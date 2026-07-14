@@ -6,6 +6,9 @@ psycopg[binary]~=3.3.4
 # --- Embeddings ---
 sentence-transformers~=5.5.1
 
+# --- Embeddings GGUF (opcional, requiere compilación) ---
+# llama-cpp-python~=0.3.0
+
 # --- API ---
 httpx~=0.28.1
 

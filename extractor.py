@@ -102,7 +102,6 @@ class Extractor:
 
         qa_prompt = (
             "Responde la pregunta basándote exclusivamente en el contexto proporcionado. "
-            "Si el contexto no contiene suf      "Responde la pregunta basándote exclusivamente en el contexto proporcionado. "
             "Si el contexto no contiene suficiente información, indícalo claramente. "
             "Responde en el mismo idioma de la pregunta."
         )

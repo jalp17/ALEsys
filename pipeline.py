@@ -11,7 +11,7 @@ from rich.progress import BarColumn, Progress, TextColumn, TimeElapsedColumn
 
 from config import CHUNKING, PATHS, OPENROUTER
 from db_manager import DatabaseManager
-from embedder import Embedder
+from embedder import get_embedder
 from extractor import Extractor
 
 logger = logging.getLogger(__name__)
@@ -60,7 +60,7 @@ class Pipeline:
         self.chunk_overlap = chunk_overlap or CHUNKING.overlap
         self.dry_run = dry_run
         self.db = DatabaseManager()
-        self.embedder = Embedder()
+        self.embedder = get_embedder()
         self.extractor = Extractor()
 
     def run(self) -> None:

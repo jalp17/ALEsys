@@ -39,9 +39,17 @@ class OpenRouterConfig:
 
 @dataclass(frozen=True)
 class EmbeddingConfig:
-    model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
-    dimension: int = 384
-    device: str = "cpu"
+    backend: str = field(default_factory=lambda: os.getenv("EMBEDDING_BACKEND", "sentence-transformers"))
+    model_name: str = field(default_factory=lambda: os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"))
+    dimension: int = field(default_factory=lambda: _env_int("EMBEDDING_DIM", 384))
+    device: str = field(default_factory=lambda: os.getenv("EMBEDDING_DEVICE", "cpu"))
+    
+    # llama.cpp / GGUF options
+    gguf_model_path: str = field(default_factory=lambda: os.getenv("EMBEDDING_GGUF_PATH", ""))
+    n_gpu_layers: int = field(default_factory=lambda: _env_int("EMBEDDING_N_GPU_LAYERS", -1))
+    n_ctx: int = field(default_factory=lambda: _env_int("EMBEDDING_N_CTX", 8192))
+    n_batch: int = field(default_factory=lambda: _env_int("EMBEDDING_N_BATCH", 512))
+    use_vulkan: bool = field(default_factory=lambda: os.getenv("EMBEDDING_USE_VULKAN", "false").lower() == "true")
 
 
 @dataclass(frozen=True)
