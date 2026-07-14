@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import logging
+import signal
 import sys
 
 from rich.console import Console
@@ -10,6 +11,16 @@ from db_manager import DatabaseManager
 from pipeline import Pipeline
 
 console = Console()
+
+# Signal handling para cleanup ordenado
+def _signal_handler(signum, frame):
+    logger = logging.getLogger("ALEsys")
+    logger.info("Interrupción recibida (Ctrl+C)")
+    console.print("\n[yellow]Interrumpido por usuario[/yellow]")
+    sys.exit(130)
+
+signal.signal(signal.SIGINT, _signal_handler)
+signal.signal(signal.SIGTERM, _signal_handler)
 
 
 def setup_logging(verbose: bool = False) -> None:

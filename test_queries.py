@@ -21,7 +21,7 @@ def vector_search(query: str, top_k: int = 5) -> list[dict[str, Any]]:
     vector = embedder.encode(query)
     cur = db.cursor
     cur.execute(
-        f"""
+        """
         SELECT f.id, f.content, f.chunk_index, d.filename,
                1 - (f.embedding <=> %s::vector) AS similarity
         FROM fragmentos f

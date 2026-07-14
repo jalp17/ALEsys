@@ -1,4 +1,6 @@
 import logging
+import signal
+import sys
 import time
 from pathlib import Path
 from typing import Optional
@@ -7,13 +9,22 @@ from rich.console import Console
 from rich.logging import RichHandler
 from rich.progress import BarColumn, Progress, TextColumn, TimeElapsedColumn
 
-from config import CHUNKING, PATHS
+from config import CHUNKING, PATHS, OPENROUTER
 from db_manager import DatabaseManager
 from embedder import Embedder
 from extractor import Extractor
 
 logger = logging.getLogger(__name__)
 console = Console()
+
+# Signal handling para cleanup ordenado
+def _signal_handler(signum, frame):
+    logger.info("Interrupción recibida (Ctrl+C), cerrando conexiones...")
+    console.print("\n[yellow]Interrumpido por usuario. Limpiando...[/yellow]")
+    sys.exit(130)
+
+signal.signal(signal.SIGINT, _signal_handler)
+signal.signal(signal.SIGTERM, _signal_handler)
 
 
 def chunk_text(text: str, size: int, overlap: int) -> list[tuple[str, int]]:
@@ -53,6 +64,11 @@ class Pipeline:
         self.extractor = Extractor()
 
     def run(self) -> None:
+        if not OPENROUTER.api_key:
+            raise ValueError(
+                "OPENROUTER_API_KEY no configurada. "
+                "Exporta la variable de entorno OPENROUTER_API_KEY o configúrala en .env"
+            )
         self.db.initialize_tables()
         md_files = sorted(self.books_dir.rglob("*.md"))
         if not md_files:

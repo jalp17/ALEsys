@@ -38,3 +38,11 @@ projects/*/vector_db/
 
 # Logs
 *.log
+
+# Secrets (nunca commitear)
+.env
+
+#ia-agent
+AGENT.md
+history.md
+estado_servidor.md

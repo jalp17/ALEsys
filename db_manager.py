@@ -22,6 +22,7 @@ class DatabaseManager:
             "dbname": DB.dbname,
             "user": DB.user,
             "password": DB.password,
+            "connect_timeout": 5,
         }
 
     def connect(self) -> Connection:
