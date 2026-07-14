@@ -1,24 +1,16 @@
-# ALEsys: Asistente de Desarrollo Multi-Proyecto (100% Local)
-# ==================================================================
-#
-# PREREQUISITO: llama-cpp-python con Vulkan
-#   CMAKE_ARGS="-DGGML_VULKAN=on" pip install llama-cpp-python --force-reinstall --no-cache-dir
-#
-# Luego instalar dependencias:
-#   pip install -r requirements.txt
+# ALEsys: GraphRAG-PG (PostgreSQL Graph & Vector Ingestion Engine)
 
-# --- Inferencia LLM ---
-# llama-cpp-python ya debe estar instalado con Vulkan (ver arriba)
+# --- Base de Datos ---
+psycopg[binary]~=3.3.4
 
-# --- Embeddings & Vector Store ---
-sentence-transformers>=2.2.0
-faiss-cpu>=1.7.4
-torch>=2.0.0
+# --- Embeddings ---
+sentence-transformers~=5.5.1
+
+# --- API ---
+httpx~=0.28.1
 
 # --- Búsqueda Web ---
-ddgs>=6.0.0
+ddgs~=9.14.4
 
 # --- Utilidades ---
-psutil>=5.9.0
-rich>=13.0.0
-watchdog>=2.2.0   # utilizado por la opción --watch para reindexación en tiempo real
+rich~=15.0.0

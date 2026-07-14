@@ -1,19 +1,12 @@
 """
-indexer.py — Fase 1: Escaneo, análisis y vectorización de código fuente.
+DEPRECATED — Este módulo ha sido reemplazado por pipeline.py + db_manager.py.
 
-Pipeline:
-1. Lee config.json del proyecto
-2. Escanea archivos ignorando exclusiones
-3. Divide cada archivo en chunks con overlap
-4. Carga CDLM-0.5B para generar resúmenes de cada chunk
-5. Vectoriza (resumen + código) con sentence-transformers
-6. Guarda índice FAISS + metadatos JSON en vector_db/
-7. Descarga el modelo al finalizar
+indexer.py indexaba proyectos de código fuente en FAISS con resúmenes
+generados por CDLM-0.5B local. En GraphRAG-PG el pipeline completo
+(pipeline.py) ingiere libros Markdown en PostgreSQL con pgvector y
+extrae entidades/relaciones vía OpenRouter.
 
-Uso:
-    from core.indexer import ProjectIndexer
-    indexer = ProjectIndexer("mi_proyecto")
-    indexer.run()
+Se mantiene como referencia histórica. No utilizar en nuevo desarrollo.
 """
 
 import json

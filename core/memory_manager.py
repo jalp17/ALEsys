@@ -1,15 +1,12 @@
 """
-memory_manager.py — Gestión de carga/descarga de modelos GGUF en VRAM.
+DEPRECATED — Este módulo ha sido reemplazado por extractor.py + OpenRouter.
 
-Singleton que asegura que NUNCA haya más de un modelo LLM cargado
-simultáneamente en la GPU. Diseñado para AMD Vega 3 APU (7GB VRAM compartida).
+memory_manager.py gestionaba modelos GGUF locales con llama-cpp-python para
+el anterior pipeline de indexación de código (FAISS). En GraphRAG-PG la
+inferencia se delega a OpenRouter (cloud) y los embeddings se generan
+localmente con embedder.py.
 
-Uso:
-    from core.memory_manager import MemoryManager
-    mm = MemoryManager()
-    llm = mm.load_model("ruta/al/modelo.gguf", n_ctx=2048)
-    # ... usar llm ...
-    mm.unload_model()
+Se mantiene como referencia histórica. No utilizar en nuevo desarrollo.
 """
 
 import gc
