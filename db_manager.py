@@ -1,3 +1,4 @@
+import json
 import logging
 import time
 from typing import Any, Optional
@@ -116,16 +117,17 @@ class DatabaseManager:
 
     def insert_document(self, filename: str, path: str, metadata: Optional[dict] = None) -> int:
         cur = self.cursor
+        metadata_json = json.dumps(metadata or {})
         cur.execute(
             """
             INSERT INTO documentos (filename, path, metadata)
-            VALUES (%s, %s, %s)
+            VALUES (%s, %s, %s::jsonb)
             ON CONFLICT (filename) DO UPDATE SET
                 path      = EXCLUDED.path,
                 metadata  = EXCLUDED.metadata
             RETURNING id
             """,
-            (filename, path, metadata or {}),
+            (filename, path, metadata_json),
         )
         row = cur.fetchone()
         return row["id"]
@@ -157,13 +159,14 @@ class DatabaseManager:
         metadata: Optional[dict] = None,
     ) -> int:
         cur = self.cursor
+        metadata_json = json.dumps(metadata or {})
         cur.execute(
             """
             INSERT INTO entidades (fragmento_id, name, type, metadata)
-            VALUES (%s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s::jsonb)
             RETURNING id
             """,
-            (fragmento_id, name, type_, metadata or {}),
+            (fragmento_id, name, type_, metadata_json),
         )
         row = cur.fetchone()
         return row["id"]
@@ -176,13 +179,14 @@ class DatabaseManager:
         metadata: Optional[dict] = None,
     ) -> int:
         cur = self.cursor
+        metadata_json = json.dumps(metadata or {})
         cur.execute(
             """
             INSERT INTO relaciones (source_entity_id, target_entity_id, relation_type, metadata)
-            VALUES (%s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s::jsonb)
             RETURNING id
             """,
-            (source_entity_id, target_entity_id, relation_type, metadata or {}),
+            (source_entity_id, target_entity_id, relation_type, metadata_json),
         )
         row = cur.fetchone()
         return row["id"]
