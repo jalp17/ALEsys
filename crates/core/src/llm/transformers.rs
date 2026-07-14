@@ -21,17 +21,14 @@ pub struct TransformersEngine {
 impl TransformersEngine {
     /// Crea una nueva instancia de TransformersEngine
     pub async fn new(config: LLMConfig) -> Result<Self> {
-        let python_config = config.python.as_ref().ok_or_else(|| {
-            crate::AlesysError::LLM("Configuración Python requerida para Transformers".to_string())
-        })?;
+        // Buscar Python en PATH o usar configuración
+        let python_path = if let Some(python_path) = &config.python_path {
+            PathBuf::from(python_path)
+        } else {
+            Self::find_python("3.10")? // Versión mínima recomendada
+        };
 
-        let python_path = Self::find_python(&python_config.version)?;
-
-        let base_url = format!(
-            "http://{}:{}",
-            config.host.as_deref().unwrap_or("127.0.0.1"),
-            config.port.unwrap_or(8000)
-        );
+        let base_url = format!("http://127.0.0.1:{}", config.server_port);
 
         Ok(Self {
             process: None,
@@ -82,14 +79,13 @@ impl TransformersEngine {
                  \\    inputs = tokenizer(data['messages'][-1]['content'], return_tensors='pt'); \
                  \\    outputs = model.generate(**inputs, max_new_tokens=data.get('max_tokens', 512)); \
                  \\    return jsonify({{'choices': [{{'message': {{'content': tokenizer.decode(outputs[0], skip_special_tokens=True)}}}}]}}); \
-                 app.run(host='{}', port={})",
+                 app.run(host='127.0.0.1', port={})",
                 model, model,
-                self.config.host.as_deref().unwrap_or("127.0.0.1"),
-                self.config.port.unwrap_or(8000)
+                self.config.server_port
             ),
         ];
 
-        if let Some(_layers) = gpu_layers {
+        if let Some(_layers) = _gpu_layers {
             args.insert(0, "--device".to_string());
             args.insert(1, "cuda".to_string());
         }
@@ -134,7 +130,8 @@ impl TransformersEngine {
     pub async fn stop_server(&mut self) -> Result<()> {
         if let Some(mut process) = self.process.take() {
             tracing::info!("Deteniendo servidor Transformers...");
-            let _ = process.kill();
+            let mut child = process.lock();
+            let _ = child.kill();
             tracing::info!("Servidor Transformers detenido");
         }
         Ok(())
@@ -160,10 +157,11 @@ impl LLMEngine for TransformersEngine {
                 let response = client
                     .post(format!("{}/v1/chat/completions", self.base_url))
                     .json(&serde_json::json!({
-                        "model": self.config.model.as_deref().unwrap_or("default"),
+                        "model": self.config.model_path,
                         "messages": openai_messages,
-                        "max_tokens": self.config.max_tokens.unwrap_or(2048),
-                        "temperature": self.config.temperature.unwrap_or(0.7),
+                        "max_tokens": self.config.max_tokens,
+                        "temperature": self.config.temperature,
+                        "top_p": self.config.top_p,
                     }))
                     .send()
                     .await
@@ -253,7 +251,8 @@ impl Drop for TransformersEngine {
     fn drop(&mut self) {
         if let Some(mut process) = self.process.take() {
             tracing::info!("Deteniendo servidor Transformers en drop...");
-            let _ = process.kill();
+            let mut child = process.lock();
+            let _ = child.kill();
         }
     }
 }

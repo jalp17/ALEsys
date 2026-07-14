@@ -23,18 +23,14 @@ pub struct VllmEngine {
 impl VllmEngine {
     /// Crea una nueva instancia de VllmEngine
     pub async fn new(config: LLMConfig) -> Result<Self> {
-        let python_config = config.python.as_ref().ok_or_else(|| {
-            crate::AlesysError::LLM("Configuración Python requerida para vLLM".to_string())
-        })?;
-
         // Buscar Python en PATH o usar configuración
-        let python_path = Self::find_python(&python_config.version)?;
+        let python_path = if let Some(python_path) = &config.python_path {
+            PathBuf::from(python_path)
+        } else {
+            Self::find_python("3.10")? // Versión mínima recomendada
+        };
 
-        let base_url = format!(
-            "http://{}:{}",
-            config.host.as_deref().unwrap_or("127.0.0.1"),
-            config.port.unwrap_or(8000)
-        );
+        let base_url = format!("http://127.0.0.1:{}", config.server_port);
 
         Ok(Self {
             process: None,
@@ -70,7 +66,7 @@ impl VllmEngine {
             return Ok(());
         }
 
-        let model = self.config.model.as_deref().unwrap_or(model_path);
+        let model = self.config.model_path.as_str();
 
         tracing::info!("Iniciando servidor vLLM con modelo: {}", model);
 
@@ -80,20 +76,18 @@ impl VllmEngine {
             "--model".to_string(),
             model.to_string(),
             "--host".to_string(),
-            self.config
-                .host
-                .as_deref()
-                .unwrap_or("127.0.0.1")
-                .to_string(),
+            "127.0.0.1".to_string(),
             "--port".to_string(),
-            self.config.port.unwrap_or(8000).to_string(),
+            self.config.server_port.to_string(),
+            "--gpu-memory-utilization".to_string(),
+            self.config.gpu_memory_utilization.to_string(),
+            "--tensor-parallel-size".to_string(),
+            self.config.tensor_parallel_size.to_string(),
         ];
 
-        // Configurar GPU layers (tensor-parallel-size en vLLM)
-        if let Some(_layers) = gpu_layers {
-            // vLLM usa tensor-parallel-size en lugar de gpu-layers
-            args.push("--tensor-parallel-size".to_string());
-            args.push("1".to_string());
+        if let Some(max_model_len) = self.config.max_model_len {
+            args.push("--max-model-len".to_string());
+            args.push(max_model_len.to_string());
         }
 
         // Agregar parámetros extra
@@ -191,10 +185,11 @@ impl LLMEngine for VllmEngine {
                 let response = client
                     .post(format!("{}/v1/chat/completions", self.base_url))
                     .json(&serde_json::json!({
-                        "model": self.config.model.as_deref().unwrap_or("default"),
+                        "model": self.config.model_path,
                         "messages": openai_messages,
-                        "max_tokens": self.config.max_tokens.unwrap_or(2048),
-                        "temperature": self.config.temperature.unwrap_or(0.7),
+                        "max_tokens": self.config.max_tokens,
+                        "temperature": self.config.temperature,
+                        "top_p": self.config.top_p,
                     }))
                     .send()
                     .await
