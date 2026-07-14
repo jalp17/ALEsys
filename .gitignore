@@ -1,58 +1,16 @@
-# ALEsys — Git Ignore
-# ===========================
-
-# Python
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
-*.egg-info/
+*.pyc
+.env
+*.log
+pipeline.log
+pipeline_pid.txt
+books/
+models/
+.venv/
+venv/
 dist/
 build/
-*.egg
-
-# Virtual Environment
-venv/
-.venv/
-env/
-
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-*~
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Models (demasiado grandes para git)
-models/*.gguf
-
-# Vector databases (regenerables)
-projects/*/vector_db/
-
-# Sentence-transformers cache
-.cache/
-
-#libros de prueba
-books/*
-
-# Logs
-*.log
-
-# Secrets (nunca commitear)
-.env
-
-# Docker
-.docker/
-docker-compose.override.yml
-
-#ia-agent
-AGENT.md
-history.md
-estado_servidor.md
-pip-audit.json
-Dockerfile.dev
-
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
