@@ -97,8 +97,10 @@ impl LLMEngine for LlamaCppEngine {
             let response_text = tokio::task::block_in_place(|| {
                 tokio::runtime::Handle::current().block_on(async {
                     tokio::task::spawn_blocking(move || -> Result<String> {
-                        let mut session_params = SessionParams::default();
-                        session_params.n_ctx = context_size as u32;
+                        let session_params = SessionParams {
+                            n_ctx: context_size as u32,
+                            ..Default::default()
+                        };
 
                         let mut session = model.create_session(session_params).map_err(|e| {
                             crate::AlesysError::LLM(format!("Error creando sesión: {}", e))

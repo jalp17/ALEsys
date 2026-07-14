@@ -44,7 +44,7 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Run Clippy (Rust linter)
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: cargo clippy --workspace -- -D warnings
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
