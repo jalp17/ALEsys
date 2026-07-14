@@ -32,7 +32,7 @@ class DBConfig:
 class OpenRouterConfig:
     api_key: str = field(default_factory=lambda: os.getenv("OPENROUTER_API_KEY", ""))
     base_url: str = "https://openrouter.ai/api/v1"
-    model: str = field(default_factory=lambda: os.getenv("OPENROUTER_MODEL", "google/gemini-2.5-flash-free"))
+    model: str = field(default_factory=lambda: os.getenv("OPENROUTER_MODEL", "google/gemma-4-31b-it:free"))
     max_retries: int = 3
     timeout: int = 60
 
