@@ -54,6 +54,8 @@ class Extractor:
             "max_tokens": 2048,
         }
         response = self.client.post("/chat/completions", json=payload)
+        if response.status_code != 200:
+            logger.error("OpenRouter error %s: %s", response.status_code, response.text)
         response.raise_for_status()
         data = response.json()
         return data["choices"][0]["message"]["content"]
@@ -100,6 +102,7 @@ class Extractor:
 
         qa_prompt = (
             "Responde la pregunta basándote exclusivamente en el contexto proporcionado. "
+            "Si el contexto no contiene suf      "Responde la pregunta basándote exclusivamente en el contexto proporcionado. "
             "Si el contexto no contiene suficiente información, indícalo claramente. "
             "Responde en el mismo idioma de la pregunta."
         )
