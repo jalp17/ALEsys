@@ -27,27 +27,34 @@ signal.signal(signal.SIGINT, _signal_handler)
 signal.signal(signal.SIGTERM, _signal_handler)
 
 
+MAX_TOKENS = 8000
+
+
 def chunk_text(text: str, size: int, overlap: int) -> list[tuple[str, int]]:
     if overlap >= size:
-        overlap = size // 2
-    MAX_TOKENS = 8000
+        overlap = max(size // 2, 0)
     if size > MAX_TOKENS:
         logger.warning("chunk_size %d excede el límite seguro de %d, reduciendo", size, MAX_TOKENS)
         size = MAX_TOKENS
+    if overlap >= size:
+        overlap = max(size - 1, 0)
+    size = max(size, 1)
     chunks: list[tuple[str, int]] = []
     start = 0
     index = 0
-    while start < len(text):
-        end = min(start + size, len(text))
-        if end < len(text):
+    length = len(text)
+    while start < length:
+        end = min(start + size, length)
+        cut = end
+        if end < length:
             newline = text.rfind("\n", start, end)
-            if newline > start + size // 2:
-                end = newline + 1
-        chunk_text_ = text[start:end].strip()
+            if newline != -1 and newline > start + size // 2:
+                cut = newline + 1
+        chunk_text_ = text[start:cut].strip()
         if chunk_text_:
             chunks.append((chunk_text_, index))
             index += 1
-        start = end - overlap if end < len(text) else len(text)
+        start = cut - overlap if cut < length else length
     return chunks
 
 

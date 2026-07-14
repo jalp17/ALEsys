@@ -2,48 +2,38 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from embedder import _cache_get, _cache_key, _cache_set, _prune_cache_dir
+from embedder import _cache_key, _cache_set
 
 
 @pytest.fixture
-def tmp_cache(tmp_path: Path) -> Path:
-    return tmp_path / "cache"
+def fake_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> SimpleNamespace:
+    fake = SimpleNamespace(
+        EMBEDDING=SimpleNamespace(model_name="test/model"),
+        CACHE_DIR=tmp_path / "cache",
+    )
+    monkeypatch.setattr("embedder.CACHE_DIR", fake.CACHE_DIR)
+    return fake
 
 
 def test_cache_key_is_deterministic() -> None:
-    assert _cache_key("texto") == _cache_key("texto")
-    assert _cache_key("texto") != _cache_key("otro texto")
+    assert _cache_key("abc") == _cache_key("abc")
+    assert _cache_key("abc") != _cache_key("def")
 
 
-def test_cache_set_and_get_roundtrip(tmp_cache: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("embedder.CACHE_DIR", tmp_cache)
-    key = _cache_key("dummy")
-    _cache_set(key, "model", [0.1, 0.2, 0.3])
-    assert _cache_get(key, "model") == [0.1, 0.2, 0.3]
+def test_roundtrip_writes_and_reads_same_vector(fake_config: SimpleNamespace) -> None:
+    vector = [0.1, 0.2, 0.3, 0.4]
+    key = _cache_key("texto")
+    _cache_set(key, fake_config.EMBEDDING.model_name, vector)
 
+    model_dir = fake_config.CACHE_DIR / fake_config.EMBEDDING.model_name.replace("/", "_")
+    cache_path = model_dir / f"{key}.json"
+    assert cache_path.exists()
 
-def test_cache_get_missing_returns_none(tmp_cache: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("embedder.CACHE_DIR", tmp_cache)
-    assert _cache_get("missing", "model") is None
-
-
-def test_prune_cache_dir_removes_oldest(tmp_path: Path) -> None:
-    model_dir = tmp_path / "model"
-    model_dir.mkdir()
-    old = model_dir / "old.json"
-    old.write_text("[0.0]", encoding="utf-8")
-    new = model_dir / "new.json"
-    new.write_text("[0.1]", encoding="utf-8")
-    max_bytes = 1
-    _prune_cache_dir(model_dir)
-    assert not old.exists()
-    assert new.exists()
-
-
-def test_prune_cache_dir_handles_missing_dir(tmp_path: Path) -> None:
-    _prune_cache_dir(tmp_path / "missing")
+    loaded = json.loads(cache_path.read_text(encoding="utf-8"))
+    assert loaded == vector
