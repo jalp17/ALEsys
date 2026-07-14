@@ -10,6 +10,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from config import OPENROUTER
 
 
+ENV_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+
+
 def fetch_models():
     """Obtiene la lista de modelos de OpenRouter."""
     if not OPENROUTER.api_key:
@@ -42,7 +45,6 @@ def filter_models(models, query="", provider="", free_only=False):
         prompt_price = float(pricing.get("prompt", "0") or "0")
         completion_price = float(pricing.get("completion", "0") or "0")
 
-        # Verificar si es gratuito
         is_free = prompt_price == 0 and completion_price == 0
 
         if free_only and not is_free:
@@ -77,81 +79,151 @@ def print_model(m, index=None):
     print()
 
 
-def main():
-    print("=== Explorador de Modelos OpenRouter ===\n")
-    
-    models = fetch_models()
-    if not models:
-        print("No se pudieron obtener modelos.")
+def load_env():
+    """Carga el archivo .env existente."""
+    env_vars = {}
+    if os.path.exists(ENV_FILE):
+        with open(ENV_FILE) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    env_vars[k.strip()] = v.strip()
+    return env_vars
+
+
+def save_model_to_env(model_id):
+    """Guarda el modelo seleccionado en .env"""
+    env_vars = load_env()
+    env_vars["OPENROUTER_MODEL"] = model_id
+
+    with open(ENV_FILE, "w") as f:
+        f.write("# ALEsys - Variables de entorno\n")
+        for k, v in env_vars.items():
+            f.write(f"{k}={v}\n")
+
+    print(f"\n✅ Modelo guardado en {ENV_FILE}: OPENROUTER_MODEL={model_id}")
+    print("   El pipeline usará este modelo en la próxima ejecución.")
+
+
+def select_and_configure_model(models):
+    """Permite seleccionar un modelo y configurarlo."""
+    print("\n--- Seleccionar y configurar modelo ---")
+    print("Ingresa el número del modelo de la lista mostrada,")
+    print("o escribe el ID completo del modelo.")
+
+    model_id = input("\nModelo a usar: ").strip()
+
+    if model_id.isdigit():
+        idx = int(model_id)
+        if 0 <= idx < len(models):
+            model_id = models[idx]["id"]
+        else:
+            print("❌ Índice inválido")
+            return
+
+    found = next((m for m in models if m["id"] == model_id), None)
+    if not found:
+        print(f"❌ Modelo '{model_id}' no encontrado")
         return
 
-    print(f"Total modelos disponibles: {len(models)}")
-    
-    # Agrupar por proveedor
-    providers = {}
-    for m in models:
-        provider = m["id"].split("/")[0] if "/" in m["id"] else "unknown"
-        providers[provider] = providers.get(provider, 0) + 1
+    print(f"\nSeleccionado: {found['id']}")
+    print(f"             {found['name']}")
 
-    print("\nProveedores disponibles:")
-    for p, count in sorted(providers.items()):
-        print(f"  {p}: {count} modelos")
+    confirm = input("¿Guardar como modelo por defecto? (s/n): ").strip().lower()
+    if confirm == "s":
+        save_model_to_env(model_id)
 
-    # Menú interactivo
+        test = input("¿Probar el modelo ahora? (s/n): ").strip().lower()
+        if test == "s":
+            test_model(found["id"])
+
+
+def test_model(model_id):
+    """Prueba un modelo específico."""
+    print(f"\nProbando {model_id}...")
+    try:
+        with httpx.Client(
+            base_url="https://openrouter.ai/api/v1",
+            timeout=30,
+            headers={
+                "Authorization": f"Bearer {OPENROUTER.api_key}",
+                "Content-Type": "application/json",
+            },
+        ) as client:
+            resp = client.post("/chat/completions", json={
+                "model": model_id,
+                "messages": [{"role": "user", "content": "Di OK"}],
+                "max_tokens": 20,
+            })
+            if resp.status_code == 200:
+                print(f"✅ Funciona: {resp.json()['choices'][0]['message']['content'][:50]}")
+            else:
+                print(f"❌ Error {resp.status_code}: {resp.text[:200]}")
+    except Exception as e:
+        print(f"❌ Error: {e}")
+
+
+def main():
+    print("=== Explorador y Configurador de Modelos OpenRouter ===\n")
+
+    models = fetch_models()
+    if not models:
+        return
+
+    print(f"Total modelos: {len(models)}")
+    free_count = sum(1 for m in models if float(m.get("pricing", {}).get("prompt", "0") or "0") == 0)
+    print(f"Gratuitos: {free_count}")
+
+    current_model = os.getenv("OPENROUTER_MODEL", "google/gemma-4-31b-it:free")
+    print(f"Modelo actual: {current_model}")
+
     while True:
         print("\n" + "="*60)
         print("Opciones:")
         print("  1. Buscar por nombre/ID")
         print("  2. Filtrar por proveedor")
         print("  3. Solo modelos gratuitos")
-        print("  4. Top 20 modelos gratuitos")
-        print("  5. Ver detalles de un modelo")
-        print("  6. Salir")
-        
-        choice = input("\nElige opción (1-6): ").strip()
-        
+        print("  4. Top 20 gratuitos")
+        print("  5. Seleccionar y CONFIGURAR modelo")
+        print("  6. Probar modelo actual")
+        print("  7. Salir")
+
+        choice = input("\nElige (1-7): ").strip()
+
         if choice == "1":
             query = input("Buscar: ").strip()
             results = filter_models(models, query=query)
             print(f"\n{len(results)} resultados:")
             for i, m in enumerate(results[:20]):
                 print_model(m, i)
-            if len(results) > 20:
-                print(f"... y {len(results) - 20} más")
-                
+
         elif choice == "2":
-            provider = input("Proveedor (ej: google, openai, meta-llama): ").strip()
+            provider = input("Proveedor (google, openai, meta-llama...): ").strip()
             results = filter_models(models, provider=provider)
             print(f"\n{len(results)} modelos de '{provider}':")
             for i, m in enumerate(results[:30]):
                 print_model(m, i)
-                
+
         elif choice == "3":
             results = filter_models(models, free_only=True)
-            print(f"\n{len(results)} modelos gratuitos:")
+            print(f"\n{len(results)} gratuitos:")
             for i, m in enumerate(results[:30]):
                 print_model(m, i)
-                
+
         elif choice == "4":
             results = filter_models(models, free_only=True)
-            free_sorted = sorted(results, key=lambda x: x["id"])
-            print(f"\nTop 20 modelos gratuitos:")
-            for i, m in enumerate(free_sorted[:20]):
+            for i, m in enumerate(sorted(results, key=lambda x: x["id"])[:20]):
                 print_model(m, i)
-                
+
         elif choice == "5":
-            model_id = input("ID del modelo: ").strip()
-            found = next((m for m in models if m["id"] == model_id), None)
-            if found:
-                print("\n" + json.dumps(found, indent=2, ensure_ascii=False))
-            else:
-                print("❌ Modelo no encontrado")
-                
+            select_and_configure_model(models)
+
         elif choice == "6":
+            test_model(current_model)
+
+        elif choice == "7":
             break
-            
-        else:
-            print("Opción inválida")
 
 
 if __name__ == "__main__":
