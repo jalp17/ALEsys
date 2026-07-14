@@ -2,9 +2,9 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [main, 'phase-*', 'feature/*']
+    branches: [master]
   pull_request:
-    branches: [main, 'phase-*']
+    branches: [master]
 
 env:
   CARGO_TERM_COLOR: always
@@ -220,7 +220,7 @@ jobs:
     name: Integration Tests
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/phase/')
+    if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/heads/phase/')
     
     needs: [rust-tests, webui-tests, docker-build]
     
@@ -275,7 +275,7 @@ jobs:
     name: Deploy
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     
     needs: [integration-tests]
     

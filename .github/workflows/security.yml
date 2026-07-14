@@ -22,7 +22,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: [python]
+        language: [rust, typescript]
 
     steps:
       - name: Checkout repository
@@ -40,25 +40,26 @@ jobs:
           category: "/language:${{ matrix.language }}"
 
   dependabot:
-    name: Dependabot Alerts
+    name: Dependency Audit
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Check for vulnerable dependencies
-        run: |
-          pip install pip-audit --quiet
-          pip-audit --desc --format=json --output=pip-audit.json || true
-          jq -r '.dependencies[] | select(.vulns | length > 0) | .name as $n | .version as $v | .vulns[] | "\($n) \($v) \(.id) \(.fix_versions[0])"' pip-audit.json || echo "No vulnerabilities found"
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
 
-      - name: Upload audit results
-        uses: actions/upload-artifact@v4
-        with:
-          name: pip-audit-results
-          path: pip-audit.json
-          retention-days: 30
+      - name: Run cargo-audit (Rust)
+        run: |
+          cargo install cargo-audit --quiet
+          cargo audit 2>&1 || true
+
+      - name: Run npm audit (WebUI)
+        working-directory: webui
+        run: |
+          npm install --package-lock-only 2>/dev/null || true
+          npm audit 2>&1 || true
 
   secrets-scan-pr:
     name: Secret Scanning (PR)
