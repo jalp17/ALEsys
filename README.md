@@ -1,156 +1,175 @@
-# ALEsys
+# 🚀 ALEsys - GraphRAG-PG
 
-**ALEsys** es un pipeline de ingesta híbrida que combina almacenamiento vectorial y de grafos de conocimiento sobre PostgreSQL. Escanea bibliotecas de libros en Markdown, extrae entidades y relaciones científicas mediante IA en la nube (OpenRouter), genera embeddings localmente en CPU y persiste todo en PostgreSQL con `pgvector`.
+**GraphRAG-PG: PostgreSQL Graph & Vector Ingestion Engine**
 
----
-
-## 1. Objetivo
-
-Construir un sistema que permita búsquedas semánticas y navegación por grafos de conocimiento a partir de documentos Markdown no estructurados.
-
-1. Escanear recursivamente una biblioteca de libros en Markdown.
-2. Generar embeddings (384 dimensiones) localmente en CPU con `sentence-transformers`.
-3. Extraer entidades científicas y sus relaciones mediante LLMs estructurados vía OpenRouter.
-4. Almacenar en PostgreSQL con `pgvector` y tablas relacionales de grafo.
-5. Consultar combinando búsqueda vectorial + navegación por grafo.
+Sistema de ingesta híbrida (vectorial + grafos de conocimiento) sobre PostgreSQL para indexar documentos Markdown y permitir búsquedas científicas complejas con LLM.
 
 ---
 
-## 2. Entorno de ejecución
+## 📋 Tabla de Contenidos
 
-| Componente | Especificación |
-|------------|---------------|
-| Host | Fedora Server 43, AMD Ryzen 5, 16 GB RAM |
-| Base de Datos | PostgreSQL en Docker (`postgres_db`, puerto `5432`) con extensión `pgvector` |
-| Modelo de embeddings | `sentence-transformers/all-MiniLM-L6-v2` (384 dim, CPU) |
-| Modelo de extracción | `google/gemini-2.5-flash-free` vía OpenRouter |
-| Asistente de código | `codestral:cloud` o `qwen3-coder:480b-cloud` |
+- [Arquitectura](#arquitectura)
+- [Setup Inicial](#setup-inicial)
+- [Uso](#uso)
+- [Licencia](#licencia)
 
 ---
 
-## 3. Arquitectura modular
+## 🏗️ Arquitectura
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    ALEsys ECOSYSTEM                          │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  ┌─────────────────────┐         ┌─────────────────────┐    │
+│  │   TAURI DESKTOP     │         │   WEBUI MULTI-USU   │    │
+│  │   (1 usuario)       │         │   (Múltiples users) │    │
+│  └──────────┬──────────┘         └──────────┬──────────┘    │
+│             │                                │               │
+│             │  MISMO CÓDIGO FRONTEND         │               │
+│             │  (React + TypeScript)          │               │
+│             └────────────┬───────────────────┘               │
+│                          │                                    │
+│                          ▼                                    │
+│  ┌──────────────────────────────────────────────────────────┐│
+│  │           ALESYS CORE (Rust Backend)                     ││
+│  │  - API REST + WebSocket                                  ││
+│  │  - GraphRAG (PostgreSQL + pgvector)                      ││
+│  │  - LLM Engine (mistralrs + ort)                          ││
+│  └──────────────────────────────────────────────────────────┘│
+│                          │                                    │
+│                          ▼                                    │
+│  ┌──────────────────────────────────────────────────────────┐│
+│  │     PostgreSQL + pgvector + Grafos                       ││
+│  └──────────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Stack Tecnológico
+
+| Componente | Tecnología |
+|------------|------------|
+| Backend | Rust (axum, sqlx, pgvector, mistralrs, ort) |
+| Frontend | React + TypeScript + TailwindCSS |
+| Base de Datos | PostgreSQL 16 + pgvector |
+| Desktop | Tauri v2 |
+| Multi-usuario | PHP 8.2 |
+
+---
+
+## 🛠️ Setup Inicial
+
+### Prerrequisitos
+
+- Rust 1.80+
+- Node.js 20+
+- pnpm 9+
+- Docker + Docker Compose
+- PostgreSQL 16 (opcional, si no usas Docker)
+
+### Instalación
+
+```bash
+# 1. Clone el repositorio
+git clone https://github.com/tu-usuario/ALEsys
+cd ALEsys
+
+# 2. Ejecutar setup
+./scripts/setup-dev.sh
+
+# 3. Configurar variables de entorno
+cp docker/.env.example .env
+# Edita .env con tus configuraciones
+
+# 4. Iniciar servicios
+docker compose -f docker/docker-compose.yml up -d
+
+# 5. Iniciar desarrollo
+pnpm dev
+```
+
+### Verificar instalación
+
+```bash
+# Backend Rust
+cargo run --bin alesys-cli -- --help
+
+# Frontend Web
+open http://localhost:5173
+
+# API (después de iniciar el servidor)
+curl http://localhost:3000/health
+```
+
+---
+
+## 💻 Uso
+
+### Estructura del Proyecto
 
 ```
 ALEsys/
-├── config.py          # Credenciales, rutas y constantes
-├── db_manager.py      # Conexión PostgreSQL, tablas y CRUD
-├── embedder.py        # Embeddings locales con sentence-transformers
-├── extractor.py       # Extracción de entidades/relaciones vía OpenRouter
-├── pipeline.py        # Orquestador: escaneo → chunking → embedding → extracción → persistencia
-├── test_queries.py    # Consultas de ejemplo (vectorial, grafo, híbrida, ask)
-├── main.py            # CLI: db-init, db-drop, run, query, ask, list
-├── gui.py             # GUI tkinter con pestañas Pipeline / Search / Chat
-├── run_tests.sh       # Suite automatizada de validación
-├── core/
-│   ├── chat_agent.py  # Chat con contexto RAG (vectorial + grafo)
-│   └── web_search.py  # Búsqueda web DuckDuckGo para contexto adicional
-├── requirements.txt   # Dependencias
-└── projects/          # Proyectos (estructura legacy)
+├── crates/              # Backend Rust
+│   ├── core/           # Lógica de negocio
+│   ├── api/            # API REST + WebSocket
+│   └── cli/            # CLI standalone
+├── webui/              # Frontend compartido
+├── server/             # PHP backend (WebUI multi-usuario)
+├── desktop/            # Tauri wrapper
+└── docker/             # Docker configs
 ```
 
-### Flujo de datos
+### Comandos Útiles
 
+```bash
+# Desarrollo (backend + frontend)
+pnpm dev
+
+# Solo backend Rust
+cargo run --bin alesys-api
+
+# Solo frontend
+cd webui && npm run dev
+
+# Build completo
+pnpm build
+
+# Tests
+pnpm test
+
+# Lint
+pnpm lint
 ```
-Libros .md → Pipeline
-               ├→ chunking → embedding (CPU) → PostgreSQL (fragmentos + vector)
-               └→ chunking → extracción LLM (OpenRouter) → PostgreSQL (entidades + relaciones)
-                                                              └→ búsqueda híbrida (vector + grafo)
+
+### Producción con Docker
+
+```bash
+# Build de imágenes
+docker compose -f docker/docker-compose.yml build
+
+# Levantar servicios
+docker compose -f docker/docker-compose.yml up -d
+
+# Ver logs
+docker compose logs -f
 ```
 
 ---
 
-## 4. Instalación
+## 📚 Documentación
 
-```bash
-git clone <url>
-cd ALEsys
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-```
-
-### Requisitos del sistema
-
-- Docker con imagen PostgreSQL + extensión `pgvector`
-- Cuenta en [OpenRouter](https://openrouter.ai) (clave en `OPENROUTER_API_KEY`)
-- Variable `OPENROUTER_API_KEY` configurada
+- [API Reference](docs/api.md)
+- [Tutorial](docs/tutorial.md)
+- [Instalación](docs/installation.md)
+- [Uso](docs/usage.md)
 
 ---
 
-## 5. Uso
+## 📄 Licencia
 
-### 5.1 Inicializar base de datos
-
-```bash
-python main.py db-init
-```
-
-### 5.2 Pipeline de ingesta
-
-```bash
-# Vista previa (dry-run) sin indexar
-python main.py run --input /ruta/a/libros/ --dry-run
-
-# Pipeline completa
-python main.py run --input /ruta/a/libros/ --chunk-size 1000 --chunk-overlap 200
-```
-
-### 5.3 Consultas
-
-```bash
-# Búsqueda vectorial
-python main.py query "mecánica cuántica"
-
-# Búsqueda en grafo por entidad
-python main.py query --graph "Heisenberg"
-
-# Búsqueda híbrida (vector + grafo)
-python main.py query "ecuación de Schrödinger" --hybrid
-
-# Preguntar con contexto RAG
-python main.py ask "¿Qué es el principio de incertidumbre?" --top-k 5
-```
-
-### 5.4 Listar documentos indexados
-
-```bash
-python main.py list
-```
-
-### 5.5 Eliminar tablas
-
-```bash
-python main.py db-drop          # pide confirmación
-python main.py db-drop --force  # sin confirmar
-```
-
-### 5.6 Interfaz gráfica
-
-```bash
-python gui.py
-```
-
-Ofrece pestañas para:
-- **Pipeline**: inicializar BD, ejecutar ingesta, vista previa
-- **Search**: búsqueda vectorial, por grafo o híbrida
-- **Chat**: preguntar con contexto RAG
-
-### 5.7 Suite de validación
-
-```bash
-bash run_tests.sh
-```
-
-Ejecuta: sintaxis, imports, conexión PostgreSQL, embeddings, pipeline en modo prueba, consultas y verificación de deduplicación.
+GNU Affero General Public License v3.0 - ver [LICENSE](LICENSE) para detalles.
 
 ---
 
-## 6. Licencia
-
-MIT — ver `LICENSE`.
-
----
-
-## Créditos
-
-Desarrollado por Jalp17. Inspirado en GraphRAG y pgvector.
+**Tags:** #alesys #graphrag #rust #react #postgresql #pgvector #llm #rag

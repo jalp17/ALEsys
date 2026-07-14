@@ -29,7 +29,7 @@ class DatabaseManager:
     def connect(self) -> Connection:
         if self._conn is not None and not self._conn.closed:
             return self._conn
-        last_error = None
+        last_error: Optional[psycopg.OperationalError] = None
         for attempt in range(3):
             try:
                 self._conn = psycopg.connect(row_factory=dict_row, **self._conninfo())

@@ -1,22 +1,150 @@
+# ===========================================
+# ALEsys .gitignore
+# ===========================================
+
+# === Python ===
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+.eggs/
+*.whl
+pip-log.txt
+pip-delete-this-directory.txt
+.venv/
+venv/
+ENV/
+env/
+
+# === Environment ===
 .env
+.env.local
+.env.*.local
 *.log
 pipeline.log
 pipeline_pid.txt
-books/
-models/
-.venv/
-venv/
+
+# === Rust ===
+/target/
+**/target/
+*.rlib
+*.rmeta
+Cargo.lock
+
+# === Node.js / TypeScript ===
+node_modules/
+**/node_modules/
 dist/
+**/dist/
+.cache/
+*.tsbuildinfo
+
+# === PHP ===
+/vendor/
+**/vendor/
+composer.lock
+
+# === Docker ===
+docker-compose.override.yml
+
+# === Build artifacts ===
 build/
-*.egg-info/
-.eggs/
+*.so
+*.dylib
+*.dll
+*.dSYM/
+
+# === Test / Coverage ===
 .pytest_cache/
 .mypy_cache/
+.coverage
+htmlcov/
+coverage/
+*.lcov
+.nox/
+
+# === IDE ===
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.settings/
+.classpath
+*.launch
+
+# === OS ===
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# === Security audit outputs ===
 pip-audit.json
 audit-report.json
 audit.sarif
 trivy-results.sarif
 gitleaks-report.json
 trufflehog-results.json
+*.sarif
+
+# === Data / Models (no comprometer) ===
+models/
+sandbox/
+*.tmp
+*.bak
+*.backup
+
+# === Books / Knowledge base ===
+books/
+
+# ===========================================
+# ARCHIVOS SENSIBLES / INTERNOS
+# NO commitear estos archivos al repo público
+# ===========================================
+
+# Documentación interna del proyecto
+AGENT.md
+history.md
+estado_servidor.md
+CHANGELOG.md
+
+# Arquitectura interna (revele infraestructura, mTLS, certs)
+docs/ARQUITECTURA_DOCKER_MTLS.md
+docs/RESUMEN_IMPLEMENTACION.md
+
+# Roadmap interno de desarrollo
+docs/ROADMAP.md
+
+# Configuración de entorno del servidor
+.server-config/
+*.server-config
+
+# Certificados y claves (NUNCA commitear)
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.jks
+.secrets/
+
+# ===========================================
+# NOTAS DE SEGURIDAD
+# ===========================================
+# Estos archivos NO deben commitearse:
+# - .env (credenciales, tokens, passwords)
+# - AGENT.md (fases de desarrollo, arquitectura detallada)
+# - history.md (historial de desarrollo)
+# - estado_servidor.md (estado del servidor, internals)
+# - docs/ARQUITECTURA_DOCKER_MTLS.md (infraestructura, mTLS, certs)
+# - docs/RESUMEN_IMPLEMENTACION.md (detalles de implementación)
+# - docs/ROADMAP.md (roadmap interno, fases de desarrollo)
+# - models/ (modelos GGUF, archivos grandes)
+# - books/ (biblioteca de conocimiento, datos del usuario)
+# - sandbox/ (archivos temporales de ejecución)
+# - *.pem, *.key, *.crt (certificados, claves privadas)

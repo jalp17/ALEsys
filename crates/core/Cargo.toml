@@ -1,0 +1,31 @@
+[package]
+name = "alesys-core"
+version.workspace = true
+edition.workspace = true
+description = "ALEsys core logic: LLM, GraphRAG, session management"
+
+[dependencies]
+# Workspace
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+pgvector.workspace = true
+mistralrs.workspace = true
+ort.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+regex.workspace = true
+once_cell.workspace = true
+
+# Graph data structures
+petgraph = "0.8"
+
+# Embeddings cache
+sled = "0.34"
+
+[dev-dependencies]
+tokio-test = "0.4"

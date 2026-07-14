@@ -40,9 +40,9 @@ services:
     env_file:
       - .env
     volumes:
-      - ${ALESYS_DIR:-/home/jesus/knowledge_database/desarrollo_git/ALEsys}:/app:ro
-      - ${BOOKS_DIR:-/home/jesus/knowledge_database/biblioteca_ia_rag/libros_ext4/books/}:/books:ro
-      - ${SANDBOX_DIR:-/home/jesus/knowledge_database/sandbox/}:/sandbox:rw
+      - ${ALESYS_DIR:-.}:/app:ro
+      - ${BOOKS_DIR:-./books}:/books:ro
+      - ${SANDBOX_DIR:-./sandbox}:/sandbox:rw
     depends_on:
       postgres:
         condition: service_healthy
@@ -67,4 +67,5 @@ volumes:
 
 networks:
   alesys-network:
-    driver: bridge
+    external: true
+    name: alesys-network

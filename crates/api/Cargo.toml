@@ -1,0 +1,43 @@
+[package]
+name = "alesys-api"
+version.workspace = true
+edition.workspace = true
+description = "ALEsys API REST + WebSocket server"
+
+[[bin]]
+name = "alesys-api"
+path = "src/main.rs"
+
+[dependencies]
+# Workspace
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+pgvector.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+
+# Core
+alesys-core = { path = "../core" }
+
+# Web framework
+axum.workspace = true
+tower.workspace = true
+tower-http.workspace = true
+
+# WebSocket
+tokio-tungstenite = "0.24"
+
+# CORS
+tower-http = { workspace = true, features = ["cors", "trace"] }
+
+# Environment
+dotenvy = "0.15"
+
+[dev-dependencies]
+tokio-test = "0.4"
+reqwest = { version = "0.12", features = ["json"] }

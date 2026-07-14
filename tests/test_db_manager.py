@@ -23,15 +23,19 @@ def test_connect_reuses_open_connection(db: DatabaseManager) -> None:
     assert db.connect() is db._conn
 
 
-def test_connect_retries_on_operational_error(db: DatabaseManager, monkeypatch: pytest.MonkeyPatch) -> None:
-    import psycopg
+    def test_connect_retries_on_operational_error(db: DatabaseManager, monkeypatch: pytest.MonkeyPatch) -> None:
+        import psycopg
 
-    connection_mock = MagicMock()
-    connection_mock.closed = False
-    monkeypatch.setattr(psycopg, "connect", lambda *_, **__: (_ for _ in ()).throw(psycopg.OperationalError("fail")))
+        attempts = []
 
-    with pytest.raises(ConnectionError):
-        db.connect()
+        def fake_connect(*_, **__):
+            attempts.append(True)
+            raise psycopg.OperationalError("fail")
+
+        monkeypatch.setattr(psycopg, "connect", fake_connect)
+        with pytest.raises(ConnectionError):
+            db.connect()
+        assert len(attempts) == 3
 
 
 def test_close_does_nothing_when_already_closed(db: DatabaseManager) -> None:

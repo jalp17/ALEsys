@@ -58,13 +58,13 @@ class PathConfig:
     books_dir: str = field(
         default_factory=lambda: os.getenv(
             "BOOKS_DIR",
-            "/home/jesus/knowledge_database/biblioteca_ia_rag/libros_ext4/books/",
+            "./books",
         )
     )
     sandbox_dir: str = field(
         default_factory=lambda: os.getenv(
             "SANDBOX_DIR",
-            "/home/jesus/knowledge_database/sandbox/",
+            "./sandbox",
         )
     )
 

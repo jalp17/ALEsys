@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import sys
 from click.testing import CliRunner
+import pytest
 from _pytest.monkeypatch import MonkeyPatch
 
-from cli import cli
+sys.path.insert(0, sys.path[0])
+
+from cli import cli  # noqa: E402
 
 
 @pytest.fixture
