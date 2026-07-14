@@ -1,0 +1,23 @@
+# Configuración para Dependency Review Action
+# https://github.com/actions/dependency-review-action
+
+# Ignorar ciertas vulnerabilidades si son falsos positivos
+# ignore-vulnerabilities:
+#   - "GHSA-xxxx-xxxx-xxxx"
+
+# Configurar severidad mínima para fallar
+fail-on-severity: high
+
+# Permitir ciertas licencias
+# allow-licenses:
+#   - MIT
+#   - Apache-2.0
+#   - BSD-3-Clause
+
+# Denegar licencias problemáticas
+deny-licenses:
+  - GPL-3.0-only
+  - AGPL-3.0-only
+
+# Configuración de scopes
+# scope: runtime

@@ -1,5 +1,9 @@
-# ALEsys — Git Ignore
+# ALEsys - Docker Ignore
 # ===========================
+
+# Git
+.git/
+.gitignore
 
 # Python
 __pycache__/
@@ -27,26 +31,32 @@ env/
 .DS_Store
 Thumbs.db
 
-# Models (demasiado grandes para git)
+# Models (demasiado grandes)
 models/*.gguf
 
-# Vector databases (regenerables)
+# Vector databases
 projects/*/vector_db/
 
-# Sentence-transformers cache
+# Cache
 .cache/
+.pytest_cache/
+.mypy_cache/
 
 # Logs
 *.log
 
-# Secrets (nunca commitear)
+# Secrets
 .env
+.env.*
 
-# Docker
-.docker/
-docker-compose.override.yml
+# Tests
+tests/
+.coverage
+htmlcov/
 
-#ia-agent
-AGENT.md
-history.md
-estado_servidor.md
+# Documentation
+docs/_build/
+*.md~
+
+# CI/CD
+.github/workflows/*.yml~

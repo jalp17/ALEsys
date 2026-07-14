@@ -1,0 +1,70 @@
+# ALEsys - Docker Compose para desarrollo local
+# Uso: docker compose up -d
+#      docker compose run --rm alesys main.py db-init
+#      docker compose run --rm alesys main.py run --input /books
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: alesys-postgres
+    environment:
+      POSTGRES_USER: alesys
+      POSTGRES_PASSWORD: alesys
+      POSTGRES_DB: alesys
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U alesys -d alesys"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - alesys-network
+
+  alesys:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: alesys-app
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGUSER: alesys
+      PGPASSWORD: alesys
+      PGDATABASE: alesys
+      # OPENROUTER_API_KEY se carga desde .env
+    env_file:
+      - .env
+    volumes:
+      - ./:/app:ro
+      - ${BOOKS_DIR:-/home/jesus/knowledge_database/biblioteca_ia_rag/libros_ext4/books/}:/books:ro
+      - ${SANDBOX_DIR:-/home/jesus/knowledge_database/sandbox/}:/sandbox:rw
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - alesys-network
+    command: ["--help"]  # Default command, override when running
+
+  # Opcional: Ollama para embeddings locales (si se migra de sentence-transformers)
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: alesys-ollama
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+  #   networks:
+  #     - alesys-network
+
+volumes:
+  postgres_data:
+  # ollama_data:
+
+networks:
+  alesys-network:
+    driver: bridge

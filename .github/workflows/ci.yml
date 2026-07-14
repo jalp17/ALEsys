@@ -1,0 +1,131 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+env:
+  PGHOST: localhost
+  PGPORT: 5432
+  PGUSER: alesys
+  PGPASSWORD: alesys
+  PGDATABASE: alesys_test
+  OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+
+jobs:
+  lint-and-test:
+    name: Lint & Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: alesys
+          POSTGRES_PASSWORD: alesys
+          POSTGRES_DB: alesys_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U alesys -d alesys_test"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Verify Python syntax
+        run: |
+          python -m py_compile config.py db_manager.py embedder.py extractor.py pipeline.py test_queries.py main.py gui.py core/chat_agent.py core/web_search.py
+
+      - name: Verify imports
+        run: |
+          python -c "
+          from config import DB, EMBEDDING, OPENROUTER, PATHS, CHUNKING
+          from db_manager import DatabaseManager
+          from embedder import Embedder
+          from extractor import Extractor
+          from pipeline import Pipeline
+          from test_queries import vector_search, graph_search, hybrid_search
+          print('✓ Todos los imports correctos')
+          "
+
+      - name: Wait for PostgreSQL
+        run: |
+          for i in {1..30}; do
+            if pg_isready -h localhost -p 5432 -U alesys -d alesys_test; then
+              echo "PostgreSQL ready"
+              break
+            fi
+            sleep 1
+          done
+
+      - name: Run test suite
+        run: |
+          bash run_tests.sh
+
+      - name: Check formatting (optional)
+        run: |
+          pip install black --quiet
+          black --check --diff . 2>/dev/null || echo "⚠ Formato no verificado (black no configurado estricto)"
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'HIGH,CRITICAL'
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Check for secrets with Gitleaks
+        uses: zricethezav/gitleaks-action@v2
+        with:
+          args: '--verbose --no-banner'
+
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Review dependencies
+        uses: actions/dependency-review-action@v4
+        with:
+          config-file: '.github/dependency-review-config.yml'
+          fail-on-severity: 'high'
