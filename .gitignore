@@ -148,4 +148,4 @@ docs/ROADMAP.md
 # - models/ (modelos GGUF, archivos grandes)
 # - books/ (biblioteca de conocimiento, datos del usuario)
 # - sandbox/ (archivos temporales de ejecución)
-# - *.pem, *.key, *.crt (certificados, claves privadas)
+# - *.pem, *.key, *.crt (certificados, claves privadas)nohup.out
