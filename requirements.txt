@@ -1,0 +1,23 @@
+# IA-Dev-System: Asistente de Desarrollo Multi-Proyecto (100% Local)
+# ==================================================================
+#
+# PREREQUISITO: llama-cpp-python con Vulkan
+#   CMAKE_ARGS="-DGGML_VULKAN=on" pip install llama-cpp-python --force-reinstall --no-cache-dir
+#
+# Luego instalar dependencias:
+#   pip install -r requirements.txt
+
+# --- Inferencia LLM ---
+# llama-cpp-python ya debe estar instalado con Vulkan (ver arriba)
+
+# --- Embeddings & Vector Store ---
+sentence-transformers>=2.2.0
+faiss-cpu>=1.7.4
+torch>=2.0.0
+
+# --- Búsqueda Web ---
+ddgs>=6.0.0
+
+# --- Utilidades ---
+psutil>=5.9.0
+rich>=13.0.0

@@ -1,0 +1,40 @@
+# IA-Dev-System — Git Ignore
+# ===========================
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual Environment
+venv/
+.venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Models (demasiado grandes para git)
+models/*.gguf
+
+# Vector databases (regenerables)
+projects/*/vector_db/
+
+# Sentence-transformers cache
+.cache/
+
+# Logs
+*.log
