@@ -1,132 +1,98 @@
 #!/usr/bin/env bash
-# ALEsys - Validación de entorno antes de ejecutar pipeline
+# ALEsys — Script de validación de entorno
 set -euo pipefail
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+OK=0
+FAIL=0
 
-echo "=== ALEsys - Validación de Entorno ==="
-echo ""
-
-ERRORS=0
-WARNINGS=0
-
-# Función para validar
 check() {
     local desc="$1"
     local cmd="$2"
     if eval "$cmd" >/dev/null 2>&1; then
-        echo -e "  ${GREEN}✓${NC} $desc"
+        echo "  ✓ $desc"
+        OK=$((OK+1))
     else
-        echo -e "  ${RED}✗${NC} $desc"
-        ((ERRORS++))
+        echo "  ✗ $desc"
+        FAIL=$((FAIL+1))
     fi
 }
 
-warn() {
-    local desc="$1"
-    local cmd="$2"
-    if eval "$cmd" >/dev/null 2>&1; then
-        echo -e "  ${GREEN}✓${NC} $desc"
-    else
-        echo -e "  ${YELLOW}⚠${NC} $desc"
-        ((WARNINGS++))
-    fi
-}
+echo "=== ALEsys — Verificación de entorno ==="
+echo ""
 
 # 1. Python
-check "Python 3.10+" "python3 --version | grep -E '3\.(1[0-9]|[2-9][0-9])'"
+echo "--- Python ---"
+check "Python 3.10+" "python3 -c 'import sys; assert sys.version_info >= (3, 10)'"
 
-# 2. pip
-check "pip disponible" "pip3 --version 2>/dev/null || pip --version 2>/dev/null"
-
-# 3. Dependencias Python
-check "psycopg[binary]" "python3 -c 'import psycopg' 2>/dev/null"
-check "sentence-transformers" "python3 -c 'import sentence_transformers' 2>/dev/null"
-check "httpx" "python3 -c 'import httpx' 2>/dev/null"
-check "ddgs" "python3 -c 'import ddgs' 2>/dev/null"
-check "rich" "python3 -c 'import rich' 2>/dev/null"
-
-# 4. Variables de entorno críticas
+# 2. Dependencias Python
 echo ""
-echo "--- Variables de Entorno ---"
-if [[ -n "${OPENROUTER_API_KEY:-}" ]]; then
-    echo -e "  ${GREEN}✓${NC} OPENROUTER_API_KEY configurada (${#OPENROUTER_API_KEY} chars)"
-else
-    echo -e "  ${RED}✗${NC} OPENROUTER_API_KEY no configurada"
-    ((ERRORS++))
-fi
+echo "--- Dependencias Python ---"
+check "psycopg"         "python3 -c 'import psycopg'"
+check "httpx"           "python3 -c 'import httpx'"
+check "rich"            "python3 -c 'import rich'"
+check "dotenv"          "python3 -c 'import dotenv'"
+check "sentence_transformers" "python3 -c 'import sentence_transformers'"
 
-# 5. PostgreSQL
+# 3. PostgreSQL
 echo ""
 echo "--- PostgreSQL ---"
 PGHOST="${PGHOST:-localhost}"
 PGPORT="${PGPORT:-5432}"
+PGDATABASE="${PGDATABASE:-alesys}"
 PGUSER="${PGUSER:-alesys}"
 PGPASSWORD="${PGPASSWORD:-alesys}"
-PGDATABASE="${PGDATABASE:-alesys}"
 
-check "Conexión a PostgreSQL" "python3 -c '
-import psycopg
-conn = psycopg.connect(
-    host=\"'$PGHOST'\", port='$PGPORT', dbname=\"'$PGDATABASE'\",
-    user=\"'$PGUSER'\", password=\"'$PGPASSWORD'\", connect_timeout=3
-)
-conn.close()
-' 2>/dev/null"
+check "Conexión a PostgreSQL ($PGHOST:$PGPORT)" \
+    "python3 -c \"import psycopg; conn = psycopg.connect(host='$PGHOST', port=$PGPORT, dbname='$PGDATABASE', user='$PGUSER', password='$PGPASSWORD', connect_timeout=5); conn.close()\""
 
-# 6. pgvector extension
-if python3 -c "
-import psycopg
-conn = psycopg.connect(
-    host=\"'$PGHOST'\", port='$PGPORT', dbname=\"'$PGDATABASE'\",
-    user=\"'$PGUSER'\", password=\"'$PGPASSWORD'\", connect_timeout=3
-)
-cur = conn.cursor()
-cur.execute('SELECT 1 FROM pg_extension WHERE extname = \"vector\"')
-result = cur.fetchone()
-conn.close()
-exit(0 if result else 1)
-" 2>/dev/null; then
-    echo -e "  ${GREEN}✓${NC} Extensión pgvector instalada"
+# 4. pgvector
+echo ""
+echo "--- pgvector ---"
+check "Extensión pgvector" \
+    "python3 -c \"import psycopg; conn = psycopg.connect(host='$PGHOST', port=$PGPORT, dbname='$PGDATABASE', user='$PGUSER', password='$PGPASSWORD', connect_timeout=5); cur = conn.cursor(); cur.execute('SELECT 1 FROM pg_extension WHERE extname = %s', ('vector',)); assert cur.fetchone() is not None; conn.close()\""
+
+# 5. Variable de entorno OPENROUTER_API_KEY
+echo ""
+echo "--- API Key ---"
+if [ -n "${OPENROUTER_API_KEY:-}" ]; then
+    echo "  ✓ OPENROUTER_API_KEY configurada (${#OPENROUTER_API_KEY} caracteres)"
+    OK=$((OK+1))
 else
-    echo -e "  ${RED}✗${NC} Extensión pgvector NO instalada"
-    ((ERRORS++))
+    echo "  ✗ OPENROUTER_API_KEY no configurada"
+    echo "    Exporta: export OPENROUTER_API_KEY=tu_clave"
+    echo "    O crea un archivo .env con OPENROUTER_API_KEY=tu_clave"
+    FAIL=$((FAIL+1))
 fi
 
-# 7. Directorio de libros
+# 6. Archivo .env (opcional)
 echo ""
-echo "--- Directorio de Libros ---"
-BOOKS_DIR="${BOOKS_DIR:-/home/jesus/knowledge_database/biblioteca_ia_rag/libros_ext4/books/}"
-if [[ -d "$BOOKS_DIR" ]]; then
-    COUNT=$(find "$BOOKS_DIR" -name "*.md" -type f | wc -l)
-    echo -e "  ${GREEN}✓${NC} Directorio existe: $BOOKS_DIR ($COUNT archivos .md)"
+echo "--- Archivo .env ---"
+if [ -f .env ]; then
+    echo "  ✓ Archivo .env encontrado"
+    OK=$((OK+1))
 else
-    echo -e "  ${YELLOW}⚠${NC} Directorio no encontrado: $BOOKS_DIR"
-    ((WARNINGS++))
+    echo "  ⚠ Archivo .env no encontrado (opcional)"
 fi
 
-# 8. Módulos ALEsys
+# 7. Disco
 echo ""
-echo "--- Módulos ALEsys ---"
-for mod in config db_manager embedder extractor pipeline test_queries main gui; do
-    check "Módulo $mod" "python3 -c 'import $mod' 2>/dev/null"
-done
+echo "--- Almacenamiento ---"
+AVAIL=$(df -BM . | awk 'NR==2 {print $4}' | tr -d 'M')
+if [ "$AVAIL" -ge 500 ]; then
+    echo "  ✓ Espacio disponible: ${AVAIL}MB"
+    OK=$((OK+1))
+else
+    echo "  ✗ Espacio insuficiente: ${AVAIL}MB (mínimo 500MB)"
+    FAIL=$((FAIL+1))
+fi
 
 # Resumen
 echo ""
-echo "=== Resumen ==="
-if [[ $ERRORS -eq 0 && $WARNINGS -eq 0 ]]; then
-    echo -e "${GREEN}✓ Entorno listo para ejecutar ALEsys${NC}"
-    exit 0
-elif [[ $ERRORS -eq 0 ]]; then
-    echo -e "${YELLOW}⚠ Entorno funcional con $WARNINGS advertencia(s)${NC}"
-    exit 0
-else
-    echo -e "${RED}✗ $ERRORS error(es) crítico(s), $WARNINGS advertencia(s)${NC}"
-    echo ""
-    echo "Soluciona los errores antes de ejecutar la pipeline."
+echo "=== Resultado: $OK éxitos, $FAIL fallos ==="
+if [ "$FAIL" -gt 0 ]; then
+    echo "Corrija los fallos antes de ejecutar ALEsys."
     exit 1
+else
+    echo "Entorno listo para usar ALEsys."
+    exit 0
 fi

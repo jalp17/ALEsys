@@ -203,9 +203,9 @@ class ALEsysGUI:
                 with open(CONFIG_FILE) as f:
                     cfg = json.load(f)
                 self._saved_books_dir = cfg.get("books_dir", "")
-        except Exception as e:
-            logger = logging.getLogger("ALEsys.GUI")
-            logger.warning("Error al refrescar documentos: %s", e)
+            except Exception as e:
+                logger = logging.getLogger("ALEsys.GUI")
+                logger.warning("Error al cargar configuración: %s", e)
 
     def _save_gui_config(self):
         try:
