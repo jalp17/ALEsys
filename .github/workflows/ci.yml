@@ -43,6 +43,9 @@ jobs:
       - name: Check Rust formatting
         run: cargo fmt --all -- --check
 
+      - name: Build Rust (required for clippy)
+        run: cargo build --workspace
+
       - name: Run Clippy (Rust linter)
         run: cargo clippy --workspace -- -D warnings
 
