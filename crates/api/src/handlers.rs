@@ -14,8 +14,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Deserialize)]
 pub struct ChatRequest {
     pub query: String,
-    pub session_id: Option<String>,
-    pub stream: Option<bool>,
+    pub _session_id: Option<String>,
+    pub _stream: Option<bool>,
 }
 
 /// Response de chat
@@ -116,7 +116,7 @@ pub async fn chat_handler(
 pub struct GenerateRequest {
     pub prompt: String,
     pub file_path: String,
-    pub language: String,
+    pub _language: String,
 }
 
 /// Response de generación
@@ -128,7 +128,7 @@ pub struct GenerateResponse {
 
 /// Handler para POST /api/generate (FASE 2)
 pub async fn generate_handler(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
     Json(payload): Json<GenerateRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     tracing::info!(

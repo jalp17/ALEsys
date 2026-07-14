@@ -1,7 +1,7 @@
 //! WebSocket handlers para streaming
 
 use crate::state::AppState;
-use alesys_core::llm::{ChatMessage, LLMEngine, StreamChunk};
+use alesys_core::llm::{ChatMessage, LLMEngine};
 use axum::{
     extract::{
         ws::{WebSocket, WebSocketUpgrade},
@@ -17,7 +17,7 @@ pub struct WSMessage {
     #[serde(rename = "type")]
     pub msg_type: String,
     pub query: Option<String>,
-    pub session_id: Option<String>,
+    pub _session_id: Option<String>,
 }
 
 #[derive(Serialize)]

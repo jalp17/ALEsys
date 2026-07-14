@@ -44,32 +44,27 @@ pub struct ExecutionResult {
 
 /// Sandbox para ejecución de código
 pub struct CodeSandbox {
-    config: SandboxConfig,
+    _config: SandboxConfig,
 }
 
 impl CodeSandbox {
     pub fn new(config: SandboxConfig) -> Self {
-        Self { config }
+        Self { _config: config }
     }
 
     /// Ejecutar código
-    pub async fn execute(&self, code: &str, language: &str) -> Result<ExecutionResult> {
+    pub async fn execute(&self, _code: &str, _language: &str) -> Result<ExecutionResult> {
         // ⚠️  TODO: Implementar en Fase 7
-        // Opciones:
-        // 1. Docker container (más seguro)
-        // 2. firecracker microvm (máxima seguridad)
-        // 3. subprocess con cgroups (menos seguro pero más simple)
-
         todo!("Implementar sandbox de ejecución - FASE 7")
     }
 
     /// Ejecutar con streaming de output
     pub async fn execute_streaming(
         &self,
-        code: &str,
-        language: &str,
-        mut stdout_callback: impl FnMut(String),
-        mut stderr_callback: impl FnMut(String),
+        _code: &str,
+        _language: &str,
+        mut _stdout_callback: impl FnMut(String),
+        mut _stderr_callback: impl FnMut(String),
     ) -> Result<ExecutionResult> {
         // ⚠️  TODO: Implementar en Fase 7
         todo!("Implementar ejecución con streaming - FASE 7")

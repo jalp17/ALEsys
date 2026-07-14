@@ -7,10 +7,7 @@
 //! - vLLM (Python subprocess) - GPU de alto rendimiento
 //! - transformers (Python subprocess) - Modelos HF
 
-use super::{
-    ChatMessage, ChatResponse, KnowledgeExtraction, LLMBackendType, LLMConfig, LLMEngine, Result,
-    StreamChunk,
-};
+use super::{ChatMessage, ChatResponse, LLMBackendType, LLMConfig, LLMEngine, Result, StreamChunk};
 
 #[cfg(feature = "llama-cpp")]
 use super::llama_cpp::LlamaCppEngine;

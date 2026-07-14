@@ -7,9 +7,9 @@ use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct AppState {
-    pub db: PgPool,
+    pub _db: PgPool,
     pub graphrag: Arc<GraphRAG>,
-    pub session_manager: SessionManager,
+    pub _session_manager: SessionManager,
     pub llm_engine: Arc<LLMBackend>,
     pub embedder: Arc<ONNXEmbedder>,
 }
@@ -47,9 +47,9 @@ impl AppState {
         let embedder = Arc::new(embedder);
 
         Ok(Self {
-            db,
+            _db: db,
             graphrag,
-            session_manager,
+            _session_manager: session_manager,
             llm_engine,
             embedder,
         })
