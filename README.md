@@ -1,4 +1,4 @@
-# 🚀 ALEsys - GraphRAG-PG
+#  ALEsys - GraphRAG-PG
 
 **GraphRAG-PG: PostgreSQL Graph & Vector Ingestion Engine**
 

@@ -38,7 +38,6 @@ Al reportar una vulnerabilidad, incluye:
 | Versión | Soporte | Fecha de Fin |
 |---------|---------|--------------|
 | 1.x | ✅ Activo | 2027-12-31 |
-| < 1.0 | ❌ No soportado | - |
 
 ## Seguridad en Desarrollo
 
