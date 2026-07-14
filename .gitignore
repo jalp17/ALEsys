@@ -51,3 +51,4 @@ AGENT.md
 history.md
 estado_servidor.md
 pip-audit.json
+Dockerfile.dev
