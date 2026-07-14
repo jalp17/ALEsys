@@ -79,7 +79,7 @@ cmake -DLLAMA_CUBLAS=off -DGGML_VULKAN=on ..
 make -j
 
 # instalar dependencias Python
-git -C /home/jesus/Documentos/proyectos/ALEsys checkout master
+git -C ~/ALEsys checkout master
 pip install --upgrade pip
 pip install -r requirements.txt
 ```
@@ -123,4 +123,22 @@ Este proyecto se distribuye bajo la **Licencia MIT**. Consulte el fichero `LICEN
 
 **Créditos**
 
-Desarrollado por Jesús y colaboradores, con base en librerías open‑source como `llama-cpp`, `sentence-transformers` y `faiss`.
+Desarrollado por Jalp17, con base en librerías open‑source como `llama-cpp`, `sentence-transformers` y `faiss`.
+## Fuentes externas
+
+El proyecto incorpora ideas, código y modelos de los siguientes repositorios y recursos:
+
+* [llama-cpp](https://github.com/ggerganov/llama.cpp) – backend Vulkan para inferencia local.
+* [sentence-transformers](https://github.com/UKPLab/sentence-transformers) – generación de embeddings.
+* [faiss](https://github.com/facebookresearch/faiss) – índice vectorial.
+* [ddgs](https://github.com/jarun/ddgr) / [duckduckgo-search](https://pypi.org/project/duckduckgo-search/) – búsqueda web sin API.
+
+### Modelos utilizados
+
+* CDLM 0.5B (GGUF) – analista rápido.
+* ruvltra-1.1b-q4_k_m.gguf – modelo conversacional principal.
+* ruvltra-claude-code-0.5b-q4_k_m.gguf – modelo conversacional alternativo.
+* imocha-ai-org/ssf-skill-extractor – extractor de habilidades técnicas.
+* Stephen-SMJ/DARE-R-Retriever – generador de embeddings vectoriales.
+
+Estos modelos se obtienen de Hugging Face u otros repositorios públicos y se alojan localmente en `~/llama.cpp/build-vulkan/bin/models/`.
