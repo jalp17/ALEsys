@@ -74,7 +74,7 @@ class LlamaCppEmbedder:
                 EMBEDDING.n_gpu_layers,
             )
 
-            self._model = Llama(
+            llama_kwargs = dict(
                 model_path=self._model_path,
                 n_ctx=EMBEDDING.n_ctx,
                 n_batch=EMBEDDING.n_batch,
@@ -83,6 +83,11 @@ class LlamaCppEmbedder:
                 verbose=False,
                 use_vulkan=EMBEDDING.use_vulkan,
             )
+            if EMBEDDING.llama_cpp_lib_path:
+                llama_kwargs["llama_cpp_lib_path"] = EMBEDDING.llama_cpp_lib_path
+                logger.info("Usando librería llama.cpp personalizada: %s", EMBEDDING.llama_cpp_lib_path)
+
+            self._model = Llama(**llama_kwargs)
         return self._model
 
     def encode(self, text: str) -> List[float]:

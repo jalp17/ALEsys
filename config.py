@@ -50,6 +50,7 @@ class EmbeddingConfig:
     n_ctx: int = field(default_factory=lambda: _env_int("EMBEDDING_N_CTX", 8192))
     n_batch: int = field(default_factory=lambda: _env_int("EMBEDDING_N_BATCH", 512))
     use_vulkan: bool = field(default_factory=lambda: os.getenv("EMBEDDING_USE_VULKAN", "false").lower() == "true")
+    llama_cpp_lib_path: str = field(default_factory=lambda: os.getenv("EMBEDDING_LLAMA_CPP_LIB_PATH", ""))
 
 
 @dataclass(frozen=True)
