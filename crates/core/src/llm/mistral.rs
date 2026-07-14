@@ -106,9 +106,8 @@ impl LLMEngine for MistralEngine {
                 text_messages = text_messages.add_message(role, &msg.content);
             }
 
-            let response = model
-                .send_chat_request(text_messages)
-                .await
+            let response = tokio::runtime::Handle::current()
+                .block_on(model.send_chat_request(text_messages))
                 .map_err(|e| crate::AlesysError::LLM(format!("Error en inferencia: {}", e)))?;
 
             let content = response.choices[0]
