@@ -40,7 +40,7 @@ services:
     env_file:
       - .env
     volumes:
-      - ./:/app:ro
+      - ${ALESYS_DIR:-/home/jesus/knowledge_database/desarrollo_git/ALEsys}:/app:ro
       - ${BOOKS_DIR:-/home/jesus/knowledge_database/biblioteca_ia_rag/libros_ext4/books/}:/books:ro
       - ${SANDBOX_DIR:-/home/jesus/knowledge_database/sandbox/}:/sandbox:rw
     depends_on:
