@@ -211,7 +211,7 @@ impl LLMEngine for VllmEngine {
                     .unwrap_or("")
                     .to_string();
 
-                 let usage = &body["usage"];
+                let usage = &body["usage"];
                 Ok(ChatResponse {
                     content,
                     model: self.config.model_path.clone(),
