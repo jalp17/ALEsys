@@ -254,6 +254,52 @@ class MemoryManager:
         """Retorna el modelo actualmente cargado o None."""
         return self._current_model
 
+    def probe_model(self, model_path: str) -> dict:
+        """Extrae metadatos de un archivo GGUF sin dejarlo cargado.
+
+        Se crea una instancia temporal de Llama redirigiendo la salida
+        estándar para capturar los mensajes del cargador. A continuación se
+        analiza la cadena resultante para obtener claves como
+        "general.architecture", "print_info: n_ctx_train", etc.
+        
+        Args:
+            model_path: Ruta al archivo .gguf
+        Returns:
+            Diccionario con los pares clave/valor obtenidos. Si ocurre un
+            error se incluye la clave "error" con el mensaje.
+        """
+        import io
+        import re
+        import contextlib
+        from llama_cpp import Llama
+
+        metadata: dict = {}
+        buf = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
+                # cargar con contexto mínimo y sin GPU para no ocupar VRAM
+                tmp = Llama(model_path=model_path, n_ctx=1, n_gpu_layers=0, verbose=False)
+                # descartar inmediatamente
+                del tmp
+        except Exception as e:
+            metadata["error"] = str(e)
+        output = buf.getvalue()
+        for line in output.splitlines():
+            # buscar líneas del tipo "print_info: key = value"
+            m = re.match(r"print_info:\s+([^=]+)=\s*(.*)", line)
+            if m:
+                key = m.group(1).strip()
+                val = m.group(2).strip()
+                metadata[key] = val
+                continue
+            # buscar keys en metadata kv dump
+            m2 = re.match(r"\s*llama_model_loader: - kv\s+\d+:\s+([^\s]+)\s+\w+\s*=\s*(.*)", line)
+            if m2:
+                key = m2.group(1).strip()
+                val = m2.group(2).strip()
+                metadata[key] = val
+        return metadata
+
     def __del__(self):
         """Limpieza al destruir el MemoryManager."""
         try:

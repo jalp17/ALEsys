@@ -126,8 +126,13 @@ def cmd_index(args) -> None:
     indexer = ProjectIndexer(
         project_name=args.name,
         embedding_model=args.embedding_model,
+        parallel_load=not args.no_parallel,
+        context_size=args.context_size,
     )
-    indexer.run(skip_summaries=args.skip_summaries)
+    if args.watch:
+        indexer.watch_and_index(skip_summaries=args.skip_summaries)
+    else:
+        indexer.run(skip_summaries=args.skip_summaries)
 
 
 def cmd_chat(args) -> None:
@@ -138,6 +143,8 @@ def cmd_chat(args) -> None:
         project_name=args.name,
         model_name=args.model,
         enable_web_search=not args.no_web,
+        parallel_load=not args.no_parallel,
+        context_size=args.context_size,
     )
     agent.start_chat()
 
@@ -314,6 +321,15 @@ Ejemplos:
         "--embedding-model", default="imocha-ai-org/ssf-skill-extractor",
         help="Modelo de embeddings (default: ssf-skill-extractor)"
     )
+    p_index.add_argument(
+        "--context-size", type=int, default=2048,
+        help="Cantidad de contexto (n_ctx) a pasar al LLM analista"
+    )
+    p_index.add_argument(
+        "--no-parallel", action="store_true",
+        help="Forzar carga secuencial de modelos en lugar de paralela"
+    )
+    p_index.add_argument("--watch", action="store_true", help="Vigilar la carpeta fuente y reindexar al detectar cambios")
     p_index.set_defaults(func=cmd_index)
     
     # chat
@@ -321,6 +337,14 @@ Ejemplos:
     p_chat.add_argument("name", help="Nombre del proyecto")
     p_chat.add_argument("-m", "--model", help="Modelo conversacional GGUF específico")
     p_chat.add_argument("--no-web", action="store_true", help="Desactivar búsqueda web")
+    p_chat.add_argument(
+        "--context-size", type=int, default=4096,
+        help="Máximo de tokens de contexto para el modelo conversacional"
+    )
+    p_chat.add_argument(
+        "--no-parallel", action="store_true",
+        help="Deshabilitar precarga paralela de modelos en chat"
+    )
     p_chat.set_defaults(func=cmd_chat)
     
     # list

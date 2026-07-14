@@ -65,6 +65,8 @@ Respond in the same language as the user's question.
         embedding_fallback: str = "sentence-transformers/all-MiniLM-L6-v2",
         top_k: int = 5,
         enable_web_search: bool = True,
+        parallel_load: bool = True,
+        context_size: int = 4096,
     ):
         """
         Args:
@@ -85,12 +87,53 @@ Respond in the same language as the user's question.
         self.embedding_fallback_name = embedding_fallback
         self.top_k = top_k
         self.enable_web_search = enable_web_search
+        self.parallel_load = parallel_load
+        self.context_size = context_size
 
         self._memory_manager = MemoryManager()
         self._embedding_model = None
         self._faiss_index = None
         self._metadata: list[dict] = []
         self._web_searcher = WebSearcher() if enable_web_search else None
+
+        # precargar embeddings y modelo conversacional en paralelo si se desea
+        if self.parallel_load:
+            self._parallel_warmup()
+
+    def _parallel_warmup(self) -> None:
+        """Carga en hilos tanto el modelo de embeddings como el conversacional.
+
+        Dado que el `MemoryManager` mantiene un único modelo en GPU, la
+        operación más costosa es cargar el LLM conversacional; arrancar el
+        hilo desde la inicialización amortigua ese coste y hace que el primer
+        `chat()` sea más veloz.
+        """
+        import threading
+
+        threads = []
+
+        def _load_embeddings():
+            try:
+                self._load_embedding_model()
+            except Exception:
+                logger.exception("fallo al precargar embeddings")
+
+        threads.append(threading.Thread(target=_load_embeddings, name="embed-warmup"))
+
+        def _load_llm():
+            try:
+                path = self._find_conversational_model()
+                self._memory_manager.load_model(str(path), n_ctx=self.context_size)
+            except Exception:
+                logger.exception("fallo al precargar modelo conversacional")
+
+        threads.append(threading.Thread(target=_load_llm, name="llm-warmup"))
+
+        for t in threads:
+            t.daemon = True
+            t.start()
+        for t in threads:
+            t.join(timeout=10)
 
         # Historial de chat para contexto conversacional
         self._chat_history: list[dict] = []
@@ -308,7 +351,7 @@ Respond in the same language as the user's question.
         model_path = self._find_conversational_model()
         llm = self._memory_manager.load_model(
             str(model_path),
-            n_ctx=4096,
+            n_ctx=self.context_size,
             n_gpu_layers=-1,
         )
 

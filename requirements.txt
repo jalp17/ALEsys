@@ -21,3 +21,4 @@ ddgs>=6.0.0
 # --- Utilidades ---
 psutil>=5.9.0
 rich>=13.0.0
+watchdog>=2.2.0   # utilizado por la opción --watch para reindexación en tiempo real

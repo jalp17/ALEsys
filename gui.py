@@ -85,6 +85,8 @@ class ALEsysGUI:
         self.selected_project = tk.StringVar(value="")
         self.web_search_enabled = tk.BooleanVar(value=True)
         self.skip_summaries = tk.BooleanVar(value=False)
+        self.parallel_load = tk.BooleanVar(value=True)
+        self.context_size = tk.IntVar(value=4096)
         self._chat_agent = None
         self._is_busy = False
 
@@ -209,6 +211,8 @@ class ALEsysGUI:
         self.models_tree = ttk.Treeview(
             frame, columns=("size",), show="tree headings", height=4
         )
+        self.models_tree.bind("<<TreeviewSelect>>", self._on_model_select)
+        self.models_tree.bind("<<TreeviewSelect>>", self._on_model_select)
         self.models_tree.heading("#0", text="Modelo", anchor=tk.W)
         self.models_tree.heading("size", text="Tamaño", anchor=tk.E)
         self.models_tree.column("#0", width=180)
@@ -217,6 +221,17 @@ class ALEsysGUI:
 
         ttk.Button(frame, text="🔄 Refrescar", 
                    command=self._refresh_models).pack(anchor=tk.E, pady=(3, 0))
+        # área de texto para información del modelo seleccionado
+        self.model_info_display = scrolledtext.ScrolledText(
+            frame,
+            wrap=tk.WORD,
+            height=5,
+            font=("monospace", 9),
+            bg=COLORS["bg_input"],
+            fg=COLORS["fg_dim"],
+            state=tk.DISABLED,
+        )
+        self.model_info_display.pack(fill=tk.X, pady=(4,0))
 
     def _build_projects_panel(self, parent):
         """Panel de gestión de proyectos."""
@@ -260,6 +275,14 @@ class ALEsysGUI:
         ttk.Checkbutton(frame, text="Omitir resúmenes LLM al indexar",
                         variable=self.skip_summaries,
                         style="TCheckbutton").pack(anchor=tk.W)
+        ttk.Checkbutton(frame, text="Cargar modelos en paralelo",
+                        variable=self.parallel_load,
+                        style="TCheckbutton").pack(anchor=tk.W)
+        # contexto
+        ctx_row = ttk.Frame(frame, style="Panel.TFrame")
+        ctx_row.pack(fill=tk.X, pady=(2,0))
+        ttk.Label(ctx_row, text="Contexto (tokens):", style="Panel.TLabel").pack(side=tk.LEFT)
+        ttk.Entry(ctx_row, textvariable=self.context_size, width=6).pack(side=tk.LEFT, padx=(4,0))
 
     def _build_chat_panel(self, parent):
         """Panel principal de chat."""
@@ -373,6 +396,10 @@ class ALEsysGUI:
                     self.web_search_enabled.set(cfg["web_search"])
                 if "skip_summaries" in cfg:
                     self.skip_summaries.set(cfg["skip_summaries"])
+                if "parallel_load" in cfg:
+                    self.parallel_load.set(cfg["parallel_load"])
+                if "context_size" in cfg:
+                    self.context_size.set(cfg["context_size"])
             except Exception:
                 pass
 
@@ -381,6 +408,8 @@ class ALEsysGUI:
             "models_dir": self.models_dir.get(),
             "web_search": self.web_search_enabled.get(),
             "skip_summaries": self.skip_summaries.get(),
+            "parallel_load": self.parallel_load.get(),
+            "context_size": self.context_size.get(),
         }
         try:
             with open(CONFIG_FILE, "w") as f:
@@ -420,6 +449,11 @@ class ALEsysGUI:
             else:
                 size_str = f"{size_mb:.0f} MB"
             tree.insert("", tk.END, text=f.name, values=(size_str,))
+        # clear info display when refreshing list
+        if hasattr(self, 'model_info_display'):
+            self.model_info_display.config(state=tk.NORMAL)
+            self.model_info_display.delete('1.0', tk.END)
+            self.model_info_display.config(state=tk.DISABLED)
 
     # ── Acciones: Proyectos ────────────────────────────────────────
     def _refresh_projects(self):
@@ -469,6 +503,35 @@ class ALEsysGUI:
                 self.selected_project.set(name)
                 self.project_label.config(text=f"Proyecto: {name}")
                 self._chat_agent = None  # Reset agent for new project
+
+    def _on_model_select(self, event):
+        sel = self.models_tree.selection()
+        if not sel:
+            return
+        name = self.models_tree.item(sel[0], "text")
+        if not name:
+            return
+        model_path = Path(self.models_dir.get()) / name
+        self._run_in_thread(self._populate_model_info, str(model_path))
+
+    def _populate_model_info(self, path):
+        """Carga metadata del modelo y actualiza el widget de info."""
+        logger = logging.getLogger("ALEsys.GUI")
+        try:
+            from core.memory_manager import MemoryManager
+            mm = MemoryManager()
+            info = mm.probe_model(path)
+        except Exception as e:
+            logger.error(f"Error al sondear modelo: {e}")
+            info = {"error": str(e)}
+        lines = [f"{k}: {v}" for k, v in info.items()]
+        text = "\n".join(lines)
+        def update():
+            self.model_info_display.config(state=tk.NORMAL)
+            self.model_info_display.delete("1.0", tk.END)
+            self.model_info_display.insert(tk.END, text)
+            self.model_info_display.config(state=tk.DISABLED)
+        self.root.after(0, update)
 
     def _new_project(self):
         """Diálogo para crear un nuevo proyecto."""
@@ -592,6 +655,8 @@ class ALEsysGUI:
             indexer = ProjectIndexer(
                 project_name=name,
                 models_dir=models_dir,
+                parallel_load=self.parallel_load.get(),
+                context_size=self.context_size.get(),
             )
             stats = indexer.run(skip_summaries=self.skip_summaries.get())
 
@@ -637,6 +702,8 @@ class ALEsysGUI:
                     project_name=project_name,
                     models_dir=self.models_dir.get(),
                     enable_web_search=self.web_search_enabled.get(),
+                    parallel_load=self.parallel_load.get(),
+                    context_size=self.context_size.get(),
                 )
 
             # Generar respuesta (sin streaming por simplicidad en GUI)

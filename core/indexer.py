@@ -64,6 +64,8 @@ Technical Summary:"""
         analyst_model: str = "CDLM-0.5B.Q8_0.gguf",
         embedding_model: str = "imocha-ai-org/ssf-skill-extractor",
         embedding_fallback: str = "sentence-transformers/all-MiniLM-L6-v2",
+        parallel_load: bool = True,
+        context_size: int = 2048,
     ):
         """
         Args:
@@ -81,6 +83,8 @@ Technical Summary:"""
         self.analyst_model_name = analyst_model
         self.embedding_model_name = embedding_model
         self.embedding_fallback_name = embedding_fallback
+        self.parallel_load = parallel_load
+        self.context_size = context_size
 
         self.config: dict = {}
         self._embedding_model = None
@@ -318,6 +322,90 @@ Technical Summary:"""
             json.dump(metadata, f, ensure_ascii=False, indent=2)
         logger.info(f"Metadatos guardados: {meta_path}")
 
+    def _warmup_models_parallel(self) -> None:
+        """Precelera la carga de los modelos necesarios en hilos independientes.
+
+        Para reducir la latencia de la indexación, este método arranca dos
+        subprocesos: uno que carga el modelo de embeddings y otro que prepara
+        el LLM analista. Ambos se ejecutan en segundo plano y se une a ellos
+        con un timeout moderado para no bloquear indefinidamente.
+        """
+        import threading
+
+        threads = []
+
+        def _load_embed():
+            try:
+                self._load_embedding_model()
+            except Exception:
+                logger.exception("Error al precargar modelo de embeddings")
+
+        threads.append(threading.Thread(target=_load_embed, name="embed-loader"))
+
+        def _load_llm():
+            try:
+                model_path = self.models_dir / self.analyst_model_name
+                self._memory_manager.load_model(str(model_path), n_ctx=2048)
+            except Exception:
+                logger.exception("Error al precargar modelo analista")
+
+        threads.append(threading.Thread(target=_load_llm, name="llm-loader"))
+
+        for t in threads:
+            t.daemon = True
+            t.start()
+        for t in threads:
+            t.join(timeout=10)
+
+    def watch_and_index(self, skip_summaries: bool = False) -> None:
+        """Monitorea el directorio fuente y relanza el proceso cuando cambian archivos.
+
+        Si `watchdog` no está disponible, lanza un `RuntimeError` explicándolo.
+        Se utiliza un debounce sencillo para evitar reindexaciones repetidas en
+        ráfaga.
+        """
+        # cargar configuración y ejecutar un índice inicial
+        self._load_config()
+        self.run(skip_summaries=skip_summaries)
+
+        try:
+            from watchdog.observers import Observer
+            from watchdog.events import FileSystemEventHandler
+        except ImportError:
+            raise RuntimeError("watchdog no está instalado. Instala con `pip install watchdog`.")
+
+        class _ChangeHandler(FileSystemEventHandler):
+            def __init__(self, parent):
+                super().__init__()
+                self.parent = parent
+                self._last_trigger = 0
+
+            def on_modified(self, event):
+                if event.is_directory:
+                    return
+                now = time.time()
+                if now - self._last_trigger < 2:
+                    return
+                self._last_trigger = now
+                logger.info(f"Cambio detectado en {event.src_path}, reindexando...")
+                try:
+                    self.parent.run(skip_summaries=skip_summaries)
+                except Exception as e:
+                    logger.error(f"Error en reindexación: {e}")
+
+        observer = Observer()
+        source = Path(self.config["source_path"])
+        observer.schedule(_ChangeHandler(self), str(source), recursive=True)
+        observer.start()
+        logger.info(f"Vigilando cambios en: {source}")
+
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            observer.stop()
+        observer.join()
+
         # Guardar info del índice
         info = {
             "project_name": self.project_name,
@@ -335,6 +423,9 @@ Technical Summary:"""
     def run(self, skip_summaries: bool = False) -> dict:
         """Ejecuta el pipeline completo de indexación.
         
+        Este método puede ser llamado de forma reiterada; cada llamada
+        recarga la configuración y vuelve a procesar los archivos.
+
         Args:
             skip_summaries: Si True, omite la generación de resúmenes con LLM
                           (útil para pruebas rápidas sin GPU)
@@ -352,6 +443,10 @@ Technical Summary:"""
 
         # 1. Cargar configuración
         self._load_config()
+
+        # precargar modelos en paralelo para reducir latencia si está habilitado
+        if not skip_summaries and self.parallel_load:
+            self._warmup_models_parallel()
 
         # 2. Escanear archivos
         console.print("[bold]Fase 1/4:[/bold] Escaneando archivos...")
@@ -378,6 +473,9 @@ Technical Summary:"""
             task = progress.add_task("Procesando archivos", total=len(files))
 
             for fpath in files:
+            # Si estamos en modo de vigilancia, comprobar si el archivo fue
+            # modificado desde la última indexación y omitir en caso contrario.
+            # (se calcula en _scan_files actualmente; esta es una ampliación opcional)
                 try:
                     content = fpath.read_text(encoding="utf-8", errors="replace")
                 except Exception as e:
@@ -422,7 +520,7 @@ Technical Summary:"""
             try:
                 llm = self._memory_manager.load_model(
                     str(analyst_path),
-                    n_ctx=2048,
+                    n_ctx=self.context_size,
                     n_gpu_layers=-1,
                 )
 
