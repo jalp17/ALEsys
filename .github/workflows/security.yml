@@ -51,7 +51,7 @@ jobs:
         run: |
           pip install pip-audit --quiet
           pip-audit --desc --format=json --output=pip-audit.json || true
-          cat pip-audit.json | jq -r '.vulnerabilities[] | "\(.package) \(.installed_version) \(.id) \(.fix_versions[])"' || echo "No vulnerabilities found"
+          jq -r '.dependencies[] | select(.vulns | length > 0) | .name as $n | .version as $v | .vulns[] | "\($n) \($v) \(.id) \(.fix_versions[0])"' pip-audit.json || echo "No vulnerabilities found"
 
       - name: Upload audit results
         uses: actions/upload-artifact@v4
