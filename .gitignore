@@ -14,3 +14,9 @@ build/
 .eggs/
 .pytest_cache/
 .mypy_cache/
+pip-audit.json
+audit-report.json
+audit.sarif
+trivy-results.sarif
+gitleaks-report.json
+trufflehog-results.json
