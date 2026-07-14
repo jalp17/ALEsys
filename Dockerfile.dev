@@ -1,0 +1,81 @@
+# ALEsys - Dev Container (code-server + herramientas de desarrollo)
+# ================================================================
+# Extiende lscr.io/linuxserver/code-server con Python 3, gh CLI,
+# cliente PostgreSQL, build tools y utilidades de desarrollo.
+#
+# Construir:
+#   docker build -f Dockerfile.dev -t alesys-dev .
+#
+# Usar en docker-compose:
+#   services:
+#     code-server:
+#       build:
+#         context: .
+#         dockerfile: Dockerfile.dev
+#       # ... resto del compose
+# ================================================================
+
+FROM lscr.io/linuxserver/code-server:latest
+
+# --------------------------------------------------
+# Instalar herramientas del sistema
+# --------------------------------------------------
+USER root
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Python 3.12 (disponible en Ubuntu 24.04)
+    python3 \
+    python3-pip \
+    python3-venv \
+    python3-dev \
+    # Build tools (necesarios para psycopg, sentence-transformers, etc.)
+    build-essential \
+    libpq-dev \
+    # Cliente PostgreSQL (psql, pg_isready)
+    postgresql-client \
+    # GitHub CLI
+    gh \
+    # JSON processor
+    jq \
+    # Otras utilidades
+    curl \
+    wget \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# --------------------------------------------------
+# Instalar Docker CLI (opcional, para gestionar contenedores)
+# --------------------------------------------------
+RUN install -m 0755 -d /etc/apt/keyrings \
+    && curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc \
+    && chmod a+r /etc/apt/keyrings/docker.asc \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu noble stable" \
+        > /etc/apt/sources.list.d/docker.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends docker-ce-cli \
+    && rm -rf /var/lib/apt/lists/*
+
+# --------------------------------------------------
+# Configurar alias y upgrades globales para el usuario abc
+# --------------------------------------------------
+ENV PIP_REQUIRE_VIRTUALENV=false
+
+# Instalar herramientas Python globales
+RUN python3 -m pip install --no-cache-dir --upgrade pip \
+    && python3 -m pip install --no-cache-dir \
+        pip-audit \
+        black \
+        ruff \
+        pytest \
+        pytest-cov
+
+# Crear enlace simbólico python -> python3
+RUN ln -sf /usr/bin/python3 /usr/bin/python
+
+# Volver al usuario por defecto de code-server
+USER abc
+
+# Establecer Python 3 como predeterminado
+ENV PATH="/home/abc/.local/bin:$PATH"
+
+WORKDIR /config/workspace
