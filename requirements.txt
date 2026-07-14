@@ -1,4 +1,4 @@
-# IA-Dev-System: Asistente de Desarrollo Multi-Proyecto (100% Local)
+# ALEsys: Asistente de Desarrollo Multi-Proyecto (100% Local)
 # ==================================================================
 #
 # PREREQUISITO: llama-cpp-python con Vulkan

@@ -13,7 +13,7 @@ Uso:
 import logging
 from typing import Optional
 
-logger = logging.getLogger("IA-Dev-System.WebSearch")
+logger = logging.getLogger("ALEsys.WebSearch")
 
 
 class WebSearcher:

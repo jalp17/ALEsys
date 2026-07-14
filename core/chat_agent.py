@@ -28,7 +28,7 @@ import numpy as np
 from core.memory_manager import MemoryManager
 from core.web_search import WebSearcher
 
-logger = logging.getLogger("IA-Dev-System.ChatAgent")
+logger = logging.getLogger("ALEsys.ChatAgent")
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 PROJECTS_DIR = BASE_DIR / "projects"

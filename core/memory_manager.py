@@ -21,7 +21,7 @@ from typing import Optional
 
 import psutil
 
-logger = logging.getLogger("IA-Dev-System.MemoryManager")
+logger = logging.getLogger("ALEsys.MemoryManager")
 
 
 class MemoryManager:

@@ -28,7 +28,7 @@ import numpy as np
 
 from core.memory_manager import MemoryManager
 
-logger = logging.getLogger("IA-Dev-System.Indexer")
+logger = logging.getLogger("ALEsys.Indexer")
 
 # Ruta base del sistema
 BASE_DIR = Path(__file__).resolve().parent.parent

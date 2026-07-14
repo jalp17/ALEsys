@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-main.py — CLI principal del IA-Dev-System.
+main.py — CLI principal de ALEsys.
 
 Subcomandos:
     init  <nombre> <ruta>    — Crea un nuevo proyecto
@@ -279,8 +279,8 @@ def _detect_language(source_path: Path) -> str:
 
 def main():
     parser = argparse.ArgumentParser(
-        prog="IA-Dev-System",
-        description="Asistente de Desarrollo Multi-Proyecto con IA Local (RAG)",
+        prog="ALEsys",
+        description="ALEsys — Asistente de Desarrollo Multi-Proyecto con IA Local (RAG)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Ejemplos:
@@ -341,7 +341,7 @@ Ejemplos:
         print("\n\nOperación cancelada por el usuario.")
         sys.exit(0)
     except Exception as e:
-        logging.getLogger("IA-Dev-System").error(f"Error: {e}", exc_info=args.verbose)
+        logging.getLogger("ALEsys").error(f"Error: {e}", exc_info=args.verbose)
         sys.exit(1)
 
 
