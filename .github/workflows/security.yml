@@ -60,8 +60,9 @@ jobs:
           path: pip-audit.json
           retention-days: 30
 
-  secrets-scan:
-    name: Secret Scanning
+  secrets-scan-pr:
+    name: Secret Scanning (PR)
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -70,10 +71,27 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Run TruffleHog
+      - name: Run TruffleHog (PR diff only)
         uses: trufflesecurity/trufflehog@main
         with:
           path: ./
-          base: ${{ github.event.pull_request.base.sha || github.sha }}
-          head: ${{ github.event.pull_request.head.sha || github.sha }}
+          base: ${{ github.event.pull_request.base.sha }}
+          head: ${{ github.event.pull_request.head.sha }}
           extra_args: --fail --json
+
+  secrets-scan-push:
+    name: Secret Scanning (Push/Schedule)
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run TruffleHog (full history)
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          extra_args: --fail --json --no-verification
