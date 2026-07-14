@@ -8,6 +8,7 @@ use super::{ChatMessage, ChatResponse, LLMConfig, LLMEngine, StreamChunk};
 use crate::Result;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use tokenizers::Tokenizer;
 
 /// Backend Candle para inferencia nativa
 pub struct CandleEngine {
@@ -62,7 +63,7 @@ impl CandleEngine {
     /// Selecciona el dispositivo basado en configuración y disponibilidad
     fn select_device(config: &LLMConfig) -> Result<Device> {
         // Respetar configuración explícita
-        match config.device.as_deref() {
+        match config.candle_device.as_deref() {
             Some("cpu") => return Ok(Device::Cpu),
             Some("cuda") => {
                 #[cfg(feature = "cuda")]

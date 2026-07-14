@@ -59,7 +59,7 @@ impl TransformersEngine {
             return Ok(());
         }
 
-        let model = self.config.model.as_deref().unwrap_or(model_path);
+        let model = self.config.model_path.as_str();
 
         tracing::info!("Iniciando servidor Transformers con modelo: {}", model);
 
@@ -85,7 +85,7 @@ impl TransformersEngine {
             ),
         ];
 
-        if let Some(_layers) = _gpu_layers {
+        if let Some(layers) = _gpu_layers {
             args.insert(0, "--device".to_string());
             args.insert(1, "cuda".to_string());
         }

@@ -142,7 +142,8 @@ impl VllmEngine {
     pub async fn stop_server(&mut self) -> Result<()> {
         if let Some(mut process) = self.process.take() {
             tracing::info!("Deteniendo servidor vLLM...");
-            process
+            let mut child = process.lock();
+            child
                 .kill()
                 .map_err(|e| crate::AlesysError::LLM(format!("Error deteniendo vLLM: {}", e)))?;
             self.started_at = None;
