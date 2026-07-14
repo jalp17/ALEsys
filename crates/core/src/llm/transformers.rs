@@ -183,12 +183,7 @@ impl LLMEngine for TransformersEngine {
                 let usage = &body["usage"];
                 Ok(ChatResponse {
                     content,
-                    model: self
-                        .config
-                        .model
-                        .as_deref()
-                        .unwrap_or("transformers")
-                        .to_string(),
+                    model: self.config.model_path.clone(),
                     usage: super::Usage {
                         prompt_tokens: usage["prompt_tokens"].as_u64().unwrap_or(0) as usize,
                         completion_tokens: usage["completion_tokens"].as_u64().unwrap_or(0)

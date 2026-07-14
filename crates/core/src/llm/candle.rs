@@ -291,7 +291,7 @@ impl CandleEngine {
 
 impl LLMEngine for CandleEngine {
     fn chat(&self, messages: &[ChatMessage]) -> Result<ChatResponse> {
-        let model = self
+        let _model = self
             .model
             .as_ref()
             .ok_or_else(|| crate::AlesysError::LLM("Modelo no cargado".to_string()))?;
@@ -390,7 +390,7 @@ impl LLMEngine for CandleEngine {
 
 /// Información de disponibilidad del backend
 pub fn availability_info() -> serde_json::Value {
-    let mut info = serde_json::json!({
+    let info = serde_json::json!({
         "name": "candle",
         "description": "Backend Rust nativo con candle-core",
         "features": ["candle-backend"],

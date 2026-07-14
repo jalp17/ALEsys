@@ -211,10 +211,10 @@ impl LLMEngine for VllmEngine {
                     .unwrap_or("")
                     .to_string();
 
-                let usage = &body["usage"];
+                 let usage = &body["usage"];
                 Ok(ChatResponse {
                     content,
-                    model: self.config.model.as_deref().unwrap_or("vllm").to_string(),
+                    model: self.config.model_path.clone(),
                     usage: super::Usage {
                         prompt_tokens: usage["prompt_tokens"].as_u64().unwrap_or(0) as usize,
                         completion_tokens: usage["completion_tokens"].as_u64().unwrap_or(0)
@@ -289,7 +289,8 @@ impl Drop for VllmEngine {
     fn drop(&mut self) {
         if let Some(mut process) = self.process.take() {
             tracing::info!("Deteniendo servidor vLLM en drop...");
-            let _ = process.kill();
+            let mut child = process.lock();
+            let _ = child.kill();
         }
     }
 }
