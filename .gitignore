@@ -50,3 +50,4 @@ docker-compose.override.yml
 AGENT.md
 history.md
 estado_servidor.md
+pip-audit.json
