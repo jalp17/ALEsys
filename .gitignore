@@ -36,6 +36,9 @@ projects/*/vector_db/
 # Sentence-transformers cache
 .cache/
 
+#libros de prueba
+books/*
+
 # Logs
 *.log
 
@@ -52,3 +55,4 @@ history.md
 estado_servidor.md
 pip-audit.json
 Dockerfile.dev
+
