@@ -62,14 +62,14 @@ jobs:
       - name: Verify imports
         run: |
           python -c "
-          from config import DB, EMBEDDING, OPENROUTER, PATHS, CHUNKING
-          from db_manager import DatabaseManager
-          from embedder import Embedder
-          from extractor import Extractor
-          from pipeline import Pipeline
-          from test_queries import vector_search, graph_search, hybrid_search
-          print('✓ Todos los imports correctos')
-          "
+from config import DB, EMBEDDING, OPENROUTER, PATHS, CHUNKING
+from db_manager import DatabaseManager
+from embedder import Embedder
+from extractor import Extractor
+from pipeline import Pipeline
+from test_queries import vector_search, graph_search, hybrid_search
+print('✓ Todos los imports correctos')
+"
 
       - name: Wait for PostgreSQL
         run: |
