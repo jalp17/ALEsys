@@ -94,7 +94,7 @@ trufflehog-results.json
 
 # === Data / Models (no comprometer) ===
 models/
-sandbox/
+/sandbox/
 *.tmp
 *.bak
 *.backup
