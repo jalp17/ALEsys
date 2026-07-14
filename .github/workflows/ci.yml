@@ -29,6 +29,11 @@ jobs:
           toolchain: stable
           components: rustfmt, clippy
 
+      - name: Install Vulkan dependencies (for llama.cpp Vulkan backend)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libvulkan-dev mesa-vulkan-drivers vulkan-tools
+
       - name: Cache Rust dependencies
         uses: actions/cache@v4
         with:
