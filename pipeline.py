@@ -69,7 +69,7 @@ class Pipeline:
                 "OPENROUTER_API_KEY no configurada. "
                 "Exporta la variable de entorno OPENROUTER_API_KEY o configúrala en .env"
             )
-        self.db.initialize_tables()
+
         md_files = sorted(self.books_dir.rglob("*.md"))
         if not md_files:
             logger.warning("No se encontraron archivos .md en %s", self.books_dir)
@@ -91,6 +91,8 @@ class Pipeline:
                 )
             logger.info("Dry run completado: %d archivos analizados", len(md_files))
             return
+
+        self.db.initialize_tables()
 
         total_chunks = 0
         total_entities = 0

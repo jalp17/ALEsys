@@ -22,7 +22,7 @@ def _env_int(key: str, default: int) -> int:
 @dataclass(frozen=True)
 class DBConfig:
     host: str = field(default_factory=lambda: os.getenv("PGHOST", "localhost"))
-    port: int = field(default_factory=lambda: _env_int("PGPORT", 5432))
+    port: int = field(default_factory=lambda: _env_int("PGPORT", 5433))
     dbname: str = field(default_factory=lambda: os.getenv("PGDATABASE", "alesys"))
     user: str = field(default_factory=lambda: os.getenv("PGUSER", "alesys"))
     password: str = field(default_factory=lambda: os.getenv("PGPASSWORD", "alesys"))

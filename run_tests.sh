@@ -35,7 +35,7 @@ pip3 --version 2>/dev/null || pip --version
 
 echo ""
 echo "--- 2. Dependencias ---"
-pip3 install -r requirements.txt -q 2>&1 | tail -2 || true
+pip3 install -r requirements.txt || true
 
 echo ""
 echo "--- 3. Sintaxis ---"
@@ -74,8 +74,8 @@ except Exception as e:
 echo ""
 echo "--- 6. Embeddings ---"
 python3 -c "
-from embedder import Embedder
-e = Embedder()
+from embedder import get_embedder
+e = get_embedder()
 v = e.encode('prueba de embedding científico')
 assert len(v) == 384, f'Dimensión incorrecta: {len(v)}'
 print(f'  ✓ Embedding generado: {len(v)} dimensiones')
