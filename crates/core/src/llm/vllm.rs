@@ -90,12 +90,6 @@ impl VllmEngine {
             args.push(max_model_len.to_string());
         }
 
-        // Agregar parámetros extra
-        for param in &self.config.extra_params {
-            args.push(format!("--{}", param.0));
-            args.push(param.1.clone());
-        }
-
         let child = Command::new(&self.python_path)
             .args(&args)
             .stdout(Stdio::piped())
@@ -142,7 +136,7 @@ impl VllmEngine {
     pub async fn stop_server(&mut self) -> Result<()> {
         if let Some(mut process) = self.process.take() {
             tracing::info!("Deteniendo servidor vLLM...");
-            let mut child = process.lock();
+            let mut child = process.lock().await;
             child
                 .kill()
                 .map_err(|e| crate::AlesysError::LLM(format!("Error deteniendo vLLM: {}", e)))?;
@@ -285,7 +279,7 @@ impl Drop for VllmEngine {
     fn drop(&mut self) {
         if let Some(mut process) = self.process.take() {
             tracing::info!("Deteniendo servidor vLLM en drop...");
-            let mut child = process.lock();
+            let mut child = process.lock().await;
             let _ = child.kill();
         }
     }

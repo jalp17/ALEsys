@@ -85,7 +85,7 @@ impl TransformersEngine {
             ),
         ];
 
-        if let Some(layers) = _gpu_layers {
+        if let Some(layers) = gpu_layers {
             args.insert(0, "--device".to_string());
             args.insert(1, "cuda".to_string());
         }
@@ -130,7 +130,7 @@ impl TransformersEngine {
     pub async fn stop_server(&mut self) -> Result<()> {
         if let Some(mut process) = self.process.take() {
             tracing::info!("Deteniendo servidor Transformers...");
-            let mut child = process.lock();
+            let mut child = process.lock().await;
             let _ = child.kill();
             tracing::info!("Servidor Transformers detenido");
         }
@@ -251,7 +251,7 @@ impl Drop for TransformersEngine {
     fn drop(&mut self) {
         if let Some(mut process) = self.process.take() {
             tracing::info!("Deteniendo servidor Transformers en drop...");
-            let mut child = process.lock();
+            let mut child = process.lock().await;
             let _ = child.kill();
         }
     }
