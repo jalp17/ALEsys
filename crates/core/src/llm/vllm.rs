@@ -279,8 +279,9 @@ impl Drop for VllmEngine {
     fn drop(&mut self) {
         if let Some(mut process) = self.process.take() {
             tracing::info!("Deteniendo servidor vLLM en drop...");
-            let mut child = process.lock().await;
-            let _ = child.kill();
+            if let Ok(mut child) = process.try_lock() {
+                let _ = child.kill();
+            }
         }
     }
 }
