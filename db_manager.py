@@ -204,3 +204,52 @@ class DatabaseManager:
         cur.execute("DROP TABLE IF EXISTS fragmentos CASCADE")
         cur.execute("DROP TABLE IF EXISTS documentos CASCADE")
         logger.info("Tablas eliminadas")
+
+    def batch_insert_fragments(
+        self,
+        documento_id: int,
+        fragments: list[tuple[str, list[float], int]],
+    ) -> list[int]:
+        cur = self.cursor
+        records = [(documento_id, content, f"[{','.join(str(v) for v in embedding)}]", idx) for content, embedding, idx in fragments]
+        ids: list[int] = []
+        with cur.copy("COPY fragmentos (documento_id, content, embedding, chunk_index) FROM STDIN") as copy:
+            for record in records:
+                copy.write_row(record)
+        cur.execute(
+            "SELECT id FROM fragmentos WHERE documento_id = %s ORDER BY chunk_index", (documento_id,)
+        )
+        for row in cur.fetchall():
+            ids.append(row["id"])
+        return ids
+
+    def batch_insert_entities(
+        self,
+        fragment_id: int,
+        entities: list[tuple[str, str, Optional[dict]]],
+    ) -> dict[str, int]:
+        cur = self.cursor
+        records = [
+            (fragment_id, name, type_, json.dumps(metadata or {}))
+            for name, type_, metadata in entities
+        ]
+        with cur.copy("COPY entidades (fragmento_id, name, type, metadata) FROM STDIN") as copy:
+            for record in records:
+                copy.write_row(record)
+        cur.execute(
+            "SELECT id, name FROM entidades WHERE fragmento_id = %s", (fragment_id,)
+        )
+        return {row["name"]: row["id"] for row in cur.fetchall()}
+
+    def batch_insert_relations(
+        self,
+        relations: list[tuple[int, int, str, Optional[dict]]],
+    ) -> None:
+        cur = self.cursor
+        records = [
+            (src_id, dst_id, rtype, json.dumps(metadata or {}))
+            for src_id, dst_id, rtype, metadata in relations
+        ]
+        with cur.copy("COPY relaciones (source_entity_id, target_entity_id, relation_type, metadata) FROM STDIN") as copy:
+            for record in records:
+                copy.write_row(record)

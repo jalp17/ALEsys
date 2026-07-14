@@ -30,6 +30,10 @@ signal.signal(signal.SIGTERM, _signal_handler)
 def chunk_text(text: str, size: int, overlap: int) -> list[tuple[str, int]]:
     if overlap >= size:
         overlap = size // 2
+    MAX_TOKENS = 8000
+    if size > MAX_TOKENS:
+        logger.warning("chunk_size %d excede el límite seguro de %d, reduciendo", size, MAX_TOKENS)
+        size = MAX_TOKENS
     chunks: list[tuple[str, int]] = []
     start = 0
     index = 0
@@ -151,29 +155,29 @@ class Pipeline:
         indices = [c[1] for c in chunks]
         vectors = self.embedder.encode_batch(texts)
 
+        fragment_records = [(texts[i], vectors[i], indices[i]) for i in range(len(chunks))]
+        fragment_ids = self.db.batch_insert_fragments(doc_id, fragment_records)
+
         entity_count = 0
         relation_count = 0
 
-        for content, idx, vec in zip(texts, indices, vectors):
-            fragment_id = self.db.insert_fragment(doc_id, content, vec, idx)
-
+        for content, fragment_id in zip(texts, fragment_ids):
             extracted = self.extractor.extract(content)
-            entity_ids: dict[str, int] = {}
+            entities: list[tuple[str, str, dict]] = []
             for ent in extracted.get("entidades", []):
-                eid = self.db.insert_entity(
-                    fragment_id,
-                    name=ent["nombre"],
-                    type_=ent.get("tipo", "desconocido"),
-                )
-                entity_ids[ent["nombre"]] = eid
-                entity_count += 1
+                entities.append((ent["nombre"], ent.get("tipo", "desconocido"), {}))
+            entity_ids = self.db.batch_insert_entities(fragment_id, entities)
+            entity_count += len(entities)
 
+            relations: list[tuple[int, int, str, dict]] = []
             for rel in extracted.get("relaciones", []):
                 src_id = entity_ids.get(rel.get("origen", ""))
                 dst_id = entity_ids.get(rel.get("destino", ""))
                 if src_id and dst_id:
-                    self.db.insert_relation(src_id, dst_id, rel.get("tipo", "relacionado"))
-                    relation_count += 1
+                    relations.append((src_id, dst_id, rel.get("tipo", "relacionado"), {}))
+            if relations:
+                self.db.batch_insert_relations(relations)
+                relation_count += len(relations)
 
         logger.debug("Procesado %s: %d fragmentos, %d entidades, %d relaciones", filename, len(chunks), entity_count, relation_count)
         return {"chunks": len(chunks), "entities": entity_count, "relations": relation_count}

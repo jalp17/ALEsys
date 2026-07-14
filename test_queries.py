@@ -6,7 +6,7 @@ from rich.table import Table
 
 from config import EMBEDDING
 from db_manager import DatabaseManager
-from embedder import Embedder
+from embedder import get_embedder
 from extractor import Extractor
 
 logger = logging.getLogger(__name__)
@@ -14,7 +14,7 @@ console = Console()
 
 
 def vector_search(query: str, top_k: int = 5) -> list[dict[str, Any]]:
-    embedder = Embedder()
+    embedder = get_embedder()
     db = DatabaseManager()
     db.initialize_tables()
 
