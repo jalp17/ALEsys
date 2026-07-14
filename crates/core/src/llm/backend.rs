@@ -241,6 +241,7 @@ impl LLMBackend {
     }
 
     /// Información de disponibilidad de todos los backends
+    #[allow(clippy::vec_init_then_push)]
     pub fn availability_info() -> Vec<serde_json::Value> {
         let mut info = vec![];
 

@@ -9,6 +9,7 @@
 //! - Streaming de output en tiempo real
 
 use crate::Result;
+use std::str::FromStr;
 use std::time::Duration;
 
 /// Configuración del sandbox
@@ -80,15 +81,23 @@ pub enum SupportedLanguage {
     Bash,
 }
 
-impl SupportedLanguage {
-    pub fn from_str(s: &str) -> Option<Self> {
+impl FromStr for SupportedLanguage {
+    type Err = ();
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
-            "python" | "py" => Some(Self::Python),
-            "rust" | "rs" => Some(Self::Rust),
-            "javascript" | "js" | "node" => Some(Self::JavaScript),
-            "bash" | "sh" => Some(Self::Bash),
-            _ => None,
+            "python" | "py" => Ok(Self::Python),
+            "rust" | "rs" => Ok(Self::Rust),
+            "javascript" | "js" | "node" => Ok(Self::JavaScript),
+            "bash" | "sh" => Ok(Self::Bash),
+            _ => Err(()),
         }
+    }
+}
+
+impl SupportedLanguage {
+    pub fn from_str_compat(s: &str) -> Option<Self> {
+        Self::from_str(s).ok()
     }
 }
 

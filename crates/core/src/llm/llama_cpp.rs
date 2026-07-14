@@ -41,8 +41,10 @@ impl LlamaCppEngine {
                 n_gpu,
             );
 
-            let mut params = LlamaParams::default();
-            params.n_gpu_layers = n_gpu;
+            let params = LlamaParams {
+                n_gpu_layers: n_gpu,
+                ..Default::default()
+            };
 
             let model = LlamaModel::load_from_file(&config.model_path, params)
                 .map_err(|e| crate::AlesysError::LLM(format!("Error cargando modelo: {}", e)))?;

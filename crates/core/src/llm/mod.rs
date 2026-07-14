@@ -131,6 +131,7 @@ impl ONNXEmbedder {
     }
 }
 
+#[allow(clippy::impl_can_be_derived)]
 impl Default for ONNXEmbedder {
     fn default() -> Self {
         Self::new()
