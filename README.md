@@ -135,10 +135,10 @@ El proyecto incorpora ideas, código y modelos de los siguientes repositorios y 
 
 ### Modelos utilizados
 
-* CDLM 0.5B (GGUF) – analista rápido.
-* ruvltra-1.1b-q4_k_m.gguf – modelo conversacional principal.
-* ruvltra-claude-code-0.5b-q4_k_m.gguf – modelo conversacional alternativo.
-* imocha-ai-org/ssf-skill-extractor – extractor de habilidades técnicas.
-* Stephen-SMJ/DARE-R-Retriever – generador de embeddings vectoriales.
+* CDLM 0.5B (GGUF) – analista rápido. [https://huggingface.co/mradermacher/CDLM-0.5B-GGUF](https://huggingface.co/mradermacher/CDLM-0.5B-GGUF)
+* ruvltra-1.1b-q4_k_m.gguf – modelo conversacional principal. (basado en [https://huggingface.co/Stephen-SMJ/ruvltra-1.1b-q4_k_m](https://huggingface.co/Stephen-SMJ/ruvltra-1.1b-q4_k_m))
+* ruvltra-claude-code-0.5b-q4_k_m.gguf – modelo conversacional alternativo. (https://huggingface.co/Stephen-SMJ/ruvltra-claude-code-0.5b-q4_k_m)
+* imocha-ai-org/ssf-skill-extractor – extractor de habilidades técnicas. [https://huggingface.co/imocha-ai-org/ssf-skill-extractor](https://huggingface.co/imocha-ai-org/ssf-skill-extractor)
+* Stephen-SMJ/DARE-R-Retriever – generador de embeddings vectoriales. [https://huggingface.co/Stephen-SMJ/DARE-R-Retriever](https://huggingface.co/Stephen-SMJ/DARE-R-Retriever)
 
 Estos modelos se obtienen de Hugging Face u otros repositorios públicos y se alojan localmente en `~/llama.cpp/build-vulkan/bin/models/`.
