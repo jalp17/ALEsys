@@ -34,7 +34,25 @@ pub enum AlesysError {
     IO(#[from] std::io::Error),
     
     #[error("Sandbox error: {0}")]
-    Sandbox(String),  // FASE AVANZADA
+    Sandbox(String),
+}
+
+impl From<anyhow::Error> for AlesysError {
+    fn from(err: anyhow::Error) -> Self {
+        AlesysError::LLM(err.to_string())
+    }
+}
+
+impl From<toml::de::Error> for AlesysError {
+    fn from(err: toml::de::Error) -> Self {
+        AlesysError::LLM(err.to_string())
+    }
+}
+
+impl From<serde_json::Error> for AlesysError {
+    fn from(err: serde_json::Error) -> Self {
+        AlesysError::LLM(err.to_string())
+    }
 }
 
 pub type Result<T> = std::result::Result<T, AlesysError>;

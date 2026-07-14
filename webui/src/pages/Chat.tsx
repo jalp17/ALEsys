@@ -1,9 +1,147 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { API_BASE_URL } from '../utils/platform';
+
+interface Message {
+  role: 'user' | 'assistant';
+  content: string;
+  sources?: Array<{
+    fragment_id: number;
+    path: string;
+    similarity: number;
+  }>;
+  isStreaming?: boolean;
+}
 
 export function Chat() {
   const [query, setQuery] = useState('');
-  const [messages, setMessages] = useState<Array<{role: string, content: string}>>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [useWebSocket, setUseWebSocket] = useState(true);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+
+  // Auto-scroll al final
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  // Limpiar WebSocket al desmontar
+  useEffect(() => {
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+    };
+  }, []);
+
+  const addMessage = (message: Message) => {
+    setMessages(prev => [...prev, message]);
+  };
+
+  const updateLastMessage = (content: string, sources?: Message['sources']) => {
+    setMessages(prev => {
+      const newMessages = [...prev];
+      const lastMsg = newMessages[newMessages.length - 1];
+      if (lastMsg && lastMsg.role === 'assistant') {
+        newMessages[newMessages.length - 1] = {
+          ...lastMsg,
+          content: lastMsg.content + content,
+          sources: sources || lastMsg.sources,
+        };
+      }
+      return newMessages;
+    });
+  };
+
+  const markLastMessageDone = () => {
+    setMessages(prev => {
+      const newMessages = [...prev];
+      const lastMsg = newMessages[newMessages.length - 1];
+      if (lastMsg && lastMsg.role === 'assistant') {
+        newMessages[newMessages.length - 1] = {
+          ...lastMsg,
+          isStreaming: false,
+        };
+      }
+      return newMessages;
+    });
+  };
+
+  const sendViaWebSocket = (query: string) => {
+    // Conectar WebSocket si no está conectado
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      const wsUrl = API_BASE_URL.replace(/^http/, 'ws') + '/ws/chat';
+      wsRef.current = new WebSocket(wsUrl);
+
+      wsRef.current.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+
+        switch (data.type) {
+          case 'start':
+            // Inicio de respuesta
+            break;
+          case 'chunk':
+            updateLastMessage(data.content || '');
+            break;
+          case 'done':
+            updateLastMessage('', data.sources);
+            markLastMessageDone();
+            setIsLoading(false);
+            break;
+          case 'error':
+            updateLastMessage(`\n\nError: ${data.error}`);
+            markLastMessageDone();
+            setIsLoading(false);
+            break;
+        }
+      };
+
+      wsRef.current.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        updateLastMessage('\n\nError: Conexión WebSocket fallida');
+        markLastMessageDone();
+        setIsLoading(false);
+      };
+
+      wsRef.current.onclose = () => {
+        wsRef.current = null;
+      };
+    }
+
+    // Enviar mensaje cuando esté listo
+    const send = () => {
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({
+          type: 'chat',
+          query,
+        }));
+      } else {
+        setTimeout(send, 100);
+      }
+    };
+    send();
+  };
+
+  const sendViaHTTP = async (query: string) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query }),
+      });
+
+      const data = await response.json();
+
+      updateLastMessage(data.response || 'Sin respuesta', data.sources);
+      markLastMessageDone();
+    } catch (error) {
+      console.error('Error:', error);
+      updateLastMessage('\n\nError: No se pudo conectar con el servidor');
+      markLastMessageDone();
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -14,28 +152,13 @@ export function Chat() {
     setQuery('');
     setIsLoading(true);
 
-    try {
-      // TODO: Implementar llamada real a la API
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: userMessage }),
-      });
+    // Agregar mensaje vacío del asistente
+    addMessage({ role: 'assistant', content: '', isStreaming: true });
 
-      const data = await response.json();
-      
-      setMessages(prev => [...prev, { 
-        role: 'assistant', 
-        content: data.response || 'Respuesta placeholder' 
-      }]);
-    } catch (error) {
-      console.error('Error:', error);
-      setMessages(prev => [...prev, { 
-        role: 'assistant', 
-        content: 'Error: No se pudo conectar con el servidor' 
-      }]);
-    } finally {
-      setIsLoading(false);
+    if (useWebSocket) {
+      sendViaWebSocket(userMessage);
+    } else {
+      await sendViaHTTP(userMessage);
     }
   };
 
@@ -46,11 +169,21 @@ export function Chat() {
         {messages.length === 0 ? (
           <div className="text-center text-gray-400 mt-20">
             <h2 className="text-2xl font-semibold mb-2">
-              👋 Bienvenido a ALEsys
+              Bienvenido a ALEsys
             </h2>
             <p className="text-lg">
               Haz una pregunta sobre tu base de conocimiento
             </p>
+            <div className="mt-4 text-sm text-gray-500">
+              <p>Modo de conexión: 
+                <button 
+                  onClick={() => setUseWebSocket(!useWebSocket)}
+                  className="ml-2 text-primary-400 hover:text-primary-300"
+                >
+                  {useWebSocket ? 'WebSocket' : 'HTTP'}
+                </button>
+              </p>
+            </div>
           </div>
         ) : (
           messages.map((msg, idx) => (
@@ -65,13 +198,31 @@ export function Chat() {
                     : 'bg-dark-800 text-gray-100'
                 }`}
               >
-                {msg.content}
+                <div className="whitespace-pre-wrap">{msg.content}</div>
+                {msg.sources && msg.sources.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-gray-700">
+                    <p className="text-xs text-gray-400 mb-1">Fuentes:</p>
+                    <div className="flex flex-wrap gap-2">
+                      {msg.sources.map((source, i) => (
+                        <span
+                          key={i}
+                          className="text-xs bg-dark-700 px-2 py-1 rounded"
+                        >
+                          {source.path} ({(source.similarity * 100).toFixed(0)}%)
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {msg.isStreaming && (
+                  <span className="inline-block w-2 h-4 ml-1 bg-primary-400 animate-pulse"></span>
+                )}
               </div>
             </div>
           ))
         )}
         
-        {isLoading && (
+        {isLoading && messages[messages.length - 1]?.role !== 'assistant' && (
           <div className="flex justify-start">
             <div className="bg-dark-800 p-4 rounded-lg">
               <div className="flex gap-2">
@@ -82,6 +233,8 @@ export function Chat() {
             </div>
           </div>
         )}
+        
+        <div ref={messagesEndRef} />
       </div>
 
       {/* Input form */}

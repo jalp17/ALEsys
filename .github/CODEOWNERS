@@ -1,0 +1,102 @@
+# Code Owners - ALEsys
+# Este define owners del código para review automático
+# Documentación: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# ===========================================
+# Default owner (toda la línea de código)
+# ===========================================
+* @alesys-dev
+
+# ===========================================
+# Backend Rust
+# ===========================================
+
+# Core (lógica de negocio)
+crates/core/ @alesys-dev
+
+# API (REST + WebSocket)
+crates/api/ @alesys-dev
+
+# CLI
+crates/cli/ @alesys-dev
+
+# ===========================================
+# Frontend React
+# ===========================================
+webui/ @alesys-dev
+
+# ===========================================
+# PHP Backend
+# ===========================================
+server/ @alesys-dev
+
+# ===========================================
+# Infraestructura
+# ===========================================
+
+# Docker
+docker/ @alesys-dev
+*.dockerfile @alesys-dev
+docker-compose*.yml @alesys-dev
+
+# CI/CD
+.github/ @alesys-dev
+
+# Scripts
+scripts/ @alesys-dev
+
+# ===========================================
+# Documentación
+# ===========================================
+
+# README principal
+README.md @alesys-dev
+
+# Documentación técnica
+docs/ @alesys-dev
+
+# ===========================================
+# Configuración
+# ===========================================
+
+# Configuración de Rust
+Cargo.toml @alesys-dev
+
+# Configuración de Node.js
+webui/package.json @alesys-dev
+webui/tsconfig.json @alesys-dev
+
+# Configuración de PHP
+server/composer.json @alesys-dev
+
+# ===========================================
+# Seguridad
+# ===========================================
+
+# Archivos sensibles (requieren review extra)
+*.env* @alesys-dev
+SECURITY.md @alesys-dev
+LICENSE @alesys-dev
+
+# ===========================================
+# Configuración de Code Owners
+# ===========================================
+
+# Reglas para diferentes áreas de conocimiento
+# Puedes asignar diferentes owners para diferentes partes
+
+# Ejemplo (descomentar si tienes más colaboradores):
+# crates/core/src/llm/ @llm-expert
+# crates/core/src/graphrag/ @graph-expert
+# webui/src/components/ @frontend-expert
+# docker/ @devops-expert
+
+# ===========================================
+# Notas
+# ===========================================
+
+# 1. Los owners son notificados automáticamente en PRs
+# 2. Se requiere aprobación de al menos 1 owner para merge
+# 3. Los owners pueden ser usuarios de GitHub o equipos
+# 4. Se pueden usar wildcards (*) para patrones
+# 5. Las reglas se evalúan en orden (primera coincidencia)

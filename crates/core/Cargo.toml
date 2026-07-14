@@ -11,8 +11,6 @@ serde.workspace = true
 serde_json.workspace = true
 sqlx.workspace = true
 pgvector.workspace = true
-mistralrs.workspace = true
-ort.workspace = true
 thiserror.workspace = true
 anyhow.workspace = true
 tracing.workspace = true
@@ -24,8 +22,32 @@ once_cell.workspace = true
 # Graph data structures
 petgraph = "0.8"
 
-# Embeddings cache
-sled = "0.34"
+# LLM inference
+mistralrs = { workspace = true, optional = true }
+llama_cpp = { workspace = true, optional = true }
+candle-core = { workspace = true, optional = true }
+candle-transformers = { workspace = true, optional = true }
+candle-nn = { workspace = true, optional = true }
+tokenizers = { workspace = true, optional = true }
+hf-hub = { workspace = true, optional = true }
+reqwest = { workspace = true, optional = true }
+num_cpus = "1"
+
+# TOML parsing para model registry
+toml = "0.8"
 
 [dev-dependencies]
 tokio-test = "0.4"
+
+[features]
+default = ["llama-cpp"]
+llama-cpp = ["dep:llama_cpp"]
+mistralrs-backend = ["dep:mistralrs"]
+candle-backend = [
+    "dep:candle-core",
+    "dep:candle-transformers",
+    "dep:tokenizers",
+    "dep:hf-hub",
+]
+vllm-backend = ["dep:reqwest"]
+transformers-backend = ["dep:reqwest"]

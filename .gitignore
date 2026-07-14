@@ -112,6 +112,7 @@ AGENT.md
 history.md
 estado_servidor.md
 CHANGELOG.md
+BRANCH_STRATEGY.md
 
 # Arquitectura interna (revele infraestructura, mTLS, certs)
 docs/ARQUITECTURA_DOCKER_MTLS.md

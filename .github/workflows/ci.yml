@@ -1,25 +1,229 @@
-name: CI
+name: CI/CD Pipeline
 
 on:
   push:
-    branches: [master, main]
+    branches: [main, 'phase-*', 'feature/*']
   pull_request:
-    branches: [master, main]
+    branches: [main, 'phase-*']
 
 env:
-  PGHOST: localhost
-  PGPORT: 5432
-  PGUSER: alesys
-  PGPASSWORD: alesys
-  PGDATABASE: alesys_test
-  OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
 
 jobs:
-  lint-and-test:
-    name: Lint & Test
+  # ===========================================
+  # Lint & Format (Fast Feedback)
+  # ===========================================
+  lint:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Check Rust formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run Clippy (Rust linter)
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        run: pnpm install -g
+
+      - name: Install webui dependencies
+        run: pnpm install
+        working-directory: webui
+
+      - name: Check TypeScript
+        run: pnpm tsc --noEmit
+        working-directory: webui
+
+      - name: Check ESLint
+        run: pnpm eslint src --ext .ts,.tsx
+        working-directory: webui
+
+  # ===========================================
+  # Rust Tests
+  # ===========================================
+  rust-tests:
+    name: Rust Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    
+    needs: lint
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Run Rust unit tests
+        run: cargo test --workspace --lib
+
+      - name: Run Rust integration tests
+        run: cargo test --workspace --test '*'
+        continue-on-error: true
+
+  # ===========================================
+  # WebUI Tests
+  # ===========================================
+  webui-tests:
+    name: WebUI Tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    
+    needs: lint
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        run: pnpm install -g
+
+      - name: Install dependencies
+        run: pnpm install
+        working-directory: webui
+
+      - name: Run WebUI tests
+        run: pnpm test
+        working-directory: webui
+
+      - name: Build WebUI
+        run: pnpm build
+        working-directory: webui
+
+  # ===========================================
+  # Security Scanning
+  # ===========================================
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    needs: lint
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Run Gitleaks (secrets scanning)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run Semgrep (SAST)
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: p/rust
+        continue-on-error: true
+
+  # ===========================================
+  # Build Docker Images
+  # ===========================================
+  docker-build:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    needs: [rust-tests, webui-tests]
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Rust Core image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile.core
+          push: false
+          tags: alesys/core:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build PHP image
+        uses: docker/build-push-action@v5
+        with:
+          context: server
+          file: server/docker/Dockerfile.php
+          push: false
+          tags: alesys/php:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ===========================================
+  # Integration Tests (on phase/* and main)
+  # ===========================================
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/phase/')
+    
+    needs: [rust-tests, webui-tests, docker-build]
+    
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -39,71 +243,100 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4
         with:
-          python-version: '3.11'
-          cache: 'pip'
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Install system dependencies
+      - name: Initialize database
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq postgresql-client
+          PGPASSWORD=alesys psql -h localhost -U alesys -d alesys_test -f docker/init-db.sql
 
-      - name: Install Python dependencies
+      - name: Run integration tests
+        run: cargo test --workspace --test '*'
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGUSER: alesys
+          PGPASSWORD: alesys
+          PGDATABASE: alesys_test
+
+  # ===========================================
+  # Deploy (only on main)
+  # ===========================================
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    needs: [integration-tests]
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build and push Docker images
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile.core
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            alesys/core:latest
+            alesys/core:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Deploy to production
         run: |
-          pip install --upgrade pip
-          pip install -r requirements.txt
+          echo "🚀 Deploying to production..."
+          # Add your deployment steps here
+          # Example: docker compose -f docker/docker-compose.prod.yml up -d
 
-      - name: Verify Python syntax
-        run: |
-          python -m py_compile config.py db_manager.py embedder.py extractor.py pipeline.py test_queries.py main.py gui.py core/chat_agent.py core/web_search.py
-
-      - name: Verify imports
-        run: |
-          python -c "
-from config import DB, EMBEDDING, OPENROUTER, PATHS, CHUNKING
-from db_manager import DatabaseManager
-from embedder import Embedder
-from extractor import Extractor
-from pipeline import Pipeline
-from test_queries import vector_search, graph_search, hybrid_search
-print('✓ Todos los imports correctos')
-"
-
-      - name: Wait for PostgreSQL
-        run: |
-          for i in {1..30}; do
-            if pg_isready -h localhost -p 5432 -U alesys -d alesys_test; then
-              echo "PostgreSQL ready"
-              break
-            fi
-            sleep 1
-          done
-
-      - name: Run test suite
-        run: |
-          bash run_tests.sh
-
-      - name: Check formatting (optional)
-        run: |
-          pip install black --quiet
-          black --check --diff . 2>/dev/null || echo "⚠ Formato no verificado (black no configurado estricto)"
-
-      - name: Check dependencies for vulnerabilities
-        run: |
-          pip install pip-audit --quiet
-          pip-audit --desc --ignore-dev || true
-
+  # ===========================================
+  # Dependency Review (PR only)
+  # ===========================================
   dependency-review:
     name: Dependency Review
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
+    
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
       - name: Review dependencies
         uses: actions/dependency-review-action@v4
         with:
           config-file: '.github/dependency-review-config.yml'
           fail-on-severity: 'high'
+
+  # ===========================================
+  # Notify
+  # ===========================================
+  notify:
+    name: Notify
+    runs-on: ubuntu-latest
+    needs: [lint, rust-tests, webui-tests, security, docker-build]
+    if: always()
+    
+    steps:
+      - name: Notify on failure
+        if: contains(needs.*.result, 'failure')
+        run: |
+          echo "❌ CI/CD Pipeline failed!"
+          # Add your notification steps here (Slack, Discord, Email, etc.)
+
+      - name: Notify on success
+        if: contains(needs.*.result, 'success') && !contains(needs.*.result, 'failure')
+        run: |
+          echo "✅ CI/CD Pipeline succeeded!"
+          # Add your notification steps here

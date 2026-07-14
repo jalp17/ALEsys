@@ -1,91 +1,170 @@
-//! Motor de inferencia LLM
-//! 
-//! Soporta dos backends:
-//! - mistralrs: Modelos GGUF cuantizados (recomendado)
-//! - ort: ONNX Runtime para embeddings
+//! Motor de inferencia LLM con soporte para múltiples backends
+//!
+//! Backends disponibles:
+//! - **llama_cpp**: Vulkan GPU, 150+ arquitecturas, 23 quantizaciones (default)
+//! - **mistralrs**: CPU, arquitecturas limitadas, sin MoE
+//! - **candle**: Rust nativo, CUDA/Metal/CPU (experimental)
+//! - **vllm**: Python subprocess, GPU de alto rendimiento
+//! - **transformers**: Python subprocess, modelos HF
+//!
+//! Selección via variable de entorno `LLM_BACKEND=llama_cpp|mistralrs|candle|vllm|transformers|auto`
+
+pub mod config;
+pub mod backend;
+pub mod backend_manager;
+
+#[cfg(feature = "mistralrs-backend")]
+pub mod mistral;
+#[cfg(feature = "llama-cpp")]
+pub mod llama_cpp;
+#[cfg(feature = "candle-backend")]
+pub mod candle;
+#[cfg(feature = "vllm-backend")]
+pub mod vllm;
+#[cfg(feature = "transformers-backend")]
+pub mod transformers;
+
+pub use config::{LLMConfig, LLMBackendType, KnowledgeExtraction, Entity, Relation};
+pub use backend::LLMBackend;
+pub use backend_manager::BackendManager;
 
 use crate::Result;
 
+/// Mensaje de chat
+#[derive(Debug, Clone)]
+pub struct ChatMessage {
+    pub role: String,
+    pub content: String,
+}
+
+/// Respuesta del LLM
+#[derive(Debug, Clone)]
+pub struct ChatResponse {
+    pub content: String,
+    pub model: String,
+    pub usage: Usage,
+}
+
+/// Uso de tokens
+#[derive(Debug, Clone)]
+pub struct Usage {
+    pub prompt_tokens: usize,
+    pub completion_tokens: usize,
+    pub total_tokens: usize,
+}
+
+/// Chunk de streaming
+#[derive(Debug, Clone)]
+pub struct StreamChunk {
+    pub delta: String,
+    pub finish_reason: Option<String>,
+}
+
+/// Trait que define la interfaz de un motor LLM
 pub trait LLMEngine: Send + Sync {
-    /// Generar respuesta de chat
-    async fn chat(&self, prompt: &str, context: &[String]) -> Result<String>;
-    
-    /// Generar código
-    async fn generate_code(&self, prompt: &str, language: &str) -> Result<String>;
-    
-    /// Generar entidades/relaciones para GraphRAG
-    async fn extract_knowledge(&self, text: &str) -> Result<KnowledgeExtraction>;
+    /// Chat con contexto de documentos
+    fn chat(&self, messages: &[ChatMessage]) -> Result<ChatResponse>;
+
+    /// Chat con streaming de tokens
+    fn chat_stream(&self, messages: &[ChatMessage]) -> Result<Box<dyn Iterator<Item = Result<StreamChunk>> + Send>>;
+
+    /// Generación de código
+    fn generate_code(&self, prompt: &str, language: &str) -> Result<String>;
+
+    /// Extracción de conocimiento
+    fn extract_knowledge(&self, text: &str, schema: &str) -> Result<String>;
+
+    /// Verifica si el backend está disponible
+    fn is_available(&self) -> bool;
+
+    /// Nombre del backend
+    fn backend_name(&self) -> &str;
 }
 
-#[derive(Debug, Clone)]
-pub struct KnowledgeExtraction {
-    pub entities: Vec<Entity>,
-    pub relations: Vec<Relation>,
-}
-
-#[derive(Debug, Clone)]
-pub struct Entity {
-    pub name: String,
-    pub entity_type: String,
-}
-
-#[derive(Debug, Clone)]
-pub struct Relation {
-    pub origin: String,
-    pub destination: String,
-    pub relation_type: String,
-}
-
-/// Implementación con mistralrs
-pub struct MistralEngine {
-    // Configuración del modelo
-    model_path: String,
-    // ... estado interno
-}
-
-impl MistralEngine {
-    pub fn new(model_path: String) -> Self {
-        Self { model_path }
-    }
-    
-    pub async fn load(&mut self) -> Result<()> {
-        // TODO: Implementar carga de modelo GGUF con mistralrs
-        Ok(())
-    }
-}
-
-impl LLMEngine for MistralEngine {
-    async fn chat(&self, prompt: &str, context: &[String]) -> Result<String> {
-        // TODO: Implementar inference con mistralrs
-        todo!("Implementar chat con mistralrs")
-    }
-    
-    async fn generate_code(&self, prompt: &str, language: &str) -> Result<String> {
-        // TODO: Implementar generación de código
-        todo!("Implementar generate_code")
-    }
-    
-    async fn extract_knowledge(&self, text: &str) -> Result<KnowledgeExtraction> {
-        // TODO: Implementar extracción de entidades/relaciones
-        todo!("Implementar extract_knowledge")
-    }
-}
-
-/// Implementación con ONNX para embeddings
+/// Embedder con ONNX Runtime (stub por ahora)
 pub struct ONNXEmbedder {
-    session: ort::Session,
+    loaded: bool,
+    dimension: usize,
 }
 
 impl ONNXEmbedder {
-    pub fn new(model_path: &str) -> Result<Self> {
-        let session = ort::Session::builder()?
-            .commit_from_file(model_path)?;
-        
-        Ok(Self { session })
+    pub fn new() -> Self {
+        Self {
+            loaded: false,
+            dimension: 384,
+        }
     }
-    
+
+    pub fn load(&mut self, model_path: &str) -> Result<()> {
+        if !std::path::Path::new(model_path).exists() {
+            tracing::warn!("Modelo ONNX no encontrado: {}", model_path);
+            return Ok(());
+        }
+        tracing::info!("Modelo ONNX configurado: {}", model_path);
+        self.loaded = true;
+        Ok(())
+    }
+
     pub fn encode(&self, text: &str) -> Result<Vec<f32>> {
-        // TODO: Implementar encoding con ONNX
-        todo!("Implementar encode con ort")
+        if !self.loaded {
+            let mut embedding = vec![0.0f32; self.dimension];
+            let hash = text
+                .bytes()
+                .fold(0u32, |acc, b| acc.wrapping_add(b as u32));
+            for (i, val) in embedding.iter_mut().enumerate() {
+                *val = ((hash.wrapping_mul(i as u32 + 1)) as f32) / (u32::MAX as f32);
+            }
+            let norm: f32 = embedding.iter().map(|x| x * x).sum::<f32>().sqrt();
+            if norm > 0.0 {
+                for val in embedding.iter_mut() {
+                    *val /= norm;
+                }
+            }
+            return Ok(embedding);
+        }
+        Ok(vec![0.0; self.dimension])
+    }
+
+    pub fn encode_batch(&self, texts: &[&str]) -> Result<Vec<Vec<f32>>> {
+        texts.iter().map(|text| self.encode(text)).collect()
+    }
+}
+
+impl Default for ONNXEmbedder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_chat_message() {
+        let msg = ChatMessage {
+            role: "user".to_string(),
+            content: "Hello".to_string(),
+        };
+        assert_eq!(msg.role, "user");
+    }
+
+    #[test]
+    fn test_usage() {
+        let usage = Usage {
+            prompt_tokens: 10,
+            completion_tokens: 20,
+            total_tokens: 30,
+        };
+        assert_eq!(usage.total_tokens, 30);
+    }
+
+    #[test]
+    fn test_stream_chunk() {
+        let chunk = StreamChunk {
+            delta: "Hello".to_string(),
+            finish_reason: None,
+        };
+        assert_eq!(chunk.delta, "Hello");
     }
 }

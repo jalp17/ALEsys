@@ -1,0 +1,139 @@
+# =============================================================================
+# ALEsys - Model Registry Centralizado
+# =============================================================================
+# Este archivo define los backends disponibles, sus compatibilidades
+# y configuraciones de build. Cada backend se habilita via Cargo features.
+
+# -----------------------------------------------------------------------------
+# Backend: llama.cpp (Vulkan/CUDA/Metal)
+# -----------------------------------------------------------------------------
+[backends.llama_cpp]
+name = "llama.cpp (Vulkan/CUDA/Metal)"
+enabled = true
+gpu_backends = ["vulkan", "cuda", "metal"]
+cpu_support = true
+architectures = [
+    "llama", "llama2", "codellama", "llama3",
+    "mistral", "mixtral",
+    "qwen2", "qwen3", "qwen3moe",
+    "phi2", "phi3", "phimoe",
+    "gemma", "gemma2", "gemma3",
+    "deepseek2", "deepseek3",
+    "starcoder", "starcoder2",
+    "bloom", "falcon",
+    "mamba", "mamba2",
+    "rwkv6", "rwkv7",
+    "internlm2", "baichuan",
+    "yi", "glm4",
+]
+quantizations = [
+    "F16", "F32", "BF16",
+    "Q2_K", "Q3_K", "Q4_K", "Q5_K", "Q6_K",
+    "Q4_0", "Q4_1", "Q5_0", "Q5_1", "Q8_0",
+    "IQ1_S", "IQ1_M", "IQ2_XXS", "IQ2_XS", "IQ2_S",
+    "IQ3_XXS", "IQ3_S", "IQ4_NL", "IQ4_XS",
+]
+build_mode = "CiPrebuilt"
+features = ["vulkan"]
+note = "Backend principal. Soporta MoE, 150+ arquitecturas, 23 quantizaciones. GPU via Vulkan."
+
+# -----------------------------------------------------------------------------
+# Backend: mistralrs (CPU only)
+# -----------------------------------------------------------------------------
+[backends.mistralrs]
+name = "mistralrs (CPU only)"
+enabled = true
+gpu_backends = []
+cpu_support = true
+architectures = [
+    "llama", "llama2", "codellama",
+    "qwen2", "qwen3",
+    "mistral",
+    "phi2", "phi3",
+    "starcoder2",
+    "bloom", "falcon",
+    "mamba",
+    "rwkv6",
+]
+quantizations = ["Q4_K_M", "Q4_K_S", "Q5_K_M", "Q5_K_S", "Q6_K", "Q8_0", "F16", "F32"]
+build_mode = "CiPrebuilt"
+limitations = [
+    "no_moe",
+    "no_iq_quant",
+    "no_bf16",
+    "cpu_only",
+]
+note = "Backend limitado. Sin MoE, sin quantizaciones IQ, solo CPU. Útil como fallback."
+
+# -----------------------------------------------------------------------------
+# Backend: Candle (Rust nativo)
+# -----------------------------------------------------------------------------
+[backends.candle]
+name = "Candle (Rust nativo)"
+enabled = false
+gpu_backends = ["cuda", "metal", "mkl"]
+cpu_support = true
+architectures = [
+    "llama", "llama2", "codellama",
+    "mistral",
+    "qwen2", "qwen3",
+    "phi3",
+    "gemma", "gemma2",
+    "bert", "roberta", "distilbert",
+    "t5", "flan-t5",
+]
+quantizations = ["F32", "F16", "BF16"]
+build_mode = "LocalCompile"
+features = ["cuda", "metal"]
+note = "Rust nativo. Sin MoE, quant limitado. Ideal para CPU/Metal, requiere CUDA SDK para GPU NVIDIA."
+
+# -----------------------------------------------------------------------------
+# Backend: vLLM (Python subprocess)
+# -----------------------------------------------------------------------------
+[backends.vllm]
+name = "vLLM (Python subprocess)"
+enabled = false
+gpu_backends = ["cuda", "rocm"]
+cpu_support = false
+architectures = [
+    "llama", "llama2", "codellama", "llama3",
+    "mistral", "mixtral",
+    "qwen2", "qwen2.5",
+    "phi3",
+    "gemma", "gemma2",
+    "deepseek", "deepseek2",
+    "yi", "internlm2",
+]
+quantizations = ["AWQ", "GPTQ", "FP8", "BF16", "F16", "INT4", "INT8"]
+build_mode = "PythonInstall"
+python = { version = "3.11+", packages = ["vllm>=0.5.0", "torch"], index_url = "https://download.pytorch.org/whl/cu121" }
+server_port = 8000
+health_endpoint = "/health"
+note = "Alto throughput. PagedAttention, continuous batching. Solo GPU NVIDIA/AMD."
+
+# -----------------------------------------------------------------------------
+# Backend: HF Transformers (Python subprocess)
+# -----------------------------------------------------------------------------
+[backends.transformers]
+name = "HF Transformers (Python subprocess)"
+enabled = false
+gpu_backends = ["cuda", "mps"]
+cpu_support = true
+architectures = ["*"]  # Todos los modelos HuggingFace
+quantizations = ["F32", "F16", "BF16", "8bit", "4bit", "AWQ", "GPTQ"]
+build_mode = "PythonInstall"
+python = { version = "3.11+", packages = ["transformers", "accelerate", "torch", "safetensors", "bitsandbytes"] }
+note = "Máxima compatibilidad (todos los modelos HF). Más lento que vLLM."
+
+# =============================================================================
+# Modelos de Test (para CI/validación)
+# =============================================================================
+[tests]
+# Modelo MoE pequeño (Qwen3-MoE-4x0.6B, 837MB)
+moe_model = "/mnt/ws_file/modelos_ia/Qwen3-MoE-4x0.6B-q4_k_m.gguf"
+
+# Modelo pequeño no-MoE (TinyLlama 1.1B, ~600MB)
+small_model = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+
+# Embeddings pequeños (all-MiniLM-L6-v2, ~80MB)
+small_embeddings = "sentence-transformers/all-MiniLM-L6-v2"
