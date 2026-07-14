@@ -3,13 +3,13 @@
 //! Implementación de `LLMEngine` usando vLLM como subprocess Python
 //! con API compatible OpenAI.
 
+use super::config::{GpuType, PythonConfig};
+use super::{ChatMessage, ChatResponse, LLMConfig, LLMEngine, StreamChunk};
+use crate::Result;
+use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
-use std::path::PathBuf;
 use tokio::sync::Mutex;
-use crate::Result;
-use super::{LLMEngine, ChatMessage, ChatResponse, StreamChunk, LLMConfig};
-use super::config::{PythonConfig, GpuType};
 
 /// Backend vLLM para inferencia de alta eficiencia
 pub struct VllmEngine {
@@ -23,15 +23,15 @@ pub struct VllmEngine {
 impl VllmEngine {
     /// Crea una nueva instancia de VllmEngine
     pub async fn new(config: LLMConfig) -> Result<Self> {
-        let python_config = config.python.as_ref()
-            .ok_or_else(|| crate::AlesysError::LLM(
-                "Configuración Python requerida para vLLM".to_string()
-            ))?;
+        let python_config = config.python.as_ref().ok_or_else(|| {
+            crate::AlesysError::LLM("Configuración Python requerida para vLLM".to_string())
+        })?;
 
         // Buscar Python en PATH o usar configuración
         let python_path = Self::find_python(&python_config.version)?;
-        
-        let base_url = format!("http://{}:{}", 
+
+        let base_url = format!(
+            "http://{}:{}",
             config.host.as_deref().unwrap_or("127.0.0.1"),
             config.port.unwrap_or(8000)
         );
@@ -47,25 +47,20 @@ impl VllmEngine {
 
     /// Busca ejecutable Python compatible
     fn find_python(version_req: &str) -> Result<PathBuf> {
-        let candidates = vec![
-            "python3".to_string(),
-            "python".to_string(),
-        ];
+        let candidates = vec!["python3".to_string(), "python".to_string()];
 
         for candidate in &candidates {
-            if let Ok(output) = Command::new(candidate)
-                .arg("--version")
-                .output()
-            {
+            if let Ok(output) = Command::new(candidate).arg("--version").output() {
                 let version = String::from_utf8_lossy(&output.stdout);
                 tracing::info!("Python encontrado: {} ({})", candidate, version.trim());
                 return Ok(PathBuf::from(candidate));
             }
         }
 
-        Err(crate::AlesysError::LLM(
-            format!("Python {} no encontrado", version_req)
-        ))
+        Err(crate::AlesysError::LLM(format!(
+            "Python {} no encontrado",
+            version_req
+        )))
     }
 
     /// Inicia el servidor vLLM como subprocess
@@ -75,8 +70,7 @@ impl VllmEngine {
             return Ok(());
         }
 
-        let model = self.config.model.as_deref()
-            .unwrap_or(model_path);
+        let model = self.config.model.as_deref().unwrap_or(model_path);
 
         tracing::info!("Iniciando servidor vLLM con modelo: {}", model);
 
@@ -86,7 +80,11 @@ impl VllmEngine {
             "--model".to_string(),
             model.to_string(),
             "--host".to_string(),
-            self.config.host.as_deref().unwrap_or("127.0.0.1").to_string(),
+            self.config
+                .host
+                .as_deref()
+                .unwrap_or("127.0.0.1")
+                .to_string(),
             "--port".to_string(),
             self.config.port.unwrap_or(8000).to_string(),
         ];
@@ -109,9 +107,7 @@ impl VllmEngine {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .map_err(|e| crate::AlesysError::LLM(
-                format!("Error iniciando vLLM: {}", e)
-            ))?;
+            .map_err(|e| crate::AlesysError::LLM(format!("Error iniciando vLLM: {}", e)))?;
 
         self.process = Some(Mutex::new(child));
         self.started_at = Some(Instant::now());
@@ -132,14 +128,11 @@ impl VllmEngine {
         loop {
             if start.elapsed() > timeout {
                 return Err(crate::AlesysError::LLM(
-                    "Timeout esperando servidor vLLM".to_string()
+                    "Timeout esperando servidor vLLM".to_string(),
                 ));
             }
 
-            match client.get(format!("{}/health", self.base_url))
-                .send()
-                .await
-            {
+            match client.get(format!("{}/health", self.base_url)).send().await {
                 Ok(resp) if resp.status().is_success() => {
                     tracing::info!("Servidor vLLM listo");
                     return Ok(());
@@ -155,7 +148,8 @@ impl VllmEngine {
     pub async fn stop_server(&mut self) -> Result<()> {
         if let Some(mut process) = self.process.take() {
             tracing::info!("Deteniendo servidor vLLM...");
-            process.kill()
+            process
+                .kill()
                 .map_err(|e| crate::AlesysError::LLM(format!("Error deteniendo vLLM: {}", e)))?;
             self.started_at = None;
             tracing::info!("Servidor vLLM detenido");
@@ -166,7 +160,8 @@ impl VllmEngine {
     /// Verifica si el servidor está corriendo
     pub async fn is_running(&self) -> bool {
         let client = reqwest::Client::new();
-        client.get(format!("{}/health", self.base_url))
+        client
+            .get(format!("{}/health", self.base_url))
             .send()
             .await
             .map(|r| r.status().is_success())
@@ -181,16 +176,20 @@ impl LLMEngine for VllmEngine {
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async {
                 let client = reqwest::Client::new();
-                
+
                 // Formatear mensajes para OpenAI API
-                let openai_messages: Vec<serde_json::Value> = messages.iter()
-                    .map(|m| serde_json::json!({
-                        "role": m.role,
-                        "content": m.content
-                    }))
+                let openai_messages: Vec<serde_json::Value> = messages
+                    .iter()
+                    .map(|m| {
+                        serde_json::json!({
+                            "role": m.role,
+                            "content": m.content
+                        })
+                    })
                     .collect();
 
-                let response = client.post(format!("{}/v1/chat/completions", self.base_url))
+                let response = client
+                    .post(format!("{}/v1/chat/completions", self.base_url))
                     .json(&serde_json::json!({
                         "model": self.config.model.as_deref().unwrap_or("default"),
                         "messages": openai_messages,
@@ -199,10 +198,13 @@ impl LLMEngine for VllmEngine {
                     }))
                     .send()
                     .await
-                    .map_err(|e| crate::AlesysError::LLM(format!("Error en request vLLM: {}", e)))?;
+                    .map_err(|e| {
+                        crate::AlesysError::LLM(format!("Error en request vLLM: {}", e))
+                    })?;
 
-                let body: serde_json::Value = response.json().await
-                    .map_err(|e| crate::AlesysError::LLM(format!("Error parseando respuesta: {}", e)))?;
+                let body: serde_json::Value = response.json().await.map_err(|e| {
+                    crate::AlesysError::LLM(format!("Error parseando respuesta: {}", e))
+                })?;
 
                 let content = body["choices"][0]["message"]["content"]
                     .as_str()
@@ -215,7 +217,8 @@ impl LLMEngine for VllmEngine {
                     model: self.config.model.as_deref().unwrap_or("vllm").to_string(),
                     usage: super::Usage {
                         prompt_tokens: usage["prompt_tokens"].as_u64().unwrap_or(0) as usize,
-                        completion_tokens: usage["completion_tokens"].as_u64().unwrap_or(0) as usize,
+                        completion_tokens: usage["completion_tokens"].as_u64().unwrap_or(0)
+                            as usize,
                         total_tokens: usage["total_tokens"].as_u64().unwrap_or(0) as usize,
                     },
                 })
@@ -223,16 +226,17 @@ impl LLMEngine for VllmEngine {
         })
     }
 
-    fn chat_stream(&self, messages: &[ChatMessage]) -> Result<Box<dyn Iterator<Item = Result<StreamChunk>> + Send>> {
+    fn chat_stream(
+        &self,
+        messages: &[ChatMessage],
+    ) -> Result<Box<dyn Iterator<Item = Result<StreamChunk>> + Send>> {
         // Para streaming, usar SSE con vLLM
         let response = self.chat(messages)?;
-        
-        let chunks = vec![
-            Ok(StreamChunk {
-                delta: response.content,
-                finish_reason: Some("stop".to_string()),
-            })
-        ];
+
+        let chunks = vec![Ok(StreamChunk {
+            delta: response.content,
+            finish_reason: Some("stop".to_string()),
+        })];
 
         Ok(Box::new(chunks.into_iter()))
     }
@@ -241,7 +245,10 @@ impl LLMEngine for VllmEngine {
         let messages = vec![
             ChatMessage {
                 role: "system".to_string(),
-                content: format!("Eres un asistente de programación. Genera código en {}.", language),
+                content: format!(
+                    "Eres un asistente de programación. Genera código en {}.",
+                    language
+                ),
             },
             ChatMessage {
                 role: "user".to_string(),

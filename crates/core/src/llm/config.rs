@@ -129,14 +129,30 @@ pub struct LLMConfig {
     pub tensor_parallel_size: u32,
 }
 
-fn default_max_tokens() -> usize { 2048 }
-fn default_temperature() -> f32 { 0.7 }
-fn default_top_p() -> f32 { 0.9 }
-fn default_context_size() -> usize { 4096 }
-fn default_gpu_layers() -> u32 { 99 }
-fn default_server_port() -> u16 { 8000 }
-fn default_gpu_memory_utilization() -> f32 { 0.9 }
-fn default_tensor_parallel_size() -> u32 { 1 }
+fn default_max_tokens() -> usize {
+    2048
+}
+fn default_temperature() -> f32 {
+    0.7
+}
+fn default_top_p() -> f32 {
+    0.9
+}
+fn default_context_size() -> usize {
+    4096
+}
+fn default_gpu_layers() -> u32 {
+    99
+}
+fn default_server_port() -> u16 {
+    8000
+}
+fn default_gpu_memory_utilization() -> f32 {
+    0.9
+}
+fn default_tensor_parallel_size() -> u32 {
+    1
+}
 
 impl Default for LLMConfig {
     fn default() -> Self {
@@ -174,37 +190,47 @@ impl LLMConfig {
             model_path: std::env::var("LLM_MODEL_PATH").unwrap_or_default(),
             backend,
             max_tokens: std::env::var("LLM_MAX_TOKENS")
-                .ok().and_then(|v| v.parse().ok())
+                .ok()
+                .and_then(|v| v.parse().ok())
                 .unwrap_or(default_max_tokens()),
             temperature: std::env::var("LLM_TEMPERATURE")
-                .ok().and_then(|v| v.parse().ok())
+                .ok()
+                .and_then(|v| v.parse().ok())
                 .unwrap_or(default_temperature()),
             top_p: std::env::var("LLM_TOP_P")
-                .ok().and_then(|v| v.parse().ok())
+                .ok()
+                .and_then(|v| v.parse().ok())
                 .unwrap_or(default_top_p()),
             context_size: std::env::var("LLM_CONTEXT_SIZE")
-                .ok().and_then(|v| v.parse().ok())
+                .ok()
+                .and_then(|v| v.parse().ok())
                 .unwrap_or(default_context_size()),
             gpu_layers: std::env::var("LLM_GPU_LAYERS")
-                .ok().and_then(|v| v.parse().ok())
+                .ok()
+                .and_then(|v| v.parse().ok())
                 .unwrap_or(default_gpu_layers()),
             n_threads: std::env::var("LLM_N_THREADS")
-                .ok().and_then(|v| v.parse().ok()),
+                .ok()
+                .and_then(|v| v.parse().ok()),
             chat_template: std::env::var("LLM_CHAT_TEMPLATE").ok(),
             server_port: std::env::var("LLM_SERVER_PORT")
-                .ok().and_then(|v| v.parse().ok())
+                .ok()
+                .and_then(|v| v.parse().ok())
                 .unwrap_or(default_server_port()),
             python_path: std::env::var("LLM_PYTHON_PATH").ok(),
             venv_path: std::env::var("LLM_VENV_PATH").ok(),
             candle_device: std::env::var("LLM_CANDLE_DEVICE").ok(),
             candle_dtype: std::env::var("LLM_CANDLE_DTYPE").ok(),
             gpu_memory_utilization: std::env::var("LLM_GPU_MEMORY_UTILIZATION")
-                .ok().and_then(|v| v.parse().ok())
+                .ok()
+                .and_then(|v| v.parse().ok())
                 .unwrap_or(default_gpu_memory_utilization()),
             max_model_len: std::env::var("LLM_MAX_MODEL_LEN")
-                .ok().and_then(|v| v.parse().ok()),
+                .ok()
+                .and_then(|v| v.parse().ok()),
             tensor_parallel_size: std::env::var("LLM_TENSOR_PARALLEL_SIZE")
-                .ok().and_then(|v| v.parse().ok())
+                .ok()
+                .and_then(|v| v.parse().ok())
                 .unwrap_or(default_tensor_parallel_size()),
         }
     }
@@ -279,7 +305,7 @@ pub struct ModelInfo {
     pub arch: ModelArch,
     pub quant: QuantType,
     pub is_moe: bool,
-    pub parameter_count: Option<f64>,  // en billions
+    pub parameter_count: Option<f64>, // en billions
 }
 
 /// Arquitectura del modelo
@@ -309,17 +335,34 @@ pub enum ModelArch {
 
 impl ModelArch {
     pub fn is_mistralrs_compatible(&self) -> bool {
-        matches!(self,
-            Self::Llama | Self::Mistral | Self::Qwen2 | Self::Qwen3 |
-            Self::Phi2 | Self::Phi3 | Self::Starcoder | Self::Bloom |
-            Self::Falcon | Self::Mamba | Self::Rwkv
+        matches!(
+            self,
+            Self::Llama
+                | Self::Mistral
+                | Self::Qwen2
+                | Self::Qwen3
+                | Self::Phi2
+                | Self::Phi3
+                | Self::Starcoder
+                | Self::Bloom
+                | Self::Falcon
+                | Self::Mamba
+                | Self::Rwkv
         )
     }
 
     pub fn is_candle_compatible(&self) -> bool {
-        matches!(self,
-            Self::Llama | Self::Mistral | Self::Qwen2 | Self::Qwen3 |
-            Self::Phi3 | Self::Gemma | Self::Gemma2 | Self::Bert | Self::T5
+        matches!(
+            self,
+            Self::Llama
+                | Self::Mistral
+                | Self::Qwen2
+                | Self::Qwen3
+                | Self::Phi3
+                | Self::Gemma
+                | Self::Gemma2
+                | Self::Bert
+                | Self::T5
         )
     }
 }

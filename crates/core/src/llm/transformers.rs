@@ -2,13 +2,13 @@
 //!
 //! Implementación de `LLMEngine` usando HuggingFace Transformers como subprocess Python.
 
+use super::config::PythonConfig;
+use super::{ChatMessage, ChatResponse, LLMConfig, LLMEngine, StreamChunk};
+use crate::Result;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::time::Duration;
 use tokio::sync::Mutex;
-use crate::Result;
-use super::{LLMEngine, ChatMessage, ChatResponse, StreamChunk, LLMConfig};
-use super::config::PythonConfig;
 
 /// Backend Transformers para inferencia con modelos HF
 pub struct TransformersEngine {
@@ -21,14 +21,14 @@ pub struct TransformersEngine {
 impl TransformersEngine {
     /// Crea una nueva instancia de TransformersEngine
     pub async fn new(config: LLMConfig) -> Result<Self> {
-        let python_config = config.python.as_ref()
-            .ok_or_else(|| crate::AlesysError::LLM(
-                "Configuración Python requerida para Transformers".to_string()
-            ))?;
+        let python_config = config.python.as_ref().ok_or_else(|| {
+            crate::AlesysError::LLM("Configuración Python requerida para Transformers".to_string())
+        })?;
 
         let python_path = Self::find_python(&python_config.version)?;
-        
-        let base_url = format!("http://{}:{}", 
+
+        let base_url = format!(
+            "http://{}:{}",
             config.host.as_deref().unwrap_or("127.0.0.1"),
             config.port.unwrap_or(8000)
         );
@@ -46,10 +46,7 @@ impl TransformersEngine {
         let candidates = vec!["python3".to_string(), "python".to_string()];
 
         for candidate in &candidates {
-            if let Ok(output) = Command::new(candidate)
-                .arg("--version")
-                .output()
-            {
+            if let Ok(output) = Command::new(candidate).arg("--version").output() {
                 let version = String::from_utf8_lossy(&output.stdout);
                 tracing::info!("Python encontrado: {} ({})", candidate, version.trim());
                 return Ok(PathBuf::from(candidate));
@@ -121,7 +118,9 @@ impl TransformersEngine {
 
         loop {
             if start.elapsed() > timeout {
-                return Err(crate::AlesysError::LLM("Timeout esperando Transformers".to_string()));
+                return Err(crate::AlesysError::LLM(
+                    "Timeout esperando Transformers".to_string(),
+                ));
             }
 
             match client.get(format!("{}/health", self.base_url)).send().await {
@@ -147,15 +146,19 @@ impl LLMEngine for TransformersEngine {
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async {
                 let client = reqwest::Client::new();
-                
-                let openai_messages: Vec<serde_json::Value> = messages.iter()
-                    .map(|m| serde_json::json!({
-                        "role": m.role,
-                        "content": m.content
-                    }))
+
+                let openai_messages: Vec<serde_json::Value> = messages
+                    .iter()
+                    .map(|m| {
+                        serde_json::json!({
+                            "role": m.role,
+                            "content": m.content
+                        })
+                    })
                     .collect();
 
-                let response = client.post(format!("{}/v1/chat/completions", self.base_url))
+                let response = client
+                    .post(format!("{}/v1/chat/completions", self.base_url))
                     .json(&serde_json::json!({
                         "model": self.config.model.as_deref().unwrap_or("default"),
                         "messages": openai_messages,
@@ -164,10 +167,13 @@ impl LLMEngine for TransformersEngine {
                     }))
                     .send()
                     .await
-                    .map_err(|e| crate::AlesysError::LLM(format!("Error en request Transformers: {}", e)))?;
+                    .map_err(|e| {
+                        crate::AlesysError::LLM(format!("Error en request Transformers: {}", e))
+                    })?;
 
-                let body: serde_json::Value = response.json().await
-                    .map_err(|e| crate::AlesysError::LLM(format!("Error parseando respuesta: {}", e)))?;
+                let body: serde_json::Value = response.json().await.map_err(|e| {
+                    crate::AlesysError::LLM(format!("Error parseando respuesta: {}", e))
+                })?;
 
                 let content = body["choices"][0]["message"]["content"]
                     .as_str()
@@ -177,10 +183,16 @@ impl LLMEngine for TransformersEngine {
                 let usage = &body["usage"];
                 Ok(ChatResponse {
                     content,
-                    model: self.config.model.as_deref().unwrap_or("transformers").to_string(),
+                    model: self
+                        .config
+                        .model
+                        .as_deref()
+                        .unwrap_or("transformers")
+                        .to_string(),
                     usage: super::Usage {
                         prompt_tokens: usage["prompt_tokens"].as_u64().unwrap_or(0) as usize,
-                        completion_tokens: usage["completion_tokens"].as_u64().unwrap_or(0) as usize,
+                        completion_tokens: usage["completion_tokens"].as_u64().unwrap_or(0)
+                            as usize,
                         total_tokens: usage["total_tokens"].as_u64().unwrap_or(0) as usize,
                     },
                 })
@@ -188,7 +200,10 @@ impl LLMEngine for TransformersEngine {
         })
     }
 
-    fn chat_stream(&self, messages: &[ChatMessage]) -> Result<Box<dyn Iterator<Item = Result<StreamChunk>> + Send>> {
+    fn chat_stream(
+        &self,
+        messages: &[ChatMessage],
+    ) -> Result<Box<dyn Iterator<Item = Result<StreamChunk>> + Send>> {
         let response = self.chat(messages)?;
         let chunks = vec![Ok(StreamChunk {
             delta: response.content,
@@ -201,7 +216,10 @@ impl LLMEngine for TransformersEngine {
         let messages = vec![
             ChatMessage {
                 role: "system".to_string(),
-                content: format!("Eres un asistente de programación. Genera código en {}.", language),
+                content: format!(
+                    "Eres un asistente de programación. Genera código en {}.",
+                    language
+                ),
             },
             ChatMessage {
                 role: "user".to_string(),

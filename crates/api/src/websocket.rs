@@ -1,13 +1,16 @@
 //! WebSocket handlers para streaming
 
+use crate::state::AppState;
+use alesys_core::llm::{ChatMessage, LLMEngine, StreamChunk};
 use axum::{
-    extract::{State, ws::{WebSocket, WebSocketUpgrade}},
+    extract::{
+        ws::{WebSocket, WebSocketUpgrade},
+        State,
+    },
     response::IntoResponse,
 };
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
-use crate::state::AppState;
-use alesys_core::llm::{LLMEngine, ChatMessage, StreamChunk};
 
 #[derive(Deserialize)]
 pub struct WSMessage {
@@ -55,9 +58,11 @@ async fn handle_websocket_chat(socket: WebSocket, state: AppState) {
                             sources: None,
                             error: Some(format!("Error al parsear mensaje: {}", e)),
                         };
-                        let _ = sender.send(axum::extract::ws::Message::Text(
-                            serde_json::to_string(&response).unwrap().into(),
-                        )).await;
+                        let _ = sender
+                            .send(axum::extract::ws::Message::Text(
+                                serde_json::to_string(&response).unwrap().into(),
+                            ))
+                            .await;
                         continue;
                     }
                 };
@@ -70,9 +75,11 @@ async fn handle_websocket_chat(socket: WebSocket, state: AppState) {
                             sources: None,
                             error: None,
                         };
-                        let _ = sender.send(axum::extract::ws::Message::Text(
-                            serde_json::to_string(&start_response).unwrap().into(),
-                        )).await;
+                        let _ = sender
+                            .send(axum::extract::ws::Message::Text(
+                                serde_json::to_string(&start_response).unwrap().into(),
+                            ))
+                            .await;
 
                         let query_embedding = match state.embedder.encode(&query) {
                             Ok(emb) => emb,
@@ -83,30 +90,36 @@ async fn handle_websocket_chat(socket: WebSocket, state: AppState) {
                                     sources: None,
                                     error: Some(format!("Error al generar embedding: {}", e)),
                                 };
-                                let _ = sender.send(axum::extract::ws::Message::Text(
-                                    serde_json::to_string(&response).unwrap().into(),
-                                )).await;
+                                let _ = sender
+                                    .send(axum::extract::ws::Message::Text(
+                                        serde_json::to_string(&response).unwrap().into(),
+                                    ))
+                                    .await;
                                 continue;
                             }
                         };
 
-                        let search_results = match state.graphrag.hybrid_search(&query_embedding, 5, 1).await {
-                            Ok(results) => results,
-                            Err(e) => {
-                                let response = WSResponse {
-                                    msg_type: "error".to_string(),
-                                    content: None,
-                                    sources: None,
-                                    error: Some(format!("Error en búsqueda: {}", e)),
-                                };
-                                let _ = sender.send(axum::extract::ws::Message::Text(
-                                    serde_json::to_string(&response).unwrap().into(),
-                                )).await;
-                                continue;
-                            }
-                        };
+                        let search_results =
+                            match state.graphrag.hybrid_search(&query_embedding, 5, 1).await {
+                                Ok(results) => results,
+                                Err(e) => {
+                                    let response = WSResponse {
+                                        msg_type: "error".to_string(),
+                                        content: None,
+                                        sources: None,
+                                        error: Some(format!("Error en búsqueda: {}", e)),
+                                    };
+                                    let _ = sender
+                                        .send(axum::extract::ws::Message::Text(
+                                            serde_json::to_string(&response).unwrap().into(),
+                                        ))
+                                        .await;
+                                    continue;
+                                }
+                            };
 
-                        let context = alesys_core::graphrag::build_rag_context(&search_results, 2000);
+                        let context =
+                            alesys_core::graphrag::build_rag_context(&search_results, 2000);
 
                         let messages = vec![
                             ChatMessage {
@@ -130,9 +143,15 @@ async fn handle_websocket_chat(socket: WebSocket, state: AppState) {
                                                 sources: None,
                                                 error: None,
                                             };
-                                            if sender.send(axum::extract::ws::Message::Text(
-                                                serde_json::to_string(&chunk_response).unwrap().into(),
-                                            )).await.is_err() {
+                                            if sender
+                                                .send(axum::extract::ws::Message::Text(
+                                                    serde_json::to_string(&chunk_response)
+                                                        .unwrap()
+                                                        .into(),
+                                                ))
+                                                .await
+                                                .is_err()
+                                            {
                                                 break;
                                             }
                                         }
@@ -143,19 +162,29 @@ async fn handle_websocket_chat(socket: WebSocket, state: AppState) {
                                                 sources: None,
                                                 error: Some(format!("Error en streaming: {}", e)),
                                             };
-                                            let _ = sender.send(axum::extract::ws::Message::Text(
-                                                serde_json::to_string(&response).unwrap().into(),
-                                            )).await;
+                                            let _ = sender
+                                                .send(axum::extract::ws::Message::Text(
+                                                    serde_json::to_string(&response)
+                                                        .unwrap()
+                                                        .into(),
+                                                ))
+                                                .await;
                                             break;
                                         }
                                     }
                                 }
 
-                                let sources: Vec<WSSource> = search_results.iter().map(|r| WSSource {
-                                    fragment_id: r.fragment_id,
-                                    path: r.doc_path.clone().unwrap_or_else(|| "desconocido".to_string()),
-                                    similarity: r.similarity,
-                                }).collect();
+                                let sources: Vec<WSSource> = search_results
+                                    .iter()
+                                    .map(|r| WSSource {
+                                        fragment_id: r.fragment_id,
+                                        path: r
+                                            .doc_path
+                                            .clone()
+                                            .unwrap_or_else(|| "desconocido".to_string()),
+                                        similarity: r.similarity,
+                                    })
+                                    .collect();
 
                                 let done_response = WSResponse {
                                     msg_type: "done".to_string(),
@@ -163,9 +192,11 @@ async fn handle_websocket_chat(socket: WebSocket, state: AppState) {
                                     sources: Some(sources),
                                     error: None,
                                 };
-                                let _ = sender.send(axum::extract::ws::Message::Text(
-                                    serde_json::to_string(&done_response).unwrap().into(),
-                                )).await;
+                                let _ = sender
+                                    .send(axum::extract::ws::Message::Text(
+                                        serde_json::to_string(&done_response).unwrap().into(),
+                                    ))
+                                    .await;
                             }
                             Err(e) => {
                                 let response = WSResponse {
@@ -174,9 +205,11 @@ async fn handle_websocket_chat(socket: WebSocket, state: AppState) {
                                     sources: None,
                                     error: Some(format!("Error en LLM: {}", e)),
                                 };
-                                let _ = sender.send(axum::extract::ws::Message::Text(
-                                    serde_json::to_string(&response).unwrap().into(),
-                                )).await;
+                                let _ = sender
+                                    .send(axum::extract::ws::Message::Text(
+                                        serde_json::to_string(&response).unwrap().into(),
+                                    ))
+                                    .await;
                             }
                         }
                     }

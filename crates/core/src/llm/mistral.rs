@@ -5,12 +5,10 @@
 //! Requiere feature `mistralrs-backend` habilitada.
 
 #[cfg(feature = "mistralrs-backend")]
-use mistralrs::{
-    GgufModelBuilder, Model, TextMessageRole, TextMessages,
-};
+use mistralrs::{GgufModelBuilder, Model, TextMessageRole, TextMessages};
 
+use super::{ChatMessage, ChatResponse, LLMConfig, LLMEngine, StreamChunk, Usage};
 use crate::Result;
-use super::{LLMConfig, LLMEngine, ChatMessage, ChatResponse, StreamChunk, Usage};
 
 pub struct MistralEngine {
     config: LLMConfig,
@@ -54,7 +52,11 @@ impl MistralEngine {
             .unwrap_or(".")
             .to_string();
 
-        tracing::info!("Cargando modelo GGUF (mistralrs): {} en {}", filename, parent);
+        tracing::info!(
+            "Cargando modelo GGUF (mistralrs): {} en {}",
+            filename,
+            parent
+        );
 
         let mut builder = GgufModelBuilder::new(&parent, vec![&filename]).with_logging();
 
@@ -85,7 +87,11 @@ impl LLMEngine for MistralEngine {
                 return Ok(ChatResponse {
                     content,
                     model: "mistralrs (sin modelo)".to_string(),
-                    usage: Usage { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+                    usage: Usage {
+                        prompt_tokens: 0,
+                        completion_tokens: 0,
+                        total_tokens: 0,
+                    },
                 });
             };
 
@@ -130,12 +136,15 @@ impl LLMEngine for MistralEngine {
         {
             let _ = messages;
             Err(crate::AlesysError::LLM(
-                "Feature 'mistralrs-backend' no habilitada".to_string()
+                "Feature 'mistralrs-backend' no habilitada".to_string(),
             ))
         }
     }
 
-    fn chat_stream(&self, messages: &[ChatMessage]) -> Result<Box<dyn Iterator<Item = Result<StreamChunk>> + Send>> {
+    fn chat_stream(
+        &self,
+        messages: &[ChatMessage],
+    ) -> Result<Box<dyn Iterator<Item = Result<StreamChunk>> + Send>> {
         let response = self.chat(messages)?;
         let chunks = vec![Ok(StreamChunk {
             delta: response.content,
@@ -148,7 +157,10 @@ impl LLMEngine for MistralEngine {
         let messages = vec![
             ChatMessage {
                 role: "system".to_string(),
-                content: format!("Eres un asistente de programación. Genera código en {}.", language),
+                content: format!(
+                    "Eres un asistente de programación. Genera código en {}.",
+                    language
+                ),
             },
             ChatMessage {
                 role: "user".to_string(),
@@ -176,9 +188,13 @@ impl LLMEngine for MistralEngine {
 
     fn is_available(&self) -> bool {
         #[cfg(feature = "mistralrs-backend")]
-        { self.model.is_some() }
+        {
+            self.model.is_some()
+        }
         #[cfg(not(feature = "mistralrs-backend"))]
-        { false }
+        {
+            false
+        }
     }
 
     fn backend_name(&self) -> &str {

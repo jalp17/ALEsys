@@ -7,7 +7,10 @@
 //! - vLLM (Python subprocess) - GPU de alto rendimiento
 //! - transformers (Python subprocess) - Modelos HF
 
-use super::{LLMEngine, LLMConfig, LLMBackendType, ChatMessage, ChatResponse, StreamChunk, Result, KnowledgeExtraction};
+use super::{
+    ChatMessage, ChatResponse, KnowledgeExtraction, LLMBackendType, LLMConfig, LLMEngine, Result,
+    StreamChunk,
+};
 
 #[cfg(feature = "llama-cpp")]
 use super::llama_cpp::LlamaCppEngine;
@@ -71,27 +74,21 @@ impl LLMBackend {
 
             #[cfg(feature = "candle-backend")]
             LLMBackendType::Candle => {
-                tracing::info!(
-                    "Usando backend candle (Rust nativo) — CUDA/Metal/CPU"
-                );
+                tracing::info!("Usando backend candle (Rust nativo) — CUDA/Metal/CPU");
                 let engine = CandleEngine::new(config).await?;
                 Ok(Self::Candle(engine))
             }
 
             #[cfg(feature = "vllm-backend")]
             LLMBackendType::Vllm => {
-                tracing::info!(
-                    "Usando backend vLLM (Python subprocess) — GPU de alto rendimiento"
-                );
+                tracing::info!("Usando backend vLLM (Python subprocess) — GPU de alto rendimiento");
                 let engine = VllmEngine::new(config).await?;
                 Ok(Self::Vllm(engine))
             }
 
             #[cfg(feature = "transformers-backend")]
             LLMBackendType::Transformers => {
-                tracing::info!(
-                    "Usando backend Transformers (Python subprocess) — Modelos HF"
-                );
+                tracing::info!("Usando backend Transformers (Python subprocess) — Modelos HF");
                 let engine = TransformersEngine::new(config).await?;
                 Ok(Self::Transformers(engine))
             }
@@ -103,27 +100,27 @@ impl LLMBackend {
 
             #[cfg(not(feature = "llama-cpp"))]
             LLMBackendType::LlamaCpp => Err(crate::AlesysError::LLM(
-                "Feature 'llama-cpp' no habilitada".to_string()
+                "Feature 'llama-cpp' no habilitada".to_string(),
             )),
 
             #[cfg(not(feature = "mistralrs-backend"))]
             LLMBackendType::Mistralrs => Err(crate::AlesysError::LLM(
-                "Feature 'mistralrs-backend' no habilitada".to_string()
+                "Feature 'mistralrs-backend' no habilitada".to_string(),
             )),
 
             #[cfg(not(feature = "candle-backend"))]
             LLMBackendType::Candle => Err(crate::AlesysError::LLM(
-                "Feature 'candle-backend' no habilitada".to_string()
+                "Feature 'candle-backend' no habilitada".to_string(),
             )),
 
             #[cfg(not(feature = "vllm-backend"))]
             LLMBackendType::Vllm => Err(crate::AlesysError::LLM(
-                "Feature 'vllm-backend' no habilitada".to_string()
+                "Feature 'vllm-backend' no habilitada".to_string(),
             )),
 
             #[cfg(not(feature = "transformers-backend"))]
             LLMBackendType::Transformers => Err(crate::AlesysError::LLM(
-                "Feature 'transformers-backend' no habilitada".to_string()
+                "Feature 'transformers-backend' no habilitada".to_string(),
             )),
         }
     }
@@ -290,7 +287,10 @@ impl LLMEngine for LLMBackend {
         }
     }
 
-    fn chat_stream(&self, messages: &[ChatMessage]) -> Result<Box<dyn Iterator<Item = Result<StreamChunk>> + Send>> {
+    fn chat_stream(
+        &self,
+        messages: &[ChatMessage],
+    ) -> Result<Box<dyn Iterator<Item = Result<StreamChunk>> + Send>> {
         match self {
             #[cfg(feature = "llama-cpp")]
             Self::LlamaCpp(e) => e.chat_stream(messages),

@@ -14,21 +14,20 @@
 
 use anyhow::Result;
 use axum::{
-    Router,
     routing::{get, post},
+    Router,
 };
-use tower_http::{
-    cors::CorsLayer,
-    trace::TraceLayer,
-};
+use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod handlers;
-mod websocket;
 mod state;
+mod websocket;
 
+use handlers::{
+    chat_handler, create_session, generate_handler, graph_stats, health_handler, list_sessions,
+};
 use state::AppState;
-use handlers::{chat_handler, generate_handler, list_sessions, create_session, graph_stats, health_handler};
 use websocket::ws_chat_handler;
 
 #[tokio::main]
@@ -43,15 +42,17 @@ async fn main() -> Result<()> {
 
     dotenvy::dotenv().ok();
 
-    let database_url = std::env::var("DATABASE_URL")
-        .unwrap_or_else(|_| {
-            let host = std::env::var("PGHOST").unwrap_or_else(|_| "localhost".to_string());
-            let port = std::env::var("PGPORT").unwrap_or_else(|_| "5433".to_string());
-            let user = std::env::var("PGUSER").unwrap_or_else(|_| "alesys".to_string());
-            let password = std::env::var("PGPASSWORD").unwrap_or_else(|_| "alesys".to_string());
-            let dbname = std::env::var("PGDATABASE").unwrap_or_else(|_| "alesys".to_string());
-            format!("postgres://{}:{}@{}:{}/{}", user, password, host, port, dbname)
-        });
+    let database_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
+        let host = std::env::var("PGHOST").unwrap_or_else(|_| "localhost".to_string());
+        let port = std::env::var("PGPORT").unwrap_or_else(|_| "5433".to_string());
+        let user = std::env::var("PGUSER").unwrap_or_else(|_| "alesys".to_string());
+        let password = std::env::var("PGPASSWORD").unwrap_or_else(|_| "alesys".to_string());
+        let dbname = std::env::var("PGDATABASE").unwrap_or_else(|_| "alesys".to_string());
+        format!(
+            "postgres://{}:{}@{}:{}/{}",
+            user, password, host, port, dbname
+        )
+    });
 
     let db_pool = sqlx::PgPool::connect(&database_url)
         .await
@@ -69,7 +70,10 @@ async fn main() -> Result<()> {
             "http://localhost:8080".parse().unwrap(),
         ])
         .allow_methods([axum::http::Method::GET, axum::http::Method::POST])
-        .allow_headers([axum::http::header::CONTENT_TYPE, axum::http::header::AUTHORIZATION]);
+        .allow_headers([
+            axum::http::header::CONTENT_TYPE,
+            axum::http::header::AUTHORIZATION,
+        ]);
 
     let app = Router::new()
         .route("/api/chat", post(chat_handler))

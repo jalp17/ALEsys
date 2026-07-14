@@ -1,7 +1,7 @@
 //! Estado compartido de la aplicación
 
-use alesys_core::{GraphRAG, SessionManager};
 use alesys_core::llm::{LLMBackend, LLMConfig, ONNXEmbedder};
+use alesys_core::{GraphRAG, SessionManager};
 use sqlx::PgPool;
 use std::sync::Arc;
 
@@ -38,7 +38,10 @@ impl AppState {
         let mut embedder = ONNXEmbedder::new();
         if let Some(path) = embedder_path {
             if let Err(e) = embedder.load(path) {
-                tracing::warn!("No se pudo cargar modelo de embeddings: {}. Usando embeddings dummy.", e);
+                tracing::warn!(
+                    "No se pudo cargar modelo de embeddings: {}. Usando embeddings dummy.",
+                    e
+                );
             }
         }
         let embedder = Arc::new(embedder);

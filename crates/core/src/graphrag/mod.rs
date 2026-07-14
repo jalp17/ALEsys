@@ -3,8 +3,8 @@
 //! Combina búsqueda vectorial (pgvector) con traversales de grafo (petgraph)
 
 use crate::Result;
-use sqlx::{PgPool, Row};
 use petgraph::graph::{DiGraph, NodeIndex};
+use sqlx::{PgPool, Row};
 use std::collections::HashMap;
 
 /// Manager para GraphRAG
@@ -47,7 +47,11 @@ pub enum SearchResultSource {
 impl GraphRAG {
     pub async fn new(db: PgPool) -> Result<Self> {
         let (graph, node_map) = Self::load_graph_from_db(&db).await?;
-        Ok(Self { db, graph, node_map })
+        Ok(Self {
+            db,
+            graph,
+            node_map,
+        })
     }
 
     pub async fn reload_graph(&mut self) -> Result<()> {
@@ -57,7 +61,9 @@ impl GraphRAG {
         Ok(())
     }
 
-    async fn load_graph_from_db(db: &PgPool) -> Result<(DiGraph<DocumentNode, EdgeType>, HashMap<i32, NodeIndex>)> {
+    async fn load_graph_from_db(
+        db: &PgPool,
+    ) -> Result<(DiGraph<DocumentNode, EdgeType>, HashMap<i32, NodeIndex>)> {
         let mut graph = DiGraph::new();
         let mut node_map = HashMap::new();
 
@@ -77,9 +83,10 @@ impl GraphRAG {
             node_map.insert(id, idx);
         }
 
-        let enlace_rows = sqlx::query("SELECT origen_id, destino_id, tipo_enlace, contexto FROM enlaces")
-            .fetch_all(db)
-            .await?;
+        let enlace_rows =
+            sqlx::query("SELECT origen_id, destino_id, tipo_enlace, contexto FROM enlaces")
+                .fetch_all(db)
+                .await?;
 
         for row in enlace_rows {
             let origen_id: i32 = row.get("origen_id");
@@ -87,10 +94,8 @@ impl GraphRAG {
             let tipo_enlace: Option<String> = row.get("tipo_enlace");
             let contexto: Option<String> = row.get("contexto");
 
-            if let (Some(&src), Some(&dst)) = (
-                node_map.get(&origen_id),
-                node_map.get(&destino_id),
-            ) {
+            if let (Some(&src), Some(&dst)) = (node_map.get(&origen_id), node_map.get(&destino_id))
+            {
                 let ctx = contexto.unwrap_or_default();
                 let edge_type = match tipo_enlace.as_deref() {
                     Some("wiki_link") => EdgeType::WikiLink { context: ctx },
@@ -109,10 +114,14 @@ impl GraphRAG {
         query_embedding: &[f32],
         limit: usize,
     ) -> Result<Vec<SearchResult>> {
-        let embedding_str = format!("[{}]", query_embedding.iter()
-            .map(|x| x.to_string())
-            .collect::<Vec<_>>()
-            .join(","));
+        let embedding_str = format!(
+            "[{}]",
+            query_embedding
+                .iter()
+                .map(|x| x.to_string())
+                .collect::<Vec<_>>()
+                .join(",")
+        );
 
         let rows = sqlx::query(
             r#"
@@ -123,24 +132,27 @@ impl GraphRAG {
             JOIN documentos d ON d.id = f.documento_id
             ORDER BY distancia
             LIMIT $2
-            "#
+            "#,
         )
         .bind(&embedding_str)
         .bind(limit as i64)
         .fetch_all(&self.db)
         .await?;
 
-        let results = rows.into_iter().map(|row| SearchResult {
-            fragment_id: row.get("id"),
-            document_id: row.get("documento_id"),
-            content: row.get("contenido"),
-            similarity: {
-                let dist: f64 = row.get("distancia");
-                1.0 - dist as f32
-            },
-            source: SearchResultSource::Vector,
-            doc_path: row.get("ruta_relativa"),
-        }).collect();
+        let results = rows
+            .into_iter()
+            .map(|row| SearchResult {
+                fragment_id: row.get("id"),
+                document_id: row.get("documento_id"),
+                content: row.get("contenido"),
+                similarity: {
+                    let dist: f64 = row.get("distancia");
+                    1.0 - dist as f32
+                },
+                source: SearchResultSource::Vector,
+                doc_path: row.get("ruta_relativa"),
+            })
+            .collect();
 
         Ok(results)
     }
@@ -153,7 +165,8 @@ impl GraphRAG {
     ) -> Result<Vec<SearchResult>> {
         let mut results = self.vector_search(query_embedding, vector_limit).await?;
 
-        let doc_ids: Vec<i32> = results.iter()
+        let doc_ids: Vec<i32> = results
+            .iter()
             .map(|r| r.document_id)
             .collect::<std::collections::HashSet<_>>()
             .into_iter()
@@ -171,7 +184,9 @@ impl GraphRAG {
                             content: frag_content,
                             similarity: 0.3,
                             source: SearchResultSource::Graph,
-                            doc_path: self.node_map.get(doc_id)
+                            doc_path: self
+                                .node_map
+                                .get(doc_id)
                                 .and_then(|&idx| self.graph.node_weight(idx))
                                 .map(|n| n.path.clone()),
                         });
@@ -180,32 +195,38 @@ impl GraphRAG {
             }
         }
 
-        results.sort_by(|a, b| b.similarity.partial_cmp(&a.similarity).unwrap_or(std::cmp::Ordering::Equal));
+        results.sort_by(|a, b| {
+            b.similarity
+                .partial_cmp(&a.similarity)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         Ok(results)
     }
 
     async fn load_fragments_for_document(&self, doc_id: i32) -> Result<Option<Vec<(i32, String)>>> {
-        let rows = sqlx::query("SELECT id, contenido FROM fragmentos WHERE documento_id = $1 ORDER BY indice_orden")
-            .bind(doc_id)
-            .fetch_all(&self.db)
-            .await?;
+        let rows = sqlx::query(
+            "SELECT id, contenido FROM fragmentos WHERE documento_id = $1 ORDER BY indice_orden",
+        )
+        .bind(doc_id)
+        .fetch_all(&self.db)
+        .await?;
 
         if rows.is_empty() {
             return Ok(None);
         }
 
-        let fragments = rows.into_iter().map(|row| {
-            (row.get("id"), row.get("contenido"))
-        }).collect();
+        let fragments = rows
+            .into_iter()
+            .map(|row| (row.get("id"), row.get("contenido")))
+            .collect();
 
         Ok(Some(fragments))
     }
 
     fn expand_with_graph(&self, doc_ids: &[i32], degrees: usize) -> Vec<i32> {
         let mut expanded = std::collections::HashSet::new();
-        let mut queue: std::collections::VecDeque<(i32, usize)> = doc_ids.iter()
-            .map(|&id| (id, 0))
-            .collect();
+        let mut queue: std::collections::VecDeque<(i32, usize)> =
+            doc_ids.iter().map(|&id| (id, 0)).collect();
 
         while let Some((current_id, depth)) = queue.pop_front() {
             if depth >= degrees {
@@ -235,20 +256,23 @@ impl GraphRAG {
             JOIN documentos d ON d.id = f.documento_id
             WHERE d.ruta_relativa LIKE $1
             LIMIT 10
-            "#
+            "#,
         )
         .bind(format!("%{}%", path_pattern))
         .fetch_all(&self.db)
         .await?;
 
-        let results = rows.into_iter().map(|row| SearchResult {
-            fragment_id: row.get("id"),
-            document_id: row.get("documento_id"),
-            content: row.get("contenido"),
-            similarity: 1.0,
-            source: SearchResultSource::Vector,
-            doc_path: row.get("ruta_relativa"),
-        }).collect();
+        let results = rows
+            .into_iter()
+            .map(|row| SearchResult {
+                fragment_id: row.get("id"),
+                document_id: row.get("documento_id"),
+                content: row.get("contenido"),
+                similarity: 1.0,
+                source: SearchResultSource::Vector,
+                doc_path: row.get("ruta_relativa"),
+            })
+            .collect();
 
         Ok(results)
     }

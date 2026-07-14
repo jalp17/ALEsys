@@ -9,24 +9,24 @@
 //!
 //! Selección via variable de entorno `LLM_BACKEND=llama_cpp|mistralrs|candle|vllm|transformers|auto`
 
-pub mod config;
 pub mod backend;
 pub mod backend_manager;
+pub mod config;
 
-#[cfg(feature = "mistralrs-backend")]
-pub mod mistral;
-#[cfg(feature = "llama-cpp")]
-pub mod llama_cpp;
 #[cfg(feature = "candle-backend")]
 pub mod candle;
-#[cfg(feature = "vllm-backend")]
-pub mod vllm;
+#[cfg(feature = "llama-cpp")]
+pub mod llama_cpp;
+#[cfg(feature = "mistralrs-backend")]
+pub mod mistral;
 #[cfg(feature = "transformers-backend")]
 pub mod transformers;
+#[cfg(feature = "vllm-backend")]
+pub mod vllm;
 
-pub use config::{LLMConfig, LLMBackendType, KnowledgeExtraction, Entity, Relation};
 pub use backend::LLMBackend;
 pub use backend_manager::BackendManager;
+pub use config::{Entity, KnowledgeExtraction, LLMBackendType, LLMConfig, Relation};
 
 use crate::Result;
 
@@ -66,7 +66,10 @@ pub trait LLMEngine: Send + Sync {
     fn chat(&self, messages: &[ChatMessage]) -> Result<ChatResponse>;
 
     /// Chat con streaming de tokens
-    fn chat_stream(&self, messages: &[ChatMessage]) -> Result<Box<dyn Iterator<Item = Result<StreamChunk>> + Send>>;
+    fn chat_stream(
+        &self,
+        messages: &[ChatMessage],
+    ) -> Result<Box<dyn Iterator<Item = Result<StreamChunk>> + Send>>;
 
     /// Generación de código
     fn generate_code(&self, prompt: &str, language: &str) -> Result<String>;
@@ -108,9 +111,7 @@ impl ONNXEmbedder {
     pub fn encode(&self, text: &str) -> Result<Vec<f32>> {
         if !self.loaded {
             let mut embedding = vec![0.0f32; self.dimension];
-            let hash = text
-                .bytes()
-                .fold(0u32, |acc, b| acc.wrapping_add(b as u32));
+            let hash = text.bytes().fold(0u32, |acc, b| acc.wrapping_add(b as u32));
             for (i, val) in embedding.iter_mut().enumerate() {
                 *val = ((hash.wrapping_mul(i as u32 + 1)) as f32) / (u32::MAX as f32);
             }

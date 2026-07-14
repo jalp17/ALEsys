@@ -1,14 +1,14 @@
 //! Handlers de los endpoints HTTP
 
-use axum::{
-    extract::{State, Json},
-    response::IntoResponse,
-    http::StatusCode,
-};
-use serde::{Deserialize, Serialize};
 use crate::state::AppState;
 use alesys_core::graphrag::SearchResultSource;
-use alesys_core::llm::{LLMEngine, ChatMessage};
+use alesys_core::llm::{ChatMessage, LLMEngine};
+use axum::{
+    extract::{Json, State},
+    http::StatusCode,
+    response::IntoResponse,
+};
+use serde::{Deserialize, Serialize};
 
 /// Request para chat
 #[derive(Deserialize)]
@@ -43,12 +43,24 @@ pub async fn chat_handler(
     tracing::info!("Chat request: {}", payload.query);
 
     // 1. Generar embedding del query
-    let query_embedding = state.embedder.encode(&payload.query)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error al generar embedding: {}", e)))?;
+    let query_embedding = state.embedder.encode(&payload.query).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Error al generar embedding: {}", e),
+        )
+    })?;
 
     // 2. Búsqueda híbrida (vector + grafo)
-    let search_results = state.graphrag.hybrid_search(&query_embedding, 5, 1).await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error en búsqueda: {}", e)))?;
+    let search_results = state
+        .graphrag
+        .hybrid_search(&query_embedding, 5, 1)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Error en búsqueda: {}", e),
+            )
+        })?;
 
     // 3. Construir contexto RAG
     let context = alesys_core::graphrag::build_rag_context(&search_results, 2000);
@@ -65,20 +77,30 @@ pub async fn chat_handler(
         },
     ];
 
-    let llm_response = state.llm_engine.chat(&messages)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Error en LLM: {}", e)))?;
+    let llm_response = state.llm_engine.chat(&messages).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Error en LLM: {}", e),
+        )
+    })?;
 
     // 5. Convertir resultados a formato de respuesta
-    let sources: Vec<Source> = search_results.iter().map(|r| Source {
-        fragment_id: r.fragment_id,
-        document_id: r.document_id,
-        path: r.doc_path.clone().unwrap_or_else(|| "desconocido".to_string()),
-        similarity: r.similarity,
-        source_type: match r.source {
-            SearchResultSource::Vector => "vector".to_string(),
-            SearchResultSource::Graph => "graph".to_string(),
-        },
-    }).collect();
+    let sources: Vec<Source> = search_results
+        .iter()
+        .map(|r| Source {
+            fragment_id: r.fragment_id,
+            document_id: r.document_id,
+            path: r
+                .doc_path
+                .clone()
+                .unwrap_or_else(|| "desconocido".to_string()),
+            similarity: r.similarity,
+            source_type: match r.source {
+                SearchResultSource::Vector => "vector".to_string(),
+                SearchResultSource::Graph => "graph".to_string(),
+            },
+        })
+        .collect();
 
     let response = ChatResponse {
         response: llm_response.content,
@@ -109,7 +131,11 @@ pub async fn generate_handler(
     State(state): State<AppState>,
     Json(payload): Json<GenerateRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    tracing::info!("Generate request: {} → {}", payload.prompt, payload.file_path);
+    tracing::info!(
+        "Generate request: {} → {}",
+        payload.prompt,
+        payload.file_path
+    );
 
     // TODO: Implementar en Fase 2
     let response = GenerateResponse {
@@ -121,9 +147,7 @@ pub async fn generate_handler(
 }
 
 /// Handler para GET /api/sessions
-pub async fn list_sessions(
-    State(_state): State<AppState>,
-) -> impl IntoResponse {
+pub async fn list_sessions(State(_state): State<AppState>) -> impl IntoResponse {
     // TODO: Implementar list de sesiones
     Json(serde_json::json!({
         "sessions": []
@@ -131,9 +155,7 @@ pub async fn list_sessions(
 }
 
 /// Handler para POST /api/sessions
-pub async fn create_session(
-    State(_state): State<AppState>,
-) -> impl IntoResponse {
+pub async fn create_session(State(_state): State<AppState>) -> impl IntoResponse {
     // TODO: Implementar creación de sesión
     Json(serde_json::json!({
         "session_id": "placeholder"
@@ -141,9 +163,7 @@ pub async fn create_session(
 }
 
 /// Handler para GET /api/graph/stats
-pub async fn graph_stats(
-    State(state): State<AppState>,
-) -> impl IntoResponse {
+pub async fn graph_stats(State(state): State<AppState>) -> impl IntoResponse {
     let stats = state.graphrag.graph_stats();
     Json(serde_json::json!({
         "nodes": stats.nodes,

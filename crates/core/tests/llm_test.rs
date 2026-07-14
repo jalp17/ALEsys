@@ -1,6 +1,6 @@
 //! Tests para el módulo llm
 
-use alesys_core::llm::{ONNXEmbedder, LLMConfig, LLMBackendType};
+use alesys_core::llm::{LLMBackendType, LLMConfig, ONNXEmbedder};
 
 #[test]
 fn test_llm_config_default() {
@@ -16,13 +16,13 @@ fn test_llm_config_default() {
 fn test_llm_backend_type_from_str() {
     let backend: LLMBackendType = "llama_cpp".parse().unwrap();
     assert_eq!(backend, LLMBackendType::LlamaCpp);
-    
+
     let backend: LLMBackendType = "mistralrs".parse().unwrap();
     assert_eq!(backend, LLMBackendType::Mistralrs);
-    
+
     let backend: LLMBackendType = "llama.cpp".parse().unwrap();
     assert_eq!(backend, LLMBackendType::LlamaCpp);
-    
+
     let backend: LLMBackendType = "mistral".parse().unwrap();
     assert_eq!(backend, LLMBackendType::Mistralrs);
 }
@@ -66,22 +66,18 @@ fn test_onnx_embedder_batch() {
 
 #[test]
 fn test_knowledge_extraction_serialization() {
-    use alesys_core::llm::{KnowledgeExtraction, Entity, Relation};
+    use alesys_core::llm::{Entity, KnowledgeExtraction, Relation};
 
     let extraction = KnowledgeExtraction {
-        entities: vec![
-            Entity {
-                name: "Faraday".to_string(),
-                entity_type: "científico".to_string(),
-            },
-        ],
-        relations: vec![
-            Relation {
-                origin: "Faraday".to_string(),
-                destination: "inducción electromagnética".to_string(),
-                relation_type: "descubrió".to_string(),
-            },
-        ],
+        entities: vec![Entity {
+            name: "Faraday".to_string(),
+            entity_type: "científico".to_string(),
+        }],
+        relations: vec![Relation {
+            origin: "Faraday".to_string(),
+            destination: "inducción electromagnética".to_string(),
+            relation_type: "descubrió".to_string(),
+        }],
     };
 
     let json = serde_json::to_string(&extraction).unwrap();

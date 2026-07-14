@@ -4,10 +4,10 @@
 //! Requiere feature `llama-cpp` habilitada.
 
 #[cfg(feature = "llama-cpp")]
-use llama_cpp::{LlamaModel, LlamaParams, SessionParams, standard_sampler::StandardSampler};
+use llama_cpp::{standard_sampler::StandardSampler, LlamaModel, LlamaParams, SessionParams};
 
+use super::{ChatMessage, ChatResponse, LLMConfig, LLMEngine, StreamChunk, Usage};
 use crate::Result;
-use super::{LLMConfig, LLMEngine, ChatMessage, ChatResponse, StreamChunk, Usage};
 
 pub struct LlamaCppEngine {
     config: LLMConfig,
@@ -21,7 +21,7 @@ impl LlamaCppEngine {
         {
             if config.model_path.is_empty() {
                 return Err(crate::AlesysError::LLM(
-                    "LLM_MODEL_PATH no configurado".to_string()
+                    "LLM_MODEL_PATH no configurado".to_string(),
                 ));
             }
 
@@ -56,7 +56,7 @@ impl LlamaCppEngine {
         {
             let _ = config;
             Err(crate::AlesysError::LLM(
-                "Feature 'llama-cpp' no habilitada".to_string()
+                "Feature 'llama-cpp' no habilitada".to_string(),
             ))
         }
     }
@@ -100,17 +100,19 @@ impl LLMEngine for LlamaCppEngine {
                         let mut session_params = SessionParams::default();
                         session_params.n_ctx = context_size as u32;
 
-                        let mut session = model
-                            .create_session(session_params)
-                            .map_err(|e| crate::AlesysError::LLM(format!("Error creando sesión: {}", e)))?;
+                        let mut session = model.create_session(session_params).map_err(|e| {
+                            crate::AlesysError::LLM(format!("Error creando sesión: {}", e))
+                        })?;
 
-                        session
-                            .advance_context(prompt)
-                            .map_err(|e| crate::AlesysError::LLM(format!("Error en advance_context: {}", e)))?;
+                        session.advance_context(prompt).map_err(|e| {
+                            crate::AlesysError::LLM(format!("Error en advance_context: {}", e))
+                        })?;
 
                         let handle = session
                             .start_completing_with(StandardSampler::default(), max_tokens)
-                            .map_err(|e| crate::AlesysError::LLM(format!("Error en start_completing: {}", e)))?;
+                            .map_err(|e| {
+                                crate::AlesysError::LLM(format!("Error en start_completing: {}", e))
+                            })?;
 
                         let mut out = String::new();
                         for token_str in handle.into_strings() {
@@ -143,12 +145,15 @@ impl LLMEngine for LlamaCppEngine {
         {
             let _ = messages;
             Err(crate::AlesysError::LLM(
-                "Feature 'llama-cpp' no habilitada".to_string()
+                "Feature 'llama-cpp' no habilitada".to_string(),
             ))
         }
     }
 
-    fn chat_stream(&self, messages: &[ChatMessage]) -> Result<Box<dyn Iterator<Item = Result<StreamChunk>> + Send>> {
+    fn chat_stream(
+        &self,
+        messages: &[ChatMessage],
+    ) -> Result<Box<dyn Iterator<Item = Result<StreamChunk>> + Send>> {
         let response = self.chat(messages)?;
         let chunks = vec![Ok(StreamChunk {
             delta: response.content,
@@ -161,7 +166,10 @@ impl LLMEngine for LlamaCppEngine {
         let messages = vec![
             ChatMessage {
                 role: "system".to_string(),
-                content: format!("Eres un asistente de programación. Genera código en {}.", language),
+                content: format!(
+                    "Eres un asistente de programación. Genera código en {}.",
+                    language
+                ),
             },
             ChatMessage {
                 role: "user".to_string(),
@@ -189,9 +197,13 @@ impl LLMEngine for LlamaCppEngine {
 
     fn is_available(&self) -> bool {
         #[cfg(feature = "llama-cpp")]
-        { true }
+        {
+            true
+        }
         #[cfg(not(feature = "llama-cpp"))]
-        { false }
+        {
+            false
+        }
     }
 
     fn backend_name(&self) -> &str {

@@ -3,10 +3,12 @@
 //! Descarga, compila y gestiona los backends disponibles.
 //! Lee la configuración desde `crates/core/resources/models.toml`.
 
-use std::path::{Path, PathBuf};
-use std::collections::HashMap;
+use super::config::{
+    BackendBuildConfig, BuildMode, GpuType, ModelArch, ModelInfo, ModelRegistry, QuantType,
+};
 use crate::Result;
-use super::config::{ModelRegistry, BackendBuildConfig, BuildMode, GpuType, ModelInfo, ModelArch, QuantType};
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
 /// Artefacto resultante de la build de un backend
 #[derive(Debug, Clone)]
@@ -31,18 +33,22 @@ impl BackendManager {
         let registry = Self::load_registry()?;
         let cache_dir = std::env::temp_dir().join("alesys/backends");
         std::fs::create_dir_all(&cache_dir)?;
-        Ok(Self { registry, cache_dir, built: HashMap::new() })
+        Ok(Self {
+            registry,
+            cache_dir,
+            built: HashMap::new(),
+        })
     }
 
     /// Carga el registry desde models.toml
     fn load_registry() -> Result<ModelRegistry> {
-        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("resources/models.toml");
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("resources/models.toml");
 
         if !path.exists() {
-            return Err(crate::AlesysError::LLM(
-                format!("Model registry no encontrado: {}", path.display())
-            ));
+            return Err(crate::AlesysError::LLM(format!(
+                "Model registry no encontrado: {}",
+                path.display()
+            )));
         }
 
         let content = std::fs::read_to_string(&path)?;
@@ -57,15 +63,15 @@ impl BackendManager {
             return Ok(artifact.clone());
         }
 
-        let config = self.registry.backends.get(backend_name)
-            .ok_or_else(|| crate::AlesysError::LLM(
-                format!("Backend no registrado: {}", backend_name)
-            ))?;
+        let config = self.registry.backends.get(backend_name).ok_or_else(|| {
+            crate::AlesysError::LLM(format!("Backend no registrado: {}", backend_name))
+        })?;
 
         if !config.enabled {
-            return Err(crate::AlesysError::LLM(
-                format!("Backend deshabilitado: {}. Habilitarlo en models.toml", backend_name)
-            ));
+            return Err(crate::AlesysError::LLM(format!(
+                "Backend deshabilitado: {}. Habilitarlo en models.toml",
+                backend_name
+            )));
         }
 
         tracing::info!("Preparando backend: {} ({})", config.name, backend_name);
@@ -76,13 +82,22 @@ impl BackendManager {
             BuildMode::PythonInstall => self.install_python(backend_name, config).await?,
         };
 
-        tracing::info!("Backend listo: {} en {}", backend_name, artifact.path.display());
-        self.built.insert(backend_name.to_string(), artifact.clone());
+        tracing::info!(
+            "Backend listo: {} en {}",
+            backend_name,
+            artifact.path.display()
+        );
+        self.built
+            .insert(backend_name.to_string(), artifact.clone());
         Ok(self.built.get(backend_name).unwrap().clone())
     }
 
     /// Descarga binario precompilado de CI
-    async fn download_prebuilt(&self, name: &str, config: &BackendBuildConfig) -> Result<BackendArtifact> {
+    async fn download_prebuilt(
+        &self,
+        name: &str,
+        config: &BackendBuildConfig,
+    ) -> Result<BackendArtifact> {
         let backend_dir = self.cache_dir.join(name);
         std::fs::create_dir_all(&backend_dir)?;
 
@@ -105,27 +120,39 @@ impl BackendManager {
     }
 
     /// Compila backend localmente con Cargo
-    async fn compile_local(&self, name: &str, config: &BackendBuildConfig) -> Result<BackendArtifact> {
+    async fn compile_local(
+        &self,
+        name: &str,
+        config: &BackendBuildConfig,
+    ) -> Result<BackendArtifact> {
         tracing::info!("Compilando {} localmente...", name);
 
         let features_str = config.features.join(",");
 
         tracing::info!(
             "Para compilar {}, ejecuta:\n  cargo build --release --features {}",
-            name, features_str
+            name,
+            features_str
         );
 
-        Err(crate::AlesysError::LLM(
-            format!("Build local no implementado aún. Usar: cargo build --features {}", features_str)
-        ))
+        Err(crate::AlesysError::LLM(format!(
+            "Build local no implementado aún. Usar: cargo build --features {}",
+            features_str
+        )))
     }
 
     /// Instala dependencias Python y configura servidor
-    async fn install_python(&self, name: &str, config: &BackendBuildConfig) -> Result<BackendArtifact> {
-        let python_config = config.python.as_ref()
-            .ok_or_else(|| crate::AlesysError::LLM(
-                format!("Backend {} requiere configuración Python en models.toml", name)
-            ))?;
+    async fn install_python(
+        &self,
+        name: &str,
+        config: &BackendBuildConfig,
+    ) -> Result<BackendArtifact> {
+        let python_config = config.python.as_ref().ok_or_else(|| {
+            crate::AlesysError::LLM(format!(
+                "Backend {} requiere configuración Python en models.toml",
+                name
+            ))
+        })?;
 
         tracing::info!("Instalando dependencias Python para {}...", name);
 
@@ -141,12 +168,16 @@ impl BackendManager {
                 .map_err(|e| crate::AlesysError::LLM(format!("Error creando venv: {}", e)))?;
 
             if !status.success() {
-                return Err(crate::AlesysError::LLM("Error creando virtualenv".to_string()));
+                return Err(crate::AlesysError::LLM(
+                    "Error creando virtualenv".to_string(),
+                ));
             }
         }
 
         let pip_bin = venv_dir.join("bin/pip");
-        let mut pip_args: Vec<String> = python_config.packages.iter()
+        let mut pip_args: Vec<String> = python_config
+            .packages
+            .iter()
             .map(|p| p.to_string())
             .collect();
 
@@ -163,7 +194,9 @@ impl BackendManager {
             .map_err(|e| crate::AlesysError::LLM(format!("Error ejecutando pip: {}", e)))?;
 
         if !status.success() {
-            return Err(crate::AlesysError::LLM("Error instalando paquetes Python".to_string()));
+            return Err(crate::AlesysError::LLM(
+                "Error instalando paquetes Python".to_string(),
+            ));
         }
 
         let python_bin = venv_dir.join("bin/python");
@@ -196,18 +229,23 @@ impl BackendManager {
 
     /// Parsea strings de GPU backends a enum GpuType
     fn parse_gpu_backends(&self, backends: &[String]) -> Vec<GpuType> {
-        backends.iter().map(|b| match b.to_lowercase().as_str() {
-            "cuda" => GpuType::Cuda,
-            "rocm" => GpuType::Rocm,
-            "metal" => GpuType::Metal,
-            "vulkan" => GpuType::Vulkan,
-            _ => GpuType::None,
-        }).collect()
+        backends
+            .iter()
+            .map(|b| match b.to_lowercase().as_str() {
+                "cuda" => GpuType::Cuda,
+                "rocm" => GpuType::Rocm,
+                "metal" => GpuType::Metal,
+                "vulkan" => GpuType::Vulkan,
+                _ => GpuType::None,
+            })
+            .collect()
     }
 
     /// Lista backends disponibles
     pub fn list_available(&self) -> Vec<&BackendBuildConfig> {
-        self.registry.backends.values()
+        self.registry
+            .backends
+            .values()
             .filter(|b| b.enabled)
             .collect()
     }
@@ -227,9 +265,10 @@ impl BackendManager {
         let path = Path::new(model_path);
 
         if !path.exists() {
-            return Err(crate::AlesysError::LLM(
-                format!("Modelo no encontrado: {}", model_path)
-            ));
+            return Err(crate::AlesysError::LLM(format!(
+                "Modelo no encontrado: {}",
+                model_path
+            )));
         }
 
         if model_path.ends_with(".gguf") {
@@ -250,9 +289,7 @@ impl BackendManager {
 
     /// Detecta info desde nombre de archivo GGUF
     fn detect_from_gguf_filename(path: &Path) -> Result<ModelInfo> {
-        let filename = path.file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("");
+        let filename = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
 
         let arch = if filename.contains("qwen3moe") || filename.contains("Qwen3-MoE") {
             ModelArch::Qwen3MoE
@@ -280,25 +317,34 @@ impl BackendManager {
             QuantType::Unknown(filename.to_string())
         };
 
-        let is_moe = filename.contains("MoE") || filename.contains("moe") ||
-                       filename.contains("mixtral") || filename.contains("Mixtral");
+        let is_moe = filename.contains("MoE")
+            || filename.contains("moe")
+            || filename.contains("mixtral")
+            || filename.contains("Mixtral");
 
-        Ok(ModelInfo { arch, quant, is_moe, parameter_count: None })
+        Ok(ModelInfo {
+            arch,
+            quant,
+            is_moe,
+            parameter_count: None,
+        })
     }
 
     /// Detecta info desde config.json de HuggingFace
     fn detect_from_hf_config(path: &Path) -> Result<ModelInfo> {
         let config_path = path.join("config.json");
         if !config_path.exists() {
-            return Err(crate::AlesysError::LLM(
-                format!("config.json no encontrado en {}", path.display())
-            ));
+            return Err(crate::AlesysError::LLM(format!(
+                "config.json no encontrado en {}",
+                path.display()
+            )));
         }
 
         let content = std::fs::read_to_string(&config_path)?;
         let config: serde_json::Value = serde_json::from_str(&content)?;
 
-        let arch_str = config.get("architectures")
+        let arch_str = config
+            .get("architectures")
             .and_then(|a| a.as_array())
             .and_then(|a| a.first())
             .and_then(|a| a.as_str())
@@ -316,14 +362,19 @@ impl BackendManager {
             _ => ModelArch::Unknown(arch_str.to_string()),
         };
 
-        let is_moe = arch_str.contains("Moe") || arch_str.contains("Mixtral") ||
-                       config.get("num_experts").map(|e| e.as_u64().unwrap_or(0) > 1).unwrap_or(false);
+        let is_moe = arch_str.contains("Moe")
+            || arch_str.contains("Mixtral")
+            || config
+                .get("num_experts")
+                .map(|e| e.as_u64().unwrap_or(0) > 1)
+                .unwrap_or(false);
 
         Ok(ModelInfo {
             arch,
             quant: QuantType::F16,
             is_moe,
-            parameter_count: config.get("num_parameters")
+            parameter_count: config
+                .get("num_parameters")
                 .and_then(|p| p.as_f64())
                 .map(|p| p / 1e9),
         })
