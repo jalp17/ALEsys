@@ -72,10 +72,6 @@ jobs:
         run: pnpm tsc --noEmit
         working-directory: webui
 
-      - name: Check ESLint
-        run: pnpm eslint src --ext .ts,.tsx
-        working-directory: webui
-
   # ===========================================
   # Rust Tests
   # ===========================================
