@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y \
     g++ \
     make \
     git \
+    pkgconf \
     libpq-dev \
     libssl-dev \
     pkg-config \
@@ -32,6 +33,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     libpq5 \
     ca-certificates \
+    libssl3 \
     wget \
     && rm -rf /var/lib/apt/lists/*
 
