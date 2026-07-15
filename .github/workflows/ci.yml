@@ -91,6 +91,11 @@ jobs:
         with:
           toolchain: stable
 
+      - name: Install Vulkan dependencies (for llama.cpp Vulkan backend)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libvulkan-dev mesa-vulkan-drivers vulkan-tools
+
       - name: Cache Rust dependencies
         uses: actions/cache@v4
         with:
@@ -256,6 +261,11 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
+
+      - name: Install Vulkan dependencies (for llama.cpp Vulkan backend)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libvulkan-dev
 
       - name: Cache Rust dependencies
         uses: actions/cache@v4
