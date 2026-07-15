@@ -32,7 +32,7 @@ pipeline_pid.txt
 **/target/
 *.rlib
 *.rmeta
-Cargo.lock
+# Cargo.lock tracked (binaries + Docker builds)
 
 # === Node.js / TypeScript ===
 node_modules/
