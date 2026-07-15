@@ -18,12 +18,15 @@ RUN apt-get update && apt-get install -y \
     wget \
     && rm -rf /var/lib/apt/lists/*
 
+# Configure git for any git dependencies
+RUN git config --global user.email "ci@alesys.local" && git config --global user.name "CI Bot"
+
 # Copy workspace
 COPY Cargo.toml Cargo.lock ./
 COPY crates/ ./crates/
 
 # Build
-RUN cargo build --release --bin alesys-api
+RUN cargo build --locked --release --bin alesys-api
 
 # Runtime stage
 FROM debian:bookworm-slim
