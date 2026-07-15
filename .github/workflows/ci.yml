@@ -300,8 +300,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    continue-on-error: true
     
-    needs: [integration-tests]
+    needs: [lint, rust-tests, webui-tests]
     
     steps:
       - name: Checkout repository
