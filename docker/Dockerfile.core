@@ -3,6 +3,16 @@ FROM rust:1.94-slim as builder
 
 WORKDIR /app
 
+# Environment variables for linker and pkg-config
+ENV PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig
+ENV LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:/usr/lib
+ENV LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:/usr/lib
+ENV OPENSSL_DIR=/usr
+ENV OPENSSL_LIB_DIR=/usr/lib/x86_64-linux-gnu
+ENV OPENSSL_INCLUDE_DIR=/usr/include
+ENV PQ_LIB_DIR=/usr/lib/x86_64-linux-gnu
+ENV PQ_INCLUDE_DIR=/usr/include/postgresql
+
 # Install dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
