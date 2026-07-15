@@ -148,7 +148,7 @@ jobs:
         continue-on-error: true
 
       - name: Build WebUI
-        run: pnpm build
+        run: pnpm build:web
         working-directory: webui
 
   # ===========================================
