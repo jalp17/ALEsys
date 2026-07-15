@@ -54,14 +54,16 @@ jobs:
       - name: Run Clippy (Rust linter)
         run: cargo clippy --workspace -- -D warnings
 
+      - name: Enable corepack and install pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@latest --activate
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'pnpm'
-
-      - name: Install pnpm
-        run: pnpm install -g
 
       - name: Install webui dependencies
         run: pnpm install
@@ -126,14 +128,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Enable corepack and install pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@latest --activate
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'pnpm'
-
-      - name: Install pnpm
-        run: pnpm install -g
 
       - name: Install dependencies
         run: pnpm install
