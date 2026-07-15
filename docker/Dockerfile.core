@@ -5,11 +5,16 @@ WORKDIR /app
 
 # Install dependencies
 RUN apt-get update && apt-get install -y \
+    build-essential \
+    g++ \
+    make \
+    git \
     libpq-dev \
     libssl-dev \
     pkg-config \
     cmake \
     libvulkan-dev \
+    wget \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy workspace
@@ -24,10 +29,10 @@ FROM debian:bookworm-slim
 
 WORKDIR /app
 
-# Install runtime dependencies
 RUN apt-get update && apt-get install -y \
     libpq5 \
     ca-certificates \
+    wget \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy binary
