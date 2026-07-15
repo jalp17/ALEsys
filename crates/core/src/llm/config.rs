@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// Backend de inferencia LLM disponible
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum LLMBackendType {
     LlamaCpp,
@@ -12,6 +12,7 @@ pub enum LLMBackendType {
     Candle,
     Vllm,
     Transformers,
+    #[default]
     Auto,
 }
 
@@ -44,12 +45,6 @@ impl std::str::FromStr for LLMBackendType {
                 s
             )),
         }
-    }
-}
-
-impl Default for LLMBackendType {
-    fn default() -> Self {
-        Self::Auto
     }
 }
 
