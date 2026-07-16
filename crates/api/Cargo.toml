@@ -22,7 +22,7 @@ uuid.workspace = true
 chrono.workspace = true
 
 # Core
-alesys-core = { path = "../core" }
+alesys-core = { path = "../core", default-features = false }
 
 # Web framework
 axum.workspace = true
@@ -38,3 +38,7 @@ futures = "0.3"
 [dev-dependencies]
 tokio-test = "0.4"
 reqwest = { version = "0.12", features = ["json"] }
+
+[features]
+default = ["alesys-core/llama-cpp"]
+test = []

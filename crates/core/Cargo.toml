@@ -41,6 +41,7 @@ tokio-test = "0.4"
 
 [features]
 default = ["llama-cpp"]
+test = []
 llama-cpp = ["dep:llama_cpp"]
 mistralrs-backend = ["dep:mistralrs"]
 candle-backend = [

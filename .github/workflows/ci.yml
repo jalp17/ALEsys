@@ -108,10 +108,10 @@ jobs:
             ${{ runner.os }}-cargo-
 
       - name: Run Rust unit tests
-        run: cargo test --workspace --lib
+        run: cargo test --workspace --lib --no-default-features --features test
 
       - name: Run Rust integration tests
-        run: cargo test --workspace --test '*'
+        run: cargo test --workspace --test '*' --no-default-features --features test
         continue-on-error: true
 
   # ===========================================
@@ -286,7 +286,7 @@ jobs:
           PGPASSWORD=alesys psql -h localhost -U alesys -d alesys_test -f docker/init-db.sql
 
       - name: Run integration tests
-        run: cargo test --workspace --test '*'
+        run: cargo test --workspace --test '*' --no-default-features --features test
         env:
           PGHOST: localhost
           PGPORT: 5432

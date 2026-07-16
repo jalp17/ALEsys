@@ -19,7 +19,7 @@ tracing.workspace = true
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Core
-alesys-core = { path = "../core" }
+alesys-core = { path = "../core", default-features = false }
 
 # CLI
 clap = { version = "4.5", features = ["derive"] }
@@ -27,3 +27,7 @@ rich = "0.1"  # Para output con colores
 
 # Environment
 dotenvy = "0.15"
+
+[features]
+default = ["alesys-core/llama-cpp"]
+test = []

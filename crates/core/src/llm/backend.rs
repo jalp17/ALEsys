@@ -123,8 +123,23 @@ impl LLMBackend {
     }
 
     /// Auto-selección inteligente de backend
+    #[cfg(any(
+        feature = "llama-cpp",
+        feature = "mistralrs-backend",
+        feature = "candle-backend",
+        feature = "vllm-backend",
+        feature = "transformers-backend"
+    ))]
     async fn auto_select(config: LLMConfig) -> Result<Self> {
-        // Detectar GPU disponible
+        #[cfg(not(any(
+            feature = "llama-cpp",
+            feature = "mistralrs-backend",
+            feature = "candle-backend",
+            feature = "vllm-backend",
+            feature = "transformers-backend"
+        )))]
+        let _config = config; // silence unused warning when no features
+                              // Detectar GPU disponible
         let gpu = Self::detect_gpu().await;
         tracing::info!("GPU detectada: {:?}", gpu);
 
@@ -187,7 +202,27 @@ impl LLMBackend {
         ))
     }
 
+    #[cfg(not(any(
+        feature = "llama-cpp",
+        feature = "mistralrs-backend",
+        feature = "candle-backend",
+        feature = "vllm-backend",
+        feature = "transformers-backend"
+    )))]
+    async fn auto_select(_config: LLMConfig) -> Result<Self> {
+        Err(crate::AlesysError::LLM(
+            "No LLM backend feature enabled. Habilitar al menos una: llama-cpp, mistralrs-backend, candle-backend".to_string()
+        ))
+    }
+
     /// Detecta GPU disponible en el sistema
+    #[cfg(any(
+        feature = "llama-cpp",
+        feature = "mistralrs-backend",
+        feature = "candle-backend",
+        feature = "vllm-backend",
+        feature = "transformers-backend"
+    ))]
     async fn detect_gpu() -> super::config::GpuType {
         // CUDA (nvidia-smi)
         if let Ok(output) = tokio::process::Command::new("nvidia-smi")
@@ -242,6 +277,7 @@ impl LLMBackend {
 
     /// Información de disponibilidad de todos los backends
     #[allow(clippy::vec_init_then_push)]
+    #[allow(unused_mut)]
     pub fn availability_info() -> Vec<serde_json::Value> {
         let mut info = vec![];
 
@@ -269,6 +305,7 @@ impl LLMBackend {
     }
 }
 
+#[allow(unused_variables)]
 impl LLMEngine for LLMBackend {
     fn chat(&self, messages: &[ChatMessage]) -> Result<ChatResponse> {
         match self {
@@ -282,6 +319,14 @@ impl LLMEngine for LLMBackend {
             Self::Vllm(e) => e.chat(messages),
             #[cfg(feature = "transformers-backend")]
             Self::Transformers(e) => e.chat(messages),
+            #[cfg(not(any(
+                feature = "llama-cpp",
+                feature = "mistralrs-backend",
+                feature = "candle-backend",
+                feature = "vllm-backend",
+                feature = "transformers-backend"
+            )))]
+            _ => unreachable!("No LLM backend feature enabled"),
         }
     }
 
@@ -300,6 +345,14 @@ impl LLMEngine for LLMBackend {
             Self::Vllm(e) => e.chat_stream(messages),
             #[cfg(feature = "transformers-backend")]
             Self::Transformers(e) => e.chat_stream(messages),
+            #[cfg(not(any(
+                feature = "llama-cpp",
+                feature = "mistralrs-backend",
+                feature = "candle-backend",
+                feature = "vllm-backend",
+                feature = "transformers-backend"
+            )))]
+            _ => unreachable!("No LLM backend feature enabled"),
         }
     }
 
@@ -315,6 +368,14 @@ impl LLMEngine for LLMBackend {
             Self::Vllm(e) => e.generate_code(prompt, language),
             #[cfg(feature = "transformers-backend")]
             Self::Transformers(e) => e.generate_code(prompt, language),
+            #[cfg(not(any(
+                feature = "llama-cpp",
+                feature = "mistralrs-backend",
+                feature = "candle-backend",
+                feature = "vllm-backend",
+                feature = "transformers-backend"
+            )))]
+            _ => unreachable!("No LLM backend feature enabled"),
         }
     }
 
@@ -330,6 +391,14 @@ impl LLMEngine for LLMBackend {
             Self::Vllm(e) => e.extract_knowledge(text, schema),
             #[cfg(feature = "transformers-backend")]
             Self::Transformers(e) => e.extract_knowledge(text, schema),
+            #[cfg(not(any(
+                feature = "llama-cpp",
+                feature = "mistralrs-backend",
+                feature = "candle-backend",
+                feature = "vllm-backend",
+                feature = "transformers-backend"
+            )))]
+            _ => unreachable!("No LLM backend feature enabled"),
         }
     }
 
@@ -345,6 +414,14 @@ impl LLMEngine for LLMBackend {
             Self::Vllm(e) => e.is_available(),
             #[cfg(feature = "transformers-backend")]
             Self::Transformers(e) => e.is_available(),
+            #[cfg(not(any(
+                feature = "llama-cpp",
+                feature = "mistralrs-backend",
+                feature = "candle-backend",
+                feature = "vllm-backend",
+                feature = "transformers-backend"
+            )))]
+            _ => unreachable!("No LLM backend feature enabled"),
         }
     }
 
@@ -360,16 +437,30 @@ impl LLMEngine for LLMBackend {
             Self::Vllm(e) => e.backend_name(),
             #[cfg(feature = "transformers-backend")]
             Self::Transformers(e) => e.backend_name(),
+            #[cfg(not(any(
+                feature = "llama-cpp",
+                feature = "mistralrs-backend",
+                feature = "candle-backend",
+                feature = "vllm-backend",
+                feature = "transformers-backend"
+            )))]
+            _ => unreachable!("No LLM backend feature enabled"),
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
+    #[cfg(any(
+        feature = "llama-cpp",
+        feature = "mistralrs-backend",
+        feature = "candle-backend",
+        feature = "vllm-backend",
+        feature = "transformers-backend"
+    ))]
     #[test]
     fn test_availability_info() {
+        use super::*;
         let info = LLMBackend::availability_info();
         // Al menos un backend debe estar habilitado
         assert!(!info.is_empty());
