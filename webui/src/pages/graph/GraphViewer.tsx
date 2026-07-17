@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { GraphCanvas, type LayoutName } from './GraphCanvas';
 import { GraphSidebar } from './GraphSidebar';
 import { GraphToolbar } from './GraphToolbar';
+import { NodeDetailPanel } from './NodeDetailPanel';
 import {
   fetchGraph,
   fetchCentrality,
@@ -31,6 +32,7 @@ export function GraphViewer() {
   const [edgeTypeFilter, setEdgeTypeFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<ApiNode[]>([]);
+  const [selectedNode, setSelectedNode] = useState<ApiNode | null>(null);
 
   const loadGraph = useCallback(async () => {
     setLoading(true);
@@ -102,8 +104,8 @@ export function GraphViewer() {
   };
 
   const handleNodeClick = (nodeId: string) => {
-    console.log('Node clicked:', nodeId);
-    // Future: show node detail panel
+    const node = nodes.find((n) => n.id === nodeId);
+    setSelectedNode(node || null);
   };
 
   const handleCommunityClick = (communityId: number) => {
@@ -266,6 +268,19 @@ export function GraphViewer() {
           />
         </div>
       </div>
+
+      {selectedNode && (
+        <NodeDetailPanel
+          node={selectedNode}
+          allNodes={nodes}
+          onClose={() => setSelectedNode(null)}
+          onFindPath={(path) => setHighlightPath(path)}
+          onHighlightNode={(nodeId) => {
+            setHighlightPath([nodeId]);
+            setTimeout(() => setHighlightPath([]), 3000);
+          }}
+        />
+      )}
     </div>
   );
 }
