@@ -36,7 +36,7 @@ impl CodeGenerator {
         let validation_result = SyntaxValidator::validate(&response, &request.language);
         let validation_warnings = match validation_result {
             Ok(true) => Vec::new(),
-            Ok(false) => vec!["Validación retornó sin errores pero sin confirmación".to_string()],
+            Ok(false) => Vec::new(), // validate() solo retorna Ok(true) o Err
             Err(e) => vec![format!("Advertencia de sintaxis: {}", e)],
         };
 
@@ -125,7 +125,6 @@ impl CodeGenerator {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
 
     #[test]
     fn test_suggest_filename_python() {
