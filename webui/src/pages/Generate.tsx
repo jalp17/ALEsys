@@ -1,3 +1,22 @@
+/**
+ * GeneratePage — MVP de generación de código (Fase 2)
+ *
+ * Prototipo funcional para probar el servicio POST /api/generate.
+ * En Fase 7 será reemplazado por Monaco editor + tree view + terminal.
+ *
+ * Responsabilidades de Fase 2 (este componente):
+ *   - Formulario de prompt + selector de lenguaje
+ *   - Vista previa del código generado
+ *   - Copiar al portapapeles y descargar archivo
+ *   - Explicación y sugerencias post-generación
+ *
+ * NO es responsabilidad de Fase 2 (Fase 7):
+ *   - Editor inline (Monaco)
+ *   - Ejecución de código (sandbox Docker)
+ *   - Modificación de archivos generados
+ *   - Tree view de archivos del proyecto
+ */
+
 import { useState } from 'react';
 import { API_BASE_URL } from '../utils/platform';
 
