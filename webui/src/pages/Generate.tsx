@@ -52,7 +52,7 @@ const LANGUAGES = [
   { id: 'cpp', label: 'C++', ext: '.cpp' },
 ];
 
-const HISTORY_KEY = 'alesys_generate_history';
+const HISTORY_KEY = 'alesys_generate_history_v1';
 const MAX_HISTORY = 20;
 
 function loadHistory(): HistoryEntry[] {
