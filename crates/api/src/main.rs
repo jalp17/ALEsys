@@ -25,9 +25,12 @@ use axum::{
 };
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::OnceLock;
 use tokio::sync::RwLock;
 use tower_http::{cors::CorsLayer, timeout::TimeoutLayer, trace::TraceLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+static METRICS_HANDLE: OnceLock<metrics_exporter_prometheus::PrometheusHandle> = OnceLock::new();
 
 mod handlers;
 mod state;
@@ -42,6 +45,19 @@ use handlers::{
 };
 use state::AppState;
 use websocket::ws_chat_handler;
+
+/// Metrics endpoint — Prometheus format
+async fn metrics_handler() -> impl IntoResponse {
+    let body = match METRICS_HANDLE.get() {
+        Some(handle) => handle.render(),
+        None => "# metrics not initialized\n".to_string(),
+    };
+    (
+        StatusCode::OK,
+        [("content-type", "text/plain; version=0.0.4; charset=utf-8")],
+        body,
+    )
+}
 
 /// Simple sliding-window rate limiter per IP
 struct RateLimiterState {
@@ -207,6 +223,7 @@ async fn main() -> Result<()> {
         .nest("/api", api_v1)
         .route("/ws/chat", get(ws_chat_handler))
         .route("/health", get(health_handler))
+        .route("/metrics", get(metrics_handler))
         .with_state(state)
         .layer(cors)
         .layer(middleware::from_fn_with_state(
@@ -223,6 +240,13 @@ async fn main() -> Result<()> {
     let listener = tokio::net::TcpListener::bind(&addr).await?;
 
     tracing::info!("ALEsys API listening on {} (timeout={}s)", addr, timeout_secs);
+
+    // Initialize Prometheus metrics
+    let handle = metrics_exporter_prometheus::PrometheusBuilder::new()
+        .install_recorder()
+        .expect("Failed to install metrics recorder");
+    let _ = METRICS_HANDLE.set(handle);
+    tracing::info!("Prometheus metrics initialized");
 
     let shutdown_signal = async {
         let _ = tokio::signal::ctrl_c().await;
