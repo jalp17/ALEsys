@@ -60,11 +60,24 @@ impl CodeGenerator {
     fn suggest_filename(&self, prompt: &str, language: &str) -> String {
         let words: Vec<&str> = prompt.split_whitespace().take(3).collect();
 
-        let base_name = words
+        let base_name: String = words
             .iter()
-            .map(|s| s.to_lowercase())
+            .map(|s| {
+                s.to_lowercase()
+                    .chars()
+                    .filter(|c| c.is_alphanumeric() || *c == '_' || *c == '-')
+                    .take(50)
+                    .collect::<String>()
+            })
+            .filter(|s| !s.is_empty())
             .collect::<Vec<_>>()
             .join("_");
+
+        let base_name = if base_name.is_empty() {
+            "untitled".to_string()
+        } else {
+            base_name
+        };
 
         let extension = match language.to_lowercase().as_str() {
             "python" | "py" => "py",
@@ -138,13 +151,43 @@ mod tests {
         assert_eq!(filename, "implementar_clase_user.js");
     }
 
+    #[test]
+    fn test_suggest_filename_sanitizes_path_traversal() {
+        let filename = suggest_filename_internal("foo/../../../etc/passwd", "python");
+        assert_eq!(filename, "fooetcpasswd.py");
+    }
+
+    #[test]
+    fn test_suggest_filename_sanitizes_special_chars() {
+        let filename = suggest_filename_internal("file; rm -rf /", "python");
+        assert_eq!(filename, "file_rm_-rf.py");
+    }
+
+    #[test]
+    fn test_suggest_filename_empty_prompt() {
+        let filename = suggest_filename_internal("", "python");
+        assert_eq!(filename, "untitled.py");
+    }
+
     fn suggest_filename_internal(prompt: &str, language: &str) -> String {
         let words: Vec<&str> = prompt.split_whitespace().take(3).collect();
-        let base_name = words
+        let base_name: String = words
             .iter()
-            .map(|s| s.to_lowercase())
+            .map(|s| {
+                s.to_lowercase()
+                    .chars()
+                    .filter(|c| c.is_alphanumeric() || *c == '_' || *c == '-')
+                    .take(50)
+                    .collect::<String>()
+            })
+            .filter(|s| !s.is_empty())
             .collect::<Vec<_>>()
             .join("_");
+        let base_name = if base_name.is_empty() {
+            "untitled".to_string()
+        } else {
+            base_name
+        };
         let extension = match language.to_lowercase().as_str() {
             "python" | "py" => "py",
             "javascript" | "js" => "js",

@@ -46,6 +46,13 @@ impl VllmEngine {
         let candidates = vec!["python3".to_string(), "python".to_string()];
 
         for candidate in &candidates {
+            // Validar que el nombre no contenga caracteres peligrosos
+            if candidate.contains(';') || candidate.contains('|') || candidate.contains('&')
+                || candidate.contains('$') || candidate.contains('`')
+            {
+                tracing::warn!("Nombre de python candidato contiene caracteres peligrosos: {}", candidate);
+                continue;
+            }
             if let Ok(output) = Command::new(candidate).arg("--version").output() {
                 let version = String::from_utf8_lossy(&output.stdout);
                 tracing::info!("Python encontrado: {} ({})", candidate, version.trim());
@@ -67,6 +74,15 @@ impl VllmEngine {
         }
 
         let model = self.config.model_path.as_str();
+
+        // Validar que model_path no contenga caracteres peligrosos para injection
+        if model.contains(';') || model.contains('|') || model.contains('&')
+            || model.contains('$') || model.contains('`') || model.contains('\n')
+        {
+            return Err(crate::AlesysError::LLM(
+                "model_path contiene caracteres no validos".to_string(),
+            ));
+        }
 
         tracing::info!("Iniciando servidor vLLM con modelo: {}", model);
 
@@ -160,60 +176,71 @@ impl VllmEngine {
 
 impl LLMEngine for VllmEngine {
     fn chat(&self, messages: &[ChatMessage]) -> Result<ChatResponse> {
-        // vLLM es async por naturaleza, pero la trait es sync
-        // Usamos bloqueo para mantener compatibilidad
-        tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(async {
-                let client = reqwest::Client::new();
-
-                // Formatear mensajes para OpenAI API
-                let openai_messages: Vec<serde_json::Value> = messages
-                    .iter()
-                    .map(|m| {
-                        serde_json::json!({
-                            "role": m.role,
-                            "content": m.content
-                        })
-                    })
-                    .collect();
-
-                let response = client
-                    .post(format!("{}/v1/chat/completions", self.base_url))
-                    .json(&serde_json::json!({
-                        "model": self.config.model_path,
-                        "messages": openai_messages,
-                        "max_tokens": self.config.max_tokens,
-                        "temperature": self.config.temperature,
-                        "top_p": self.config.top_p,
-                    }))
-                    .send()
-                    .await
-                    .map_err(|e| {
-                        crate::AlesysError::LLM(format!("Error en request vLLM: {}", e))
-                    })?;
-
-                let body: serde_json::Value = response.json().await.map_err(|e| {
-                    crate::AlesysError::LLM(format!("Error parseando respuesta: {}", e))
-                })?;
-
-                let content = body["choices"][0]["message"]["content"]
-                    .as_str()
-                    .unwrap_or("")
-                    .to_string();
-
-                let usage = &body["usage"];
-                Ok(ChatResponse {
-                    content,
-                    model: self.config.model_path.clone(),
-                    usage: super::Usage {
-                        prompt_tokens: usage["prompt_tokens"].as_u64().unwrap_or(0) as usize,
-                        completion_tokens: usage["completion_tokens"].as_u64().unwrap_or(0)
-                            as usize,
-                        total_tokens: usage["total_tokens"].as_u64().unwrap_or(0) as usize,
-                    },
+        let openai_messages: Vec<serde_json::Value> = messages
+            .iter()
+            .map(|m| {
+                serde_json::json!({
+                    "role": m.role,
+                    "content": m.content
                 })
             })
-        })
+            .collect();
+
+        let base_url = self.base_url.clone();
+        let model_path = self.config.model_path.clone();
+        let max_tokens = self.config.max_tokens;
+        let temperature = self.config.temperature;
+        let top_p = self.config.top_p;
+
+        let do_request = async move {
+            let client = reqwest::Client::new();
+
+            let response = client
+                .post(format!("{}/v1/chat/completions", base_url))
+                .json(&serde_json::json!({
+                    "model": model_path,
+                    "messages": openai_messages,
+                    "max_tokens": max_tokens,
+                    "temperature": temperature,
+                    "top_p": top_p,
+                }))
+                .send()
+                .await
+                .map_err(|e| {
+                    crate::AlesysError::LLM(format!("Error en request vLLM: {}", e))
+                })?;
+
+            let body: serde_json::Value = response.json().await.map_err(|e| {
+                crate::AlesysError::LLM(format!("Error parseando respuesta: {}", e))
+            })?;
+
+            let content = body["choices"][0]["message"]["content"]
+                .as_str()
+                .unwrap_or("")
+                .to_string();
+
+            let usage = &body["usage"];
+            Ok(ChatResponse {
+                content,
+                model: model_path,
+                usage: super::Usage {
+                    prompt_tokens: usage["prompt_tokens"].as_u64().unwrap_or(0) as usize,
+                    completion_tokens: usage["completion_tokens"].as_u64().unwrap_or(0)
+                        as usize,
+                    total_tokens: usage["total_tokens"].as_u64().unwrap_or(0) as usize,
+                },
+            })
+        };
+
+        // Usar Handle::try_current para detectar si estamos dentro de Tokio runtime
+        match tokio::runtime::Handle::try_current() {
+            Ok(handle) => tokio::task::block_in_place(move || handle.block_on(do_request)),
+            Err(_) => {
+                let rt = tokio::runtime::Runtime::new()
+                    .map_err(|e| crate::AlesysError::LLM(format!("Error creando runtime: {}", e)))?;
+                rt.block_on(do_request)
+            }
+        }
     }
 
     fn chat_stream(
