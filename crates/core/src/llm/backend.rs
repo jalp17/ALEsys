@@ -8,6 +8,7 @@
 //! - transformers (Python subprocess) - Modelos HF
 
 use async_trait::async_trait;
+use futures::stream::BoxStream;
 use super::{ChatMessage, ChatResponse, LLMBackendType, LLMConfig, LLMEngine, Result, StreamChunk};
 
 #[cfg(feature = "llama-cpp")]
@@ -341,11 +342,27 @@ impl LLMEngine for LLMBackend {
         delegate_backend!(self, chat(messages))
     }
 
-    async fn chat_stream(
-        &self,
-        messages: &[ChatMessage],
-    ) -> Result<Vec<StreamChunk>> {
-        delegate_backend!(self, chat_stream(messages))
+    fn chat_stream<'a>(
+        &'a self,
+        messages: &'a [ChatMessage],
+    ) -> BoxStream<'a, Result<StreamChunk>> {
+        match self {
+            #[cfg(feature = "llama-cpp")]
+            Self::LlamaCpp(e) => e.chat_stream(messages),
+            #[cfg(feature = "mistralrs-backend")]
+            Self::Mistralrs(e) => e.chat_stream(messages),
+            #[cfg(feature = "candle-backend")]
+            Self::Candle(e) => e.chat_stream(messages),
+            #[cfg(feature = "vllm-backend")]
+            Self::Vllm(e) => e.chat_stream(messages),
+            #[cfg(feature = "transformers-backend")]
+            Self::Transformers(e) => e.chat_stream(messages),
+            Self::Noop => Box::pin(futures::stream::once(async {
+                Err(crate::AlesysError::LLM(
+                    "LLM no disponible — modo solo búsqueda".to_string(),
+                ))
+            })),
+        }
     }
 
     async fn generate_code(&self, prompt: &str, language: &str) -> Result<String> {

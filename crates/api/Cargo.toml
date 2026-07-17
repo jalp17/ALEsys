@@ -34,6 +34,7 @@ dotenvy = "0.15"
 
 # WebSocket
 futures.workspace = true
+tokio-stream.workspace = true
 moka.workspace = true
 async-trait.workspace = true
 

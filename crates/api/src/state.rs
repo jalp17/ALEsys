@@ -4,6 +4,7 @@ use alesys_core::llm::{
     ChatMessage, ChatResponse, LLMBackend, LLMConfig, LLMEngine, ONNXEmbedder, StreamChunk,
 };
 use alesys_core::{GraphRAG, SessionManager};
+use futures::stream::BoxStream;
 use sqlx::PgPool;
 use std::sync::Arc;
 use tokio::sync::Semaphore;
@@ -32,16 +33,11 @@ impl LLMQueue {
         self.engine.chat(messages).await
     }
 
-    pub async fn chat_stream(
-        &self,
-        messages: &[ChatMessage],
-    ) -> alesys_core::Result<Vec<StreamChunk>> {
-        let _permit = self
-            .semaphore
-            .acquire()
-            .await
-            .map_err(|e| alesys_core::AlesysError::LLM(format!("Semaphore closed: {}", e)))?;
-        self.engine.chat_stream(messages).await
+    pub fn chat_stream<'a>(
+        &'a self,
+        messages: &'a [ChatMessage],
+    ) -> BoxStream<'a, alesys_core::Result<StreamChunk>> {
+        self.engine.chat_stream(messages)
     }
 
     #[allow(dead_code)] // Used by health endpoint + metrics

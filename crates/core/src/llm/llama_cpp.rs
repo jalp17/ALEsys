@@ -7,7 +7,9 @@
 use llama_cpp::{standard_sampler::StandardSampler, LlamaModel, LlamaParams, SessionParams};
 
 use async_trait::async_trait;
-use super::{ChatMessage, ChatResponse, LLMConfig, LLMEngine, Usage};
+use futures::stream::BoxStream;
+use futures::StreamExt;
+use super::{ChatMessage, ChatResponse, LLMConfig, LLMEngine, StreamChunk, Usage};
 use crate::Result;
 
 pub struct LlamaCppEngine {
@@ -148,6 +150,82 @@ impl LLMEngine for LlamaCppEngine {
             Err(crate::AlesysError::LLM(
                 "Feature 'llama-cpp' no habilitada".to_string(),
             ))
+        }
+    }
+
+    fn chat_stream<'a>(
+        &'a self,
+        messages: &'a [ChatMessage],
+    ) -> BoxStream<'a, Result<StreamChunk>> {
+        #[cfg(feature = "llama-cpp")]
+        {
+            let prompt = self.format_messages(messages);
+            let model = self.model.clone();
+            let max_tokens = self.config.max_tokens;
+            let context_size = self.config.context_size;
+
+            let (tx, rx) = tokio::sync::mpsc::channel(64);
+
+            tokio::task::spawn_blocking(move || {
+                let session_params = SessionParams {
+                    n_ctx: context_size as u32,
+                    ..Default::default()
+                };
+
+                let session = match model.create_session(session_params) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        let _ = tx.blocking_send(Err(crate::AlesysError::LLM(
+                            format!("Error creando sesión: {}", e),
+                        )));
+                        return;
+                    }
+                };
+
+                let mut session = session;
+                if let Err(e) = session.advance_context(prompt) {
+                    let _ = tx.blocking_send(Err(crate::AlesysError::LLM(
+                        format!("Error en advance_context: {}", e),
+                    )));
+                    return;
+                }
+
+                let handle = match session.start_completing_with(StandardSampler::default(), max_tokens) {
+                    Ok(h) => h,
+                    Err(e) => {
+                        let _ = tx.blocking_send(Err(crate::AlesysError::LLM(
+                            format!("Error en start_completing: {}", e),
+                        )));
+                        return;
+                    }
+                };
+
+                for token_str in handle.into_strings() {
+                    if tx.blocking_send(Ok(StreamChunk {
+                        delta: token_str,
+                        finish_reason: None,
+                    })).is_err() {
+                        break;
+                    }
+                }
+
+                let _ = tx.blocking_send(Ok(StreamChunk {
+                    delta: String::new(),
+                    finish_reason: Some("stop".to_string()),
+                }));
+            });
+
+            Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx))
+        }
+
+        #[cfg(not(feature = "llama-cpp"))]
+        {
+            let _ = messages;
+            Box::pin(futures::stream::once(async {
+                Err(crate::AlesysError::LLM(
+                    "Feature 'llama-cpp' no habilitada".to_string(),
+                ))
+            }))
         }
     }
 

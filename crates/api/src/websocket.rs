@@ -146,9 +146,10 @@ async fn handle_websocket_chat(socket: WebSocket, state: AppState) {
                             },
                         ];
 
-                        match state.llm_queue.chat_stream(&messages).await {
-                            Ok(chunks) => {
-                                for chunk in chunks {
+                        let mut stream = state.llm_queue.chat_stream(&messages);
+                        loop {
+                            match stream.next().await {
+                                Some(Ok(chunk)) => {
                                     if !send_ws_response(
                                         &mut sender,
                                         &WSResponse {
@@ -162,38 +163,44 @@ async fn handle_websocket_chat(socket: WebSocket, state: AppState) {
                                     {
                                         break;
                                     }
+
+                                    if chunk.finish_reason.is_some() {
+                                        break;
+                                    }
                                 }
-
-                                let sources: Vec<WSSource> = search_results
-                                    .iter()
-                                    .map(|r| WSSource {
-                                        fragment_id: r.fragment_id,
-                                        path: r
-                                            .doc_path
-                                            .clone()
-                                            .unwrap_or_else(|| "desconocido".to_string()),
-                                        similarity: r.similarity,
-                                    })
-                                    .collect();
-
-                                if !send_ws_response(
-                                    &mut sender,
-                                    &WSResponse {
-                                        msg_type: "done".to_string(),
-                                        content: None,
-                                        sources: Some(sources),
-                                        error: None,
-                                    },
-                                )
-                                .await
-                                {
+                                Some(Err(e)) => {
+                                    tracing::error!("WS LLM error: {}", e);
+                                    send_ws_response(&mut sender, &ws_error("Error generando respuesta")).await;
                                     break;
                                 }
+                                None => break,
                             }
-                            Err(e) => {
-                                tracing::error!("WS LLM error: {}", e);
-                                send_ws_response(&mut sender, &ws_error("Error generando respuesta")).await;
-                            }
+                        }
+
+                        let sources: Vec<WSSource> = search_results
+                            .iter()
+                            .map(|r| WSSource {
+                                fragment_id: r.fragment_id,
+                                path: r
+                                    .doc_path
+                                    .clone()
+                                    .unwrap_or_else(|| "desconocido".to_string()),
+                                similarity: r.similarity,
+                            })
+                            .collect();
+
+                        if !send_ws_response(
+                            &mut sender,
+                            &WSResponse {
+                                msg_type: "done".to_string(),
+                                content: None,
+                                sources: Some(sources),
+                                error: None,
+                            },
+                        )
+                        .await
+                        {
+                            break;
                         }
                     }
                 }

@@ -5,7 +5,8 @@
 
 use super::config::{GpuType, ModelArch, QuantType};
 use async_trait::async_trait;
-use super::{ChatMessage, ChatResponse, LLMConfig, LLMEngine};
+use futures::stream::BoxStream;
+use super::{ChatMessage, ChatResponse, LLMConfig, LLMEngine, StreamChunk};
 use crate::Result;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -338,6 +339,19 @@ impl LLMEngine for CandleEngine {
 
     fn backend_name(&self) -> &str {
         "candle"
+    }
+
+    fn chat_stream<'a>(
+        &'a self,
+        messages: &'a [ChatMessage],
+    ) -> BoxStream<'a, Result<StreamChunk>> {
+        Box::pin(futures::stream::once(async move {
+            let response = self.chat(messages).await?;
+            Ok(StreamChunk {
+                delta: response.content,
+                finish_reason: Some("stop".to_string()),
+            })
+        }))
     }
 }
 
