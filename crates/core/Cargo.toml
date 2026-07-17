@@ -18,6 +18,10 @@ uuid.workspace = true
 chrono.workspace = true
 regex.workspace = true
 once_cell.workspace = true
+async-trait.workspace = true
+futures.workspace = true
+tokio-stream.workspace = true
+moka.workspace = true
 
 # Graph data structures
 petgraph = "0.8"
@@ -52,3 +56,4 @@ candle-backend = [
 ]
 vllm-backend = ["dep:reqwest"]
 transformers-backend = ["dep:reqwest"]
+http-backend = ["dep:reqwest"]

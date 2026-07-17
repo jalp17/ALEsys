@@ -37,7 +37,7 @@ impl CodeGenerator {
         let full_prompt = template.render(&request.prompt, request.context.as_ref());
 
         // 3. Generar código usando LLM compartido
-        let response = self.llm.generate_code(&full_prompt, &request.language)?;
+        let response = self.llm.generate_code(&full_prompt, &request.language).await?;
 
         // 4. Validar sintaxis del código generado
         let validation_result = SyntaxValidator::validate(&response, &request.language);

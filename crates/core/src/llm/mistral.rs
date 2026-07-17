@@ -7,7 +7,9 @@
 #[cfg(feature = "mistralrs-backend")]
 use mistralrs::{GgufModelBuilder, Model, TextMessageRole, TextMessages};
 
-use super::{ChatMessage, ChatResponse, LLMConfig, LLMEngine, Usage};
+use async_trait::async_trait;
+use futures::stream::BoxStream;
+use super::{ChatMessage, ChatResponse, LLMConfig, LLMEngine, StreamChunk, Usage};
 use crate::Result;
 
 pub struct MistralEngine {
@@ -73,8 +75,9 @@ impl MistralEngine {
     }
 }
 
+#[async_trait]
 impl LLMEngine for MistralEngine {
-    fn chat(&self, messages: &[ChatMessage]) -> Result<ChatResponse> {
+    async fn chat(&self, messages: &[ChatMessage]) -> Result<ChatResponse> {
         #[cfg(feature = "mistralrs-backend")]
         {
             let Some(ref model) = self.model else {
@@ -106,12 +109,15 @@ impl LLMEngine for MistralEngine {
                 text_messages = text_messages.add_message(role, &msg.content);
             }
 
-            let response = tokio::runtime::Handle::current()
-                .block_on(model.send_chat_request(text_messages))
-                .map_err(|e| {
-                    tracing::error!("Error en inferencia mistralrs: {}", e);
-                    crate::AlesysError::LLM("Error en inferencia del modelo".to_string())
-                })?;
+            let response = tokio::task::spawn_blocking(move || {
+                tokio::runtime::Handle::current().block_on(model.send_chat_request(text_messages))
+            })
+            .await
+            .map_err(|e| crate::AlesysError::LLM(format!("Join error: {}", e)))?
+            .map_err(|e| {
+                tracing::error!("Error en inferencia mistralrs: {}", e);
+                crate::AlesysError::LLM("Error en inferencia del modelo".to_string())
+            })?;
 
             let content = response.choices[0]
                 .message
@@ -156,5 +162,18 @@ impl LLMEngine for MistralEngine {
 
     fn backend_name(&self) -> &str {
         "mistralrs"
+    }
+
+    fn chat_stream<'a>(
+        &'a self,
+        messages: &'a [ChatMessage],
+    ) -> BoxStream<'a, Result<StreamChunk>> {
+        Box::pin(futures::stream::once(async move {
+            let response = self.chat(messages).await?;
+            Ok(StreamChunk {
+                delta: response.content,
+                finish_reason: Some("stop".to_string()),
+            })
+        }))
     }
 }

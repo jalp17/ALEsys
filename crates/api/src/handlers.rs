@@ -122,7 +122,7 @@ pub async fn chat_handler(
     });
 
     // 7. Llamar al LLM
-    let llm_response = state.llm_engine.chat(&messages).map_err(|e| {
+    let llm_response = state.llm_queue.chat(&messages).await.map_err(|e| {
         tracing::error!("Error en LLM chat: {}", e);
         ApiError { error: "Error generando respuesta".into(), code: "INTERNAL".into() }
     })?;

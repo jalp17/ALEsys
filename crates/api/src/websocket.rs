@@ -1,7 +1,7 @@
 //! WebSocket handlers para streaming
 
 use crate::state::AppState;
-use alesys_core::llm::{ChatMessage, LLMEngine};
+use alesys_core::llm::ChatMessage;
 use axum::{
     extract::{
         ws::{WebSocket, WebSocketUpgrade},
@@ -146,70 +146,61 @@ async fn handle_websocket_chat(socket: WebSocket, state: AppState) {
                             },
                         ];
 
-                        match state.llm_engine.chat_stream(&messages) {
-                            Ok(iterator) => {
-                                for chunk_result in iterator {
-                                    match chunk_result {
-                                        Ok(chunk) => {
-                                            if !send_ws_response(
-                                                &mut sender,
-                                                &WSResponse {
-                                                    msg_type: "chunk".to_string(),
-                                                    content: Some(chunk.delta),
-                                                    sources: None,
-                                                    error: None,
-                                                },
-                                            )
-                                            .await
-                                            {
-                                                break;
-                                            }
-                                        }
-                                        Err(e) => {
-                                            tracing::error!("WS stream error: {}", e);
-                                            if !send_ws_response(
-                                                &mut sender,
-                                                &ws_error("Error generando respuesta"),
-                                            )
-                                            .await
-                                            {
-                                                break;
-                                            }
-                                            break;
-                                        }
+                        let mut stream = state.llm_queue.chat_stream(&messages);
+                        loop {
+                            match stream.next().await {
+                                Some(Ok(chunk)) => {
+                                    if !send_ws_response(
+                                        &mut sender,
+                                        &WSResponse {
+                                            msg_type: "chunk".to_string(),
+                                            content: Some(chunk.delta),
+                                            sources: None,
+                                            error: None,
+                                        },
+                                    )
+                                    .await
+                                    {
+                                        break;
+                                    }
+
+                                    if chunk.finish_reason.is_some() {
+                                        break;
                                     }
                                 }
-
-                                let sources: Vec<WSSource> = search_results
-                                    .iter()
-                                    .map(|r| WSSource {
-                                        fragment_id: r.fragment_id,
-                                        path: r
-                                            .doc_path
-                                            .clone()
-                                            .unwrap_or_else(|| "desconocido".to_string()),
-                                        similarity: r.similarity,
-                                    })
-                                    .collect();
-
-                                if !send_ws_response(
-                                    &mut sender,
-                                    &WSResponse {
-                                        msg_type: "done".to_string(),
-                                        content: None,
-                                        sources: Some(sources),
-                                        error: None,
-                                    },
-                                )
-                                .await
-                                {
+                                Some(Err(e)) => {
+                                    tracing::error!("WS LLM error: {}", e);
+                                    send_ws_response(&mut sender, &ws_error("Error generando respuesta")).await;
                                     break;
                                 }
+                                None => break,
                             }
-                            Err(e) => {
-                                tracing::error!("WS LLM error: {}", e);
-                                send_ws_response(&mut sender, &ws_error("Error generando respuesta")).await;
-                            }
+                        }
+
+                        let sources: Vec<WSSource> = search_results
+                            .iter()
+                            .map(|r| WSSource {
+                                fragment_id: r.fragment_id,
+                                path: r
+                                    .doc_path
+                                    .clone()
+                                    .unwrap_or_else(|| "desconocido".to_string()),
+                                similarity: r.similarity,
+                            })
+                            .collect();
+
+                        if !send_ws_response(
+                            &mut sender,
+                            &WSResponse {
+                                msg_type: "done".to_string(),
+                                content: None,
+                                sources: Some(sources),
+                                error: None,
+                            },
+                        )
+                        .await
+                        {
+                            break;
                         }
                     }
                 }
