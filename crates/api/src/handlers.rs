@@ -102,7 +102,7 @@ pub async fn chat_handler(
     if messages.is_empty() {
         messages.push(ChatMessage {
             role: "system".to_string(),
-            content: "Eres un asistente de IA experto en programacion y analisis de documentos. Responde de forma clara y concisa basandote en el contexto proporcionado.".to_string(),
+            content: crate::CHAT_SYSTEM_PROMPT.to_string(),
         });
     }
 
@@ -352,19 +352,17 @@ pub async fn get_session(
     State(state): State<AppState>,
     Path(session_id): Path<String>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    let sessions = state
+    let session = state
         .session_manager
-        .get_active_sessions(0)
+        .get_by_id(&session_id)
         .await
         .map_err(|e| {
-            tracing::error!("Error obteniendo sesiones: {}", e);
+            tracing::error!("Error obteniendo sesion {}: {}", session_id, e);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                "Error interno obteniendo sesiones".to_string(),
+                "Error interno obteniendo sesion".to_string(),
             )
         })?;
-
-    let session = sessions.into_iter().find(|s| s.id == session_id);
 
     match session {
         Some(s) => Ok(Json(serde_json::json!({

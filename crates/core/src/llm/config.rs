@@ -176,26 +176,74 @@ impl Default for LLMConfig {
 impl LLMConfig {
     /// Construye config desde variables de entorno
     pub fn from_env() -> Self {
-        let backend = std::env::var("LLM_BACKEND")
+        let backend: LLMBackendType = std::env::var("LLM_BACKEND")
             .unwrap_or_else(|_| "auto".to_string())
             .parse()
             .unwrap_or_default();
 
+        let temperature = std::env::var("LLM_TEMPERATURE")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(default_temperature());
+
+        let top_p = std::env::var("LLM_TOP_P")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(default_top_p());
+
+        let gpu_memory_utilization = std::env::var("LLM_GPU_MEMORY_UTILIZATION")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(default_gpu_memory_utilization());
+
+        // Range validation
+        let temperature = if !(0.0..=2.0).contains(&temperature) {
+            tracing::warn!(
+                "LLM_TEMPERATURE={} fuera de rango [0.0, 2.0], usando default",
+                temperature
+            );
+            default_temperature()
+        } else {
+            temperature
+        };
+
+        let top_p = if !(0.0..=1.0).contains(&top_p) {
+            tracing::warn!(
+                "LLM_TOP_P={} fuera de rango [0.0, 1.0], usando default",
+                top_p
+            );
+            default_top_p()
+        } else {
+            top_p
+        };
+
+        let gpu_memory_utilization = if !(0.0..=1.0).contains(&gpu_memory_utilization) {
+            tracing::warn!(
+                "LLM_GPU_MEMORY_UTILIZATION={} fuera de rango [0.0, 1.0], usando default",
+                gpu_memory_utilization
+            );
+            default_gpu_memory_utilization()
+        } else {
+            gpu_memory_utilization
+        };
+
+        let model_path = std::env::var("LLM_MODEL_PATH").unwrap_or_default();
+        if model_path.is_empty() && backend.to_string() != "auto" {
+            tracing::warn!(
+                "LLM_MODEL_PATH vacío con backend={:?} — el modelo no se cargará hasta configurar la ruta",
+                backend
+            );
+        }
+
         Self {
-            model_path: std::env::var("LLM_MODEL_PATH").unwrap_or_default(),
+            model_path,
             backend,
             max_tokens: std::env::var("LLM_MAX_TOKENS")
                 .ok()
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(default_max_tokens()),
-            temperature: std::env::var("LLM_TEMPERATURE")
-                .ok()
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(default_temperature()),
-            top_p: std::env::var("LLM_TOP_P")
-                .ok()
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(default_top_p()),
+            temperature,
+            top_p,
             context_size: std::env::var("LLM_CONTEXT_SIZE")
                 .ok()
                 .and_then(|v| v.parse().ok())
@@ -216,10 +264,7 @@ impl LLMConfig {
             venv_path: std::env::var("LLM_VENV_PATH").ok(),
             candle_device: std::env::var("LLM_CANDLE_DEVICE").ok(),
             candle_dtype: std::env::var("LLM_CANDLE_DTYPE").ok(),
-            gpu_memory_utilization: std::env::var("LLM_GPU_MEMORY_UTILIZATION")
-                .ok()
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(default_gpu_memory_utilization()),
+            gpu_memory_utilization,
             max_model_len: std::env::var("LLM_MAX_MODEL_LEN")
                 .ok()
                 .and_then(|v| v.parse().ok()),
