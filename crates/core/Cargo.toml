@@ -18,6 +18,8 @@ uuid.workspace = true
 chrono.workspace = true
 regex.workspace = true
 once_cell.workspace = true
+async-trait.workspace = true
+futures.workspace = true
 
 # Graph data structures
 petgraph = "0.8"
