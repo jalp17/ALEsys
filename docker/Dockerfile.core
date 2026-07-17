@@ -1,7 +1,15 @@
-# Build stage
-FROM rust:1.94-slim as builder
-
+# Stage 1: Chef prepare
+FROM rust:1.94-slim as chef
+RUN cargo install cargo-chef
 WORKDIR /app
+
+# Stage 2: Planner — generate dependency recipe
+FROM chef as planner
+COPY . .
+RUN cargo chef prepare --recipe-path recipe.json
+
+# Stage 3: Builder — cook deps then build app (deps cached across builds)
+FROM chef as builder
 
 # Environment variables for linker and pkg-config
 ENV PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig
@@ -13,7 +21,7 @@ ENV OPENSSL_INCLUDE_DIR=/usr/include
 ENV PQ_LIB_DIR=/usr/lib/x86_64-linux-gnu
 ENV PQ_INCLUDE_DIR=/usr/include/postgresql
 
-# Install dependencies
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
     g++ \
@@ -28,17 +36,17 @@ RUN apt-get update && apt-get install -y \
     wget \
     && rm -rf /var/lib/apt/lists/*
 
-# Configure git for any git dependencies
 RUN git config --global user.email "ci@alesys.local" && git config --global user.name "CI Bot"
 
-# Copy workspace
-COPY Cargo.toml Cargo.lock ./
-COPY crates/ ./crates/
+# Cook dependencies (cached layer — only rebuilds when Cargo.toml changes)
+COPY --from=planner /app/recipe.json .
+RUN cargo chef cook --release --recipe-path recipe.json
 
-# Build
+# Build application
+COPY . .
 RUN cargo build --locked --release --bin alesys-api
 
-# Runtime stage
+# Stage 4: Runtime
 FROM debian:bookworm-slim
 
 WORKDIR /app
@@ -50,10 +58,8 @@ RUN apt-get update && apt-get install -y \
     wget \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy binary
 COPY --from=builder /app/target/release/alesys-api .
 
-# Environment variables
 ENV RUST_LOG=info
 ENV DATABASE_URL=postgresql://alesys:alesys@postgres-core:5432/alesys
 

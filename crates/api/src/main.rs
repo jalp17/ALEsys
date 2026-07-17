@@ -16,11 +16,21 @@
 
 use anyhow::Result;
 use axum::{
+    extract::State,
+    http::{Request, StatusCode},
+    middleware::{self, Next},
+    response::{IntoResponse, Response},
     routing::{delete, get, post},
-    Router,
+    Json, Router,
 };
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::sync::OnceLock;
+use tokio::sync::RwLock;
 use tower_http::{cors::CorsLayer, timeout::TimeoutLayer, trace::TraceLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+static METRICS_HANDLE: OnceLock<metrics_exporter_prometheus::PrometheusHandle> = OnceLock::new();
 
 mod handlers;
 mod state;
@@ -35,6 +45,82 @@ use handlers::{
 };
 use state::AppState;
 use websocket::ws_chat_handler;
+
+/// Metrics endpoint — Prometheus format
+async fn metrics_handler() -> impl IntoResponse {
+    let body = match METRICS_HANDLE.get() {
+        Some(handle) => handle.render(),
+        None => "# metrics not initialized\n".to_string(),
+    };
+    (
+        StatusCode::OK,
+        [("content-type", "text/plain; version=0.0.4; charset=utf-8")],
+        body,
+    )
+}
+
+/// Simple sliding-window rate limiter per IP
+struct RateLimiterState {
+    window_secs: u64,
+    max_requests: usize,
+    windows: RwLock<HashMap<std::net::IpAddr, (u64, usize)>>,
+}
+
+impl RateLimiterState {
+    fn new(max_requests_per_min: usize) -> Self {
+        Self {
+            window_secs: 60,
+            max_requests: max_requests_per_min,
+            windows: RwLock::new(HashMap::new()),
+        }
+    }
+
+    async fn check(&self, ip: std::net::IpAddr) -> bool {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let window_start = now / self.window_secs * self.window_secs;
+
+        let mut windows = self.windows.write().await;
+        let entry = windows.entry(ip).or_insert((window_start, 0));
+
+        if entry.0 < window_start {
+            *entry = (window_start, 1);
+            true
+        } else if entry.1 < self.max_requests {
+            entry.1 += 1;
+            true
+        } else {
+            false
+        }
+    }
+}
+
+async fn rate_limit_middleware(
+    State(limiter): State<Arc<RateLimiterState>>,
+    request: Request<axum::body::Body>,
+    next: Next,
+) -> Response {
+    let ip = request
+        .headers()
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.split(',').next())
+        .and_then(|v| v.trim().parse::<std::net::IpAddr>().ok())
+        .unwrap_or(std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)));
+
+    if limiter.check(ip).await {
+        next.run(request).await
+    } else {
+        tracing::warn!("Rate limit exceeded for IP: {}", ip);
+        (StatusCode::TOO_MANY_REQUESTS, Json(serde_json::json!({
+            "error": "Rate limit exceeded",
+            "code": "RATE_LIMITED",
+            "retry_after": 60,
+        }))).into_response()
+    }
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -69,9 +155,19 @@ async fn main() -> Result<()> {
         )
     });
 
-    let db_pool = sqlx::PgPool::connect(&database_url)
+    let db_pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(
+            std::env::var("DB_MAX_CONNECTIONS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(25),
+        )
+        .idle_timeout(std::time::Duration::from_secs(300))
+        .connect(&database_url)
         .await
         .expect("Failed to connect to database");
+
+    tracing::info!("Database pool configured (max={})", db_pool.options().get_max_connections());
 
     let llm_config = alesys_core::llm::LLMConfig::from_env();
 
@@ -102,6 +198,15 @@ async fn main() -> Result<()> {
         .and_then(|v| v.parse().ok())
         .unwrap_or(120);
 
+    // Rate limiting config
+    let rate_limit_per_min: u32 = std::env::var("RATE_LIMIT_PER_MIN")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(100);
+    tracing::info!("Rate limit configured: {} req/min per IP", rate_limit_per_min);
+
+    let rate_limiter = Arc::new(RateLimiterState::new(rate_limit_per_min as usize));
+
     let api_v1 = Router::new()
         .route("/chat", post(chat_handler))
         .route("/generate", post(generate_handler))
@@ -118,8 +223,13 @@ async fn main() -> Result<()> {
         .nest("/api", api_v1)
         .route("/ws/chat", get(ws_chat_handler))
         .route("/health", get(health_handler))
+        .route("/metrics", get(metrics_handler))
         .with_state(state)
         .layer(cors)
+        .layer(middleware::from_fn_with_state(
+            rate_limiter.clone(),
+            rate_limit_middleware,
+        ))
         .layer(TimeoutLayer::with_status_code(
             axum::http::StatusCode::REQUEST_TIMEOUT,
             std::time::Duration::from_secs(timeout_secs),
@@ -130,6 +240,13 @@ async fn main() -> Result<()> {
     let listener = tokio::net::TcpListener::bind(&addr).await?;
 
     tracing::info!("ALEsys API listening on {} (timeout={}s)", addr, timeout_secs);
+
+    // Initialize Prometheus metrics
+    let handle = metrics_exporter_prometheus::PrometheusBuilder::new()
+        .install_recorder()
+        .expect("Failed to install metrics recorder");
+    let _ = METRICS_HANDLE.set(handle);
+    tracing::info!("Prometheus metrics initialized");
 
     let shutdown_signal = async {
         let _ = tokio::signal::ctrl_c().await;

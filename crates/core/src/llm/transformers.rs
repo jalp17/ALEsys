@@ -3,7 +3,9 @@
 //! Implementación de `LLMEngine` usando HuggingFace Transformers como subprocess Python.
 
 use super::config::PythonConfig;
-use super::{ChatMessage, ChatResponse, LLMConfig, LLMEngine};
+use async_trait::async_trait;
+use futures::stream::BoxStream;
+use super::{ChatMessage, ChatResponse, LLMConfig, LLMEngine, StreamChunk};
 use crate::Result;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
@@ -155,8 +157,9 @@ app.run(host='127.0.0.1', port={})"#,
     }
 }
 
+#[async_trait]
 impl LLMEngine for TransformersEngine {
-    fn chat(&self, messages: &[ChatMessage]) -> Result<ChatResponse> {
+    async fn chat(&self, messages: &[ChatMessage]) -> Result<ChatResponse> {
         let openai_messages: Vec<serde_json::Value> = messages
             .iter()
             .map(|m| {
@@ -173,55 +176,42 @@ impl LLMEngine for TransformersEngine {
         let temperature = self.config.temperature;
         let top_p = self.config.top_p;
 
-        let do_request = async move {
-            let client = reqwest::Client::new();
-
-            let response = client
-                .post(format!("{}/v1/chat/completions", base_url))
-                .json(&serde_json::json!({
-                    "model": model_path,
-                    "messages": openai_messages,
-                    "max_tokens": max_tokens,
-                    "temperature": temperature,
-                    "top_p": top_p,
-                }))
-                .send()
-                .await
-                .map_err(|e| {
-                    crate::AlesysError::LLM(format!("Error en request Transformers: {}", e))
-                })?;
-
-            let body: serde_json::Value = response.json().await.map_err(|e| {
-                crate::AlesysError::LLM(format!("Error parseando respuesta: {}", e))
+        let client = reqwest::Client::new();
+        let response = client
+            .post(format!("{}/v1/chat/completions", base_url))
+            .json(&serde_json::json!({
+                "model": model_path,
+                "messages": openai_messages,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "top_p": top_p,
+            }))
+            .send()
+            .await
+            .map_err(|e| {
+                crate::AlesysError::LLM(format!("Error en request Transformers: {}", e))
             })?;
 
-            let content = body["choices"][0]["message"]["content"]
-                .as_str()
-                .unwrap_or("")
-                .to_string();
+        let body: serde_json::Value = response.json().await.map_err(|e| {
+            crate::AlesysError::LLM(format!("Error parseando respuesta: {}", e))
+        })?;
 
-            let usage = &body["usage"];
-            Ok(ChatResponse {
-                content,
-                model: model_path,
-                usage: super::Usage {
-                    prompt_tokens: usage["prompt_tokens"].as_u64().unwrap_or(0) as usize,
-                    completion_tokens: usage["completion_tokens"].as_u64().unwrap_or(0)
-                        as usize,
-                    total_tokens: usage["total_tokens"].as_u64().unwrap_or(0) as usize,
-                },
-            })
-        };
+        let content = body["choices"][0]["message"]["content"]
+            .as_str()
+            .unwrap_or("")
+            .to_string();
 
-        // Usar Handle::try_current para detectar si estamos dentro de Tokio runtime
-        match tokio::runtime::Handle::try_current() {
-            Ok(handle) => tokio::task::block_in_place(move || handle.block_on(do_request)),
-            Err(_) => {
-                let rt = tokio::runtime::Runtime::new()
-                    .map_err(|e| crate::AlesysError::LLM(format!("Error creando runtime: {}", e)))?;
-                rt.block_on(do_request)
-            }
-        }
+        let usage = &body["usage"];
+        Ok(ChatResponse {
+            content,
+            model: model_path,
+            usage: super::Usage {
+                prompt_tokens: usage["prompt_tokens"].as_u64().unwrap_or(0) as usize,
+                completion_tokens: usage["completion_tokens"].as_u64().unwrap_or(0)
+                    as usize,
+                total_tokens: usage["total_tokens"].as_u64().unwrap_or(0) as usize,
+            },
+        })
     }
 
     fn is_available(&self) -> bool {
@@ -230,6 +220,19 @@ impl LLMEngine for TransformersEngine {
 
     fn backend_name(&self) -> &str {
         "transformers"
+    }
+
+    fn chat_stream<'a>(
+        &'a self,
+        messages: &'a [ChatMessage],
+    ) -> BoxStream<'a, Result<StreamChunk>> {
+        Box::pin(futures::stream::once(async move {
+            let response = self.chat(messages).await?;
+            Ok(StreamChunk {
+                delta: response.content,
+                finish_reason: Some("stop".to_string()),
+            })
+        }))
     }
 }
 

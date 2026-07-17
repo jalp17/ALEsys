@@ -23,12 +23,18 @@ pub mod mistral;
 pub mod transformers;
 #[cfg(feature = "vllm-backend")]
 pub mod vllm;
+#[cfg(feature = "http-backend")]
+pub mod http;
 
 pub use backend::LLMBackend;
 pub use backend_manager::BackendManager;
 pub use config::{Entity, KnowledgeExtraction, LLMBackendType, LLMConfig, Relation};
+#[cfg(feature = "http-backend")]
+pub use http::HttpLLMEngine;
 
 use crate::Result;
+use async_trait::async_trait;
+use futures::stream::BoxStream;
 
 /// Mensaje de chat
 #[derive(Debug, Clone)]
@@ -61,25 +67,19 @@ pub struct StreamChunk {
 }
 
 /// Trait que define la interfaz de un motor LLM
+#[async_trait]
 pub trait LLMEngine: Send + Sync {
     /// Chat con contexto de documentos
-    fn chat(&self, messages: &[ChatMessage]) -> Result<ChatResponse>;
+    async fn chat(&self, messages: &[ChatMessage]) -> Result<ChatResponse>;
 
-    /// Chat con streaming de tokens (default: single-chunk via chat)
-    fn chat_stream(
-        &self,
-        messages: &[ChatMessage],
-    ) -> Result<Box<dyn Iterator<Item = Result<StreamChunk>> + Send>> {
-        let response = self.chat(messages)?;
-        let chunks = vec![Ok(StreamChunk {
-            delta: response.content,
-            finish_reason: Some("stop".to_string()),
-        })];
-        Ok(Box::new(chunks.into_iter()))
-    }
+    /// Chat con streaming real de tokens (cada chunk se envía individualmente)
+    fn chat_stream<'a>(
+        &'a self,
+        messages: &'a [ChatMessage],
+    ) -> BoxStream<'a, Result<StreamChunk>>;
 
     /// Generación de código (default: chat con system prompt de programación)
-    fn generate_code(&self, prompt: &str, language: &str) -> Result<String> {
+    async fn generate_code(&self, prompt: &str, language: &str) -> Result<String> {
         let messages = vec![
             ChatMessage {
                 role: "system".to_string(),
@@ -93,12 +93,12 @@ pub trait LLMEngine: Send + Sync {
                 content: prompt.to_string(),
             },
         ];
-        let response = self.chat(&messages)?;
+        let response = self.chat(&messages).await?;
         Ok(response.content)
     }
 
     /// Extracción de conocimiento (default: chat con system prompt de extracción)
-    fn extract_knowledge(&self, text: &str, schema: &str) -> Result<String> {
+    async fn extract_knowledge(&self, text: &str, schema: &str) -> Result<String> {
         let messages = vec![
             ChatMessage {
                 role: "system".to_string(),
@@ -109,7 +109,7 @@ pub trait LLMEngine: Send + Sync {
                 content: text.to_string(),
             },
         ];
-        let response = self.chat(&messages)?;
+        let response = self.chat(&messages).await?;
         Ok(response.content)
     }
 
@@ -118,6 +118,21 @@ pub trait LLMEngine: Send + Sync {
 
     /// Nombre del backend
     fn backend_name(&self) -> &str;
+}
+
+/// Helper: crea un BoxStream con un solo chunk desde un ChatResponse
+pub fn single_chunk_stream(response: ChatResponse) -> BoxStream<'static, Result<StreamChunk>> {
+    Box::pin(futures::stream::once(async move {
+        Ok(StreamChunk {
+            delta: response.content,
+            finish_reason: Some("stop".to_string()),
+        })
+    }))
+}
+
+/// Helper: crea un BoxStream con un solo error
+pub fn error_stream(err: crate::AlesysError) -> BoxStream<'static, Result<StreamChunk>> {
+    Box::pin(futures::stream::once(async move { Err(err) }))
 }
 
 /// Embedder con ONNX Runtime (stub por ahora)

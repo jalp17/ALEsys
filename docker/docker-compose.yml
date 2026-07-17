@@ -15,6 +15,11 @@ services:
       - "5432:5432"
     volumes:
       - postgres_core_data:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
     networks:
       - alesys-network
     healthcheck:
@@ -38,6 +43,11 @@ services:
     volumes:
       - postgres_users_data:/var/lib/postgresql/data
       - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
     networks:
       - alesys-network
     healthcheck:
@@ -62,6 +72,11 @@ services:
     volumes:
       - ../books:/books:ro
       - ../sandbox:/sandbox
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '2.0'
     depends_on:
       postgres-core:
         condition: service_healthy
