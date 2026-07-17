@@ -446,3 +446,33 @@ pub async fn health_handler(State(state): State<AppState>) -> impl IntoResponse 
         "embedder": state.embedder.is_available(),
     }))
 }
+
+/// Handler para GET /api/v1/config — returns current runtime configuration
+pub async fn get_config(State(state): State<AppState>) -> impl IntoResponse {
+    let db_ok = sqlx::query("SELECT 1")
+        .fetch_optional(&state.db)
+        .await
+        .is_ok();
+
+    Json(serde_json::json!({
+        "llm": {
+            "backend": state.llm_config.backend,
+            "model_path": state.llm_config.model_path,
+            "temperature": state.llm_config.temperature,
+            "top_p": state.llm_config.top_p,
+            "max_tokens": state.llm_config.max_tokens,
+            "context_size": state.llm_config.context_size,
+            "gpu_layers": state.llm_config.gpu_layers,
+        },
+        "embeddings": {
+            "dimension": 384,
+            "loaded": state.embedder.is_available(),
+        },
+        "health": {
+            "llm_available": state.llm_engine.is_available(),
+            "embedder_available": state.embedder.is_available(),
+            "db_connected": db_ok,
+            "version": env!("CARGO_PKG_VERSION"),
+        },
+    }))
+}

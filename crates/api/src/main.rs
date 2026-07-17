@@ -1,16 +1,18 @@
 //! ALEsys API - Backend REST + WebSocket
 //!
-//! Endpoints:
-//! - POST /api/chat               -> Chat con GraphRAG + sesiones
-//! - POST /api/generate           -> Generar archivos (FASE 2)
-//! - GET  /api/sessions           -> Listar sesiones activas
-//! - POST /api/sessions           -> Crear sesion
-//! - GET  /api/sessions/:id       -> Detalle de sesion
-//! - DELETE /api/sessions/:id     -> Cerrar sesion
-//! - GET  /api/sessions/:id/history -> Historial de chat
-//! - GET  /ws/chat                -> WebSocket para streaming
-//! - GET  /api/graph/stats        -> Estadisticas del grafo
-//! - GET  /health                 -> Health check
+//! Endpoints (v1):
+//! - POST /api/v1/chat               -> Chat con GraphRAG + sesiones
+//! - POST /api/v1/generate           -> Generar archivos
+//! - GET  /api/v1/sessions           -> Listar sesiones activas
+//! - POST /api/v1/sessions           -> Crear sesion
+//! - GET  /api/v1/sessions/:id       -> Detalle de sesion
+//! - DELETE /api/v1/sessions/:id     -> Cerrar sesion
+//! - GET  /api/v1/sessions/:id/history -> Historial de chat
+//! - GET  /ws/chat                   -> WebSocket para streaming
+//! - GET  /api/v1/graph/stats        -> Estadisticas del grafo
+//! - GET  /health                    -> Health check
+//!
+//! Legacy /api/* routes are also available for backwards compatibility.
 
 use anyhow::Result;
 use axum::{
@@ -28,7 +30,7 @@ pub(crate) const CHAT_SYSTEM_PROMPT: &str =
     "Eres un asistente de IA experto en programación y análisis de documentos. Responde de forma clara y concisa basándote en el contexto proporcionado.";
 
 use handlers::{
-    chat_handler, create_session, delete_session, generate_handler, get_session,
+    chat_handler, create_session, delete_session, generate_handler, get_config, get_session,
     get_session_history, graph_stats, health_handler, list_sessions,
 };
 use state::AppState;
@@ -100,16 +102,21 @@ async fn main() -> Result<()> {
         .and_then(|v| v.parse().ok())
         .unwrap_or(120);
 
+    let api_v1 = Router::new()
+        .route("/chat", post(chat_handler))
+        .route("/generate", post(generate_handler))
+        .route("/sessions", get(list_sessions))
+        .route("/sessions", post(create_session))
+        .route("/sessions/:id", get(get_session))
+        .route("/sessions/:id", delete(delete_session))
+        .route("/sessions/:id/history", get(get_session_history))
+        .route("/graph/stats", get(graph_stats))
+        .route("/config", get(get_config));
+
     let app = Router::new()
-        .route("/api/chat", post(chat_handler))
+        .nest("/api/v1", api_v1.clone())
+        .nest("/api", api_v1)
         .route("/ws/chat", get(ws_chat_handler))
-        .route("/api/generate", post(generate_handler))
-        .route("/api/sessions", get(list_sessions))
-        .route("/api/sessions", post(create_session))
-        .route("/api/sessions/:id", get(get_session))
-        .route("/api/sessions/:id", delete(delete_session))
-        .route("/api/sessions/:id/history", get(get_session_history))
-        .route("/api/graph/stats", get(graph_stats))
         .route("/health", get(health_handler))
         .with_state(state)
         .layer(cors)
