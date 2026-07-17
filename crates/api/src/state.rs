@@ -1,6 +1,6 @@
 //! Estado compartido de la aplicación
 
-use alesys_core::llm::{LLMBackend, LLMConfig, ONNXEmbedder};
+use alesys_core::llm::{LLMBackend, LLMConfig, LLMEngine, ONNXEmbedder};
 use alesys_core::{GraphRAG, SessionManager};
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -12,6 +12,7 @@ pub struct AppState {
     pub graphrag: Arc<GraphRAG>,
     pub session_manager: SessionManager,
     pub llm_engine: Arc<LLMBackend>,
+    pub llm_config: LLMConfig,
     pub embedder: Arc<ONNXEmbedder>,
 }
 
@@ -25,13 +26,11 @@ impl AppState {
         let session_manager = SessionManager::new(db.clone());
 
         // Inicializar LLM engine (selecciona backend automáticamente)
-        let llm_engine = match LLMBackend::from_config(llm_config).await {
+        let llm_engine = match LLMBackend::from_config(llm_config.clone()).await {
             Ok(engine) => Arc::new(engine),
             Err(e) => {
                 tracing::warn!("No se pudo cargar modelo LLM: {}. Modo solo búsqueda.", e);
-                // Crear un backend sin modelo para modo solo búsqueda
-                // Esto permite que la API funcione sin LLM
-                Arc::new(LLMBackend::from_config(LLMConfig::default()).await?)
+                Arc::new(LLMBackend::noop())
             }
         };
 
@@ -47,12 +46,23 @@ impl AppState {
         }
         let embedder = Arc::new(embedder);
 
-        Ok(Self {
+        let state = Self {
             db,
             graphrag,
             session_manager,
             llm_engine,
+            llm_config,
             embedder,
-        })
+        };
+
+        // Log startup health status
+        tracing::info!(
+            "Estado inicial: LLM={} (backend={}), Embedder={}, DB=connected",
+            state.llm_engine.is_available(),
+            state.llm_engine.backend_name(),
+            state.embedder.is_available(),
+        );
+
+        Ok(state)
     }
 }

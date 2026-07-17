@@ -89,7 +89,7 @@ impl BackendManager {
         );
         self.built
             .insert(backend_name.to_string(), artifact.clone());
-        Ok(self.built.get(backend_name).unwrap().clone())
+        Ok(artifact)
     }
 
     /// Descarga binario precompilado de CI
@@ -161,8 +161,11 @@ impl BackendManager {
 
         if !venv_dir.join("bin/python").exists() {
             tracing::info!("Creando virtualenv en {}", venv_dir.display());
+            let venv_str = venv_dir
+                .to_str()
+                .ok_or_else(|| crate::AlesysError::LLM("Ruta de venv contiene caracteres no UTF-8".to_string()))?;
             let status = tokio::process::Command::new(&python_path)
-                .args(["-m", "venv", venv_dir.to_str().unwrap()])
+                .args(["-m", "venv", venv_str])
                 .status()
                 .await
                 .map_err(|e| crate::AlesysError::LLM(format!("Error creando venv: {}", e)))?;

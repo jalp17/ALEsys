@@ -7,7 +7,7 @@
 #[cfg(feature = "mistralrs-backend")]
 use mistralrs::{GgufModelBuilder, Model, TextMessageRole, TextMessages};
 
-use super::{ChatMessage, ChatResponse, LLMConfig, LLMEngine, StreamChunk, Usage};
+use super::{ChatMessage, ChatResponse, LLMConfig, LLMEngine, Usage};
 use crate::Result;
 
 pub struct MistralEngine {
@@ -108,7 +108,10 @@ impl LLMEngine for MistralEngine {
 
             let response = tokio::runtime::Handle::current()
                 .block_on(model.send_chat_request(text_messages))
-                .map_err(|e| crate::AlesysError::LLM(format!("Error en inferencia: {}", e)))?;
+                .map_err(|e| {
+                    tracing::error!("Error en inferencia mistralrs: {}", e);
+                    crate::AlesysError::LLM("Error en inferencia del modelo".to_string())
+                })?;
 
             let content = response.choices[0]
                 .message
@@ -138,51 +141,6 @@ impl LLMEngine for MistralEngine {
                 "Feature 'mistralrs-backend' no habilitada".to_string(),
             ))
         }
-    }
-
-    fn chat_stream(
-        &self,
-        messages: &[ChatMessage],
-    ) -> Result<Box<dyn Iterator<Item = Result<StreamChunk>> + Send>> {
-        let response = self.chat(messages)?;
-        let chunks = vec![Ok(StreamChunk {
-            delta: response.content,
-            finish_reason: Some("stop".to_string()),
-        })];
-        Ok(Box::new(chunks.into_iter()))
-    }
-
-    fn generate_code(&self, prompt: &str, language: &str) -> Result<String> {
-        let messages = vec![
-            ChatMessage {
-                role: "system".to_string(),
-                content: format!(
-                    "Eres un asistente de programación. Genera código en {}.",
-                    language
-                ),
-            },
-            ChatMessage {
-                role: "user".to_string(),
-                content: prompt.to_string(),
-            },
-        ];
-        let response = self.chat(&messages)?;
-        Ok(response.content)
-    }
-
-    fn extract_knowledge(&self, text: &str, schema: &str) -> Result<String> {
-        let messages = vec![
-            ChatMessage {
-                role: "system".to_string(),
-                content: format!("Extrae conocimiento del texto según el esquema: {}", schema),
-            },
-            ChatMessage {
-                role: "user".to_string(),
-                content: text.to_string(),
-            },
-        ];
-        let response = self.chat(&messages)?;
-        Ok(response.content)
     }
 
     fn is_available(&self) -> bool {

@@ -22,9 +22,16 @@ impl CodeGenerator {
 
     /// Genera código desde un prompt
     pub async fn generate(&self, request: GenerateRequest) -> Result<GenerationResult> {
+        tracing::info!(
+            "Generación solicitada: lang={}, prompt_len={}",
+            request.language,
+            request.prompt.len()
+        );
+
         // 1. Seleccionar template según lenguaje
         let template = templates::get_template(&request.language)
             .unwrap_or(templates::PromptTemplate::generic());
+        tracing::debug!("Template seleccionado: {}", request.language);
 
         // 2. Renderizar prompt completo (system + requirements + context + user)
         let full_prompt = template.render(&request.prompt, request.context.as_ref());
@@ -35,9 +42,15 @@ impl CodeGenerator {
         // 4. Validar sintaxis del código generado
         let validation_result = SyntaxValidator::validate(&response, &request.language);
         let validation_warnings = match validation_result {
-            Ok(true) => Vec::new(),
-            Ok(false) => Vec::new(), // validate() solo retorna Ok(true) o Err
-            Err(e) => vec![format!("Advertencia de sintaxis: {}", e)],
+            Ok(true) => {
+                tracing::debug!("Validación de sintaxis: OK");
+                Vec::new()
+            }
+            Ok(false) => Vec::new(),
+            Err(e) => {
+                tracing::warn!("Validación de sintaxis falló: {}", e);
+                vec![format!("Advertencia de sintaxis: {}", e)]
+            }
         };
 
         // 5. Extraer nombre de archivo sugerido
@@ -46,6 +59,12 @@ impl CodeGenerator {
         // 6. Análisis estático → explicación + sugerencias
         let (explanation, mut suggestions) = self.analyze_generation(&response);
         suggestions.extend(validation_warnings);
+
+        tracing::info!(
+            "Generación completada: file={}, lines={}",
+            file_name,
+            response.lines().count()
+        );
 
         Ok(GenerationResult {
             file_name,
@@ -60,11 +79,24 @@ impl CodeGenerator {
     fn suggest_filename(&self, prompt: &str, language: &str) -> String {
         let words: Vec<&str> = prompt.split_whitespace().take(3).collect();
 
-        let base_name = words
+        let base_name: String = words
             .iter()
-            .map(|s| s.to_lowercase())
+            .map(|s| {
+                s.to_lowercase()
+                    .chars()
+                    .filter(|c| c.is_alphanumeric() || *c == '_' || *c == '-')
+                    .take(50)
+                    .collect::<String>()
+            })
+            .filter(|s| !s.is_empty())
             .collect::<Vec<_>>()
             .join("_");
+
+        let base_name = if base_name.is_empty() {
+            "untitled".to_string()
+        } else {
+            base_name
+        };
 
         let extension = match language.to_lowercase().as_str() {
             "python" | "py" => "py",
@@ -138,13 +170,43 @@ mod tests {
         assert_eq!(filename, "implementar_clase_user.js");
     }
 
+    #[test]
+    fn test_suggest_filename_sanitizes_path_traversal() {
+        let filename = suggest_filename_internal("foo/../../../etc/passwd", "python");
+        assert_eq!(filename, "fooetcpasswd.py");
+    }
+
+    #[test]
+    fn test_suggest_filename_sanitizes_special_chars() {
+        let filename = suggest_filename_internal("file; rm -rf /", "python");
+        assert_eq!(filename, "file_rm_-rf.py");
+    }
+
+    #[test]
+    fn test_suggest_filename_empty_prompt() {
+        let filename = suggest_filename_internal("", "python");
+        assert_eq!(filename, "untitled.py");
+    }
+
     fn suggest_filename_internal(prompt: &str, language: &str) -> String {
         let words: Vec<&str> = prompt.split_whitespace().take(3).collect();
-        let base_name = words
+        let base_name: String = words
             .iter()
-            .map(|s| s.to_lowercase())
+            .map(|s| {
+                s.to_lowercase()
+                    .chars()
+                    .filter(|c| c.is_alphanumeric() || *c == '_' || *c == '-')
+                    .take(50)
+                    .collect::<String>()
+            })
+            .filter(|s| !s.is_empty())
             .collect::<Vec<_>>()
             .join("_");
+        let base_name = if base_name.is_empty() {
+            "untitled".to_string()
+        } else {
+            base_name
+        };
         let extension = match language.to_lowercase().as_str() {
             "python" | "py" => "py",
             "javascript" | "js" => "js",

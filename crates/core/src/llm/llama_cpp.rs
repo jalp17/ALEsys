@@ -6,7 +6,7 @@
 #[cfg(feature = "llama-cpp")]
 use llama_cpp::{standard_sampler::StandardSampler, LlamaModel, LlamaParams, SessionParams};
 
-use super::{ChatMessage, ChatResponse, LLMConfig, LLMEngine, StreamChunk, Usage};
+use super::{ChatMessage, ChatResponse, LLMConfig, LLMEngine, Usage};
 use crate::Result;
 
 pub struct LlamaCppEngine {
@@ -152,51 +152,6 @@ impl LLMEngine for LlamaCppEngine {
                 "Feature 'llama-cpp' no habilitada".to_string(),
             ))
         }
-    }
-
-    fn chat_stream(
-        &self,
-        messages: &[ChatMessage],
-    ) -> Result<Box<dyn Iterator<Item = Result<StreamChunk>> + Send>> {
-        let response = self.chat(messages)?;
-        let chunks = vec![Ok(StreamChunk {
-            delta: response.content,
-            finish_reason: Some("stop".to_string()),
-        })];
-        Ok(Box::new(chunks.into_iter()))
-    }
-
-    fn generate_code(&self, prompt: &str, language: &str) -> Result<String> {
-        let messages = vec![
-            ChatMessage {
-                role: "system".to_string(),
-                content: format!(
-                    "Eres un asistente de programación. Genera código en {}.",
-                    language
-                ),
-            },
-            ChatMessage {
-                role: "user".to_string(),
-                content: prompt.to_string(),
-            },
-        ];
-        let response = self.chat(&messages)?;
-        Ok(response.content)
-    }
-
-    fn extract_knowledge(&self, text: &str, schema: &str) -> Result<String> {
-        let messages = vec![
-            ChatMessage {
-                role: "system".to_string(),
-                content: format!("Extrae conocimiento del texto según el esquema: {}", schema),
-            },
-            ChatMessage {
-                role: "user".to_string(),
-                content: text.to_string(),
-            },
-        ];
-        let response = self.chat(&messages)?;
-        Ok(response.content)
     }
 
     fn is_available(&self) -> bool {

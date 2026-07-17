@@ -46,7 +46,13 @@ pub enum SearchResultSource {
 
 impl GraphRAG {
     pub async fn new(db: PgPool) -> Result<Self> {
+        tracing::info!("Inicializando GraphRAG...");
         let (graph, node_map) = Self::load_graph_from_db(&db).await?;
+        tracing::info!(
+            "GraphRAG inicializado: {} nodos, {} edges",
+            graph.node_count(),
+            graph.edge_count()
+        );
         Ok(Self {
             db,
             graph,
@@ -55,7 +61,13 @@ impl GraphRAG {
     }
 
     pub async fn reload_graph(&mut self) -> Result<()> {
+        tracing::info!("Recargando grafo desde DB...");
         let (graph, node_map) = Self::load_graph_from_db(&self.db).await?;
+        tracing::info!(
+            "Grafo recargado: {} nodos, {} edges",
+            graph.node_count(),
+            graph.edge_count()
+        );
         self.graph = graph;
         self.node_map = node_map;
         Ok(())
@@ -67,45 +79,101 @@ impl GraphRAG {
         let mut graph = DiGraph::new();
         let mut node_map = HashMap::new();
 
-        let doc_rows = sqlx::query("SELECT id, ruta_relativa, tipo FROM documentos")
+        // Paginated load using cursor-based pagination (OFFSET-free)
+        let batch_size: i64 = 500;
+        let mut last_id: i32 = 0;
+        let mut total_docs = 0usize;
+
+        loop {
+            let rows = sqlx::query(
+                "SELECT id, ruta_relativa, tipo FROM documentos WHERE id > $1 ORDER BY id LIMIT $2",
+            )
+            .bind(last_id)
+            .bind(batch_size)
             .fetch_all(db)
-            .await?;
+            .await
+            .map_err(|e| {
+                tracing::error!("DB error cargando documentos (batch desde id={}): {}", last_id, e);
+                crate::AlesysError::Database(e)
+            })?;
 
-        for row in doc_rows {
-            let id: i32 = row.get("id");
-            let ruta_relativa: String = row.get("ruta_relativa");
-            let tipo: String = row.get("tipo");
-            let idx = graph.add_node(DocumentNode {
-                id,
-                path: ruta_relativa,
-                doc_type: tipo,
-            });
-            node_map.insert(id, idx);
-        }
+            if rows.is_empty() {
+                break;
+            }
 
-        let enlace_rows =
-            sqlx::query("SELECT origen_id, destino_id, tipo_enlace, contexto FROM enlaces")
-                .fetch_all(db)
-                .await?;
+            total_docs += rows.len();
+            for row in &rows {
+                let id: i32 = row.get("id");
+                let ruta_relativa: String = row.get("ruta_relativa");
+                let tipo: String = row.get("tipo");
+                let idx = graph.add_node(DocumentNode {
+                    id,
+                    path: ruta_relativa,
+                    doc_type: tipo,
+                });
+                node_map.insert(id, idx);
+            }
 
-        for row in enlace_rows {
-            let origen_id: i32 = row.get("origen_id");
-            let destino_id: i32 = row.get("destino_id");
-            let tipo_enlace: Option<String> = row.get("tipo_enlace");
-            let contexto: Option<String> = row.get("contexto");
-
-            if let (Some(&src), Some(&dst)) = (node_map.get(&origen_id), node_map.get(&destino_id))
-            {
-                let ctx = contexto.unwrap_or_default();
-                let edge_type = match tipo_enlace.as_deref() {
-                    Some("wiki_link") => EdgeType::WikiLink { context: ctx },
-                    Some("backlink") => EdgeType::Backlink { context: ctx },
-                    _ => EdgeType::Reference { context: ctx },
-                };
-                graph.add_edge(src, dst, edge_type);
+            if let Some(last) = rows.last() {
+                last_id = last.get("id");
+            } else {
+                break;
             }
         }
 
+        // Paginated edge load
+        let mut last_origen: i32 = 0;
+        let mut total_edges = 0usize;
+
+        loop {
+            let rows = sqlx::query(
+                "SELECT origen_id, destino_id, tipo_enlace, contexto FROM enlaces WHERE origen_id > $1 ORDER BY origen_id LIMIT $2",
+            )
+            .bind(last_origen)
+            .bind(batch_size)
+            .fetch_all(db)
+            .await
+            .map_err(|e| {
+                tracing::error!("DB error cargando enlaces (batch desde id={}): {}", last_origen, e);
+                crate::AlesysError::Database(e)
+            })?;
+
+            if rows.is_empty() {
+                break;
+            }
+
+            total_edges += rows.len();
+            for row in &rows {
+                let origen_id: i32 = row.get("origen_id");
+                let destino_id: i32 = row.get("destino_id");
+                let tipo_enlace: Option<String> = row.get("tipo_enlace");
+                let contexto: Option<String> = row.get("contexto");
+
+                if let (Some(&src), Some(&dst)) =
+                    (node_map.get(&origen_id), node_map.get(&destino_id))
+                {
+                    let ctx = contexto.unwrap_or_default();
+                    let edge_type = match tipo_enlace.as_deref() {
+                        Some("wiki_link") => EdgeType::WikiLink { context: ctx },
+                        Some("backlink") => EdgeType::Backlink { context: ctx },
+                        _ => EdgeType::Reference { context: ctx },
+                    };
+                    graph.add_edge(src, dst, edge_type);
+                }
+            }
+
+            if let Some(last) = rows.last() {
+                last_origen = last.get("origen_id");
+            } else {
+                break;
+            }
+        }
+
+        tracing::debug!(
+            "Grafo cargado: {} documentos, {} enlaces",
+            total_docs,
+            total_edges
+        );
         Ok((graph, node_map))
     }
 
@@ -137,8 +205,13 @@ impl GraphRAG {
         .bind(&embedding_str)
         .bind(limit as i64)
         .fetch_all(&self.db)
-        .await?;
+        .await
+        .map_err(|e| {
+            tracing::error!("DB error en vector_search: {}", e);
+            crate::AlesysError::Database(e)
+        })?;
 
+        tracing::debug!("vector_search: {} resultados", rows.len());
         let results = rows
             .into_iter()
             .map(|row| SearchResult {
@@ -174,24 +247,47 @@ impl GraphRAG {
 
         let expanded = self.expand_with_graph(&doc_ids, graph_degrees);
 
-        for doc_id in &expanded {
-            if !doc_ids.contains(doc_id) {
-                if let Some(fragments) = self.load_fragments_for_document(*doc_id).await? {
-                    for (frag_id, frag_content) in fragments {
-                        results.push(SearchResult {
-                            fragment_id: frag_id,
-                            document_id: *doc_id,
-                            content: frag_content,
-                            similarity: 0.3,
-                            source: SearchResultSource::Graph,
-                            doc_path: self
-                                .node_map
-                                .get(doc_id)
-                                .and_then(|&idx| self.graph.node_weight(idx))
-                                .map(|n| n.path.clone()),
-                        });
-                    }
-                }
+        let new_doc_ids: Vec<i32> = expanded
+            .iter()
+            .filter(|id| !doc_ids.contains(id))
+            .copied()
+            .collect();
+
+        if !new_doc_ids.is_empty() {
+            let rows = sqlx::query(
+                "SELECT id, documento_id, contenido FROM fragmentos WHERE documento_id = ANY($1) ORDER BY documento_id, indice_orden",
+            )
+            .bind(&new_doc_ids)
+            .fetch_all(&self.db)
+            .await
+            .map_err(|e| {
+                tracing::error!("DB error cargando fragmentos expandidos: {}", e);
+                crate::AlesysError::Database(e)
+            })?;
+
+            tracing::debug!(
+                "hybrid_search: {} docs vectoriales, {} expandidos, {} fragmentos graph",
+                doc_ids.len(),
+                new_doc_ids.len(),
+                rows.len()
+            );
+
+            for row in rows {
+                let frag_id: i32 = row.get("id");
+                let doc_id: i32 = row.get("documento_id");
+                let frag_content: String = row.get("contenido");
+                results.push(SearchResult {
+                    fragment_id: frag_id,
+                    document_id: doc_id,
+                    content: frag_content,
+                    similarity: 0.3,
+                    source: SearchResultSource::Graph,
+                    doc_path: self
+                        .node_map
+                        .get(&doc_id)
+                        .and_then(|&idx| self.graph.node_weight(idx))
+                        .map(|n| n.path.clone()),
+                });
             }
         }
 
@@ -200,41 +296,26 @@ impl GraphRAG {
                 .partial_cmp(&a.similarity)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
+        tracing::debug!("hybrid_search total: {} resultados", results.len());
         Ok(results)
     }
 
-    async fn load_fragments_for_document(&self, doc_id: i32) -> Result<Option<Vec<(i32, String)>>> {
-        let rows = sqlx::query(
-            "SELECT id, contenido FROM fragmentos WHERE documento_id = $1 ORDER BY indice_orden",
-        )
-        .bind(doc_id)
-        .fetch_all(&self.db)
-        .await?;
-
-        if rows.is_empty() {
-            return Ok(None);
-        }
-
-        let fragments = rows
-            .into_iter()
-            .map(|row| (row.get("id"), row.get("contenido")))
-            .collect();
-
-        Ok(Some(fragments))
-    }
-
     fn expand_with_graph(&self, doc_ids: &[i32], degrees: usize) -> Vec<i32> {
+        let max_expanded = 50; // Limitar expansion para evitar O(N)
         let mut expanded = std::collections::HashSet::new();
         let mut queue: std::collections::VecDeque<(i32, usize)> =
             doc_ids.iter().map(|&id| (id, 0)).collect();
 
         while let Some((current_id, depth)) = queue.pop_front() {
-            if depth >= degrees {
+            if depth >= degrees || expanded.len() >= max_expanded {
                 continue;
             }
 
             if let Some(&node_idx) = self.node_map.get(&current_id) {
                 for neighbor in self.graph.neighbors_undirected(node_idx) {
+                    if expanded.len() >= max_expanded {
+                        break;
+                    }
                     if let Some(neighbor_id) = self.graph.node_weight(neighbor).map(|n| n.id) {
                         if !expanded.contains(&neighbor_id) && !doc_ids.contains(&neighbor_id) {
                             expanded.insert(neighbor_id);
@@ -249,19 +330,27 @@ impl GraphRAG {
     }
 
     pub async fn search_by_path(&self, path_pattern: &str) -> Result<Vec<SearchResult>> {
+        let escaped = path_pattern
+            .replace('%', "\\%")
+            .replace('_', "\\_");
         let rows = sqlx::query(
             r#"
             SELECT f.id, f.documento_id, f.contenido, d.ruta_relativa
             FROM fragmentos f
             JOIN documentos d ON d.id = f.documento_id
-            WHERE d.ruta_relativa LIKE $1
+            WHERE d.ruta_relativa LIKE $1 ESCAPE '\'
             LIMIT 10
             "#,
         )
-        .bind(format!("%{}%", path_pattern))
+        .bind(format!("%{}%", escaped))
         .fetch_all(&self.db)
-        .await?;
+        .await
+        .map_err(|e| {
+            tracing::error!("DB error en search_by_path: {}", e);
+            crate::AlesysError::Database(e)
+        })?;
 
+        tracing::debug!("search_by_path '{}': {} resultados", path_pattern, rows.len());
         let results = rows
             .into_iter()
             .map(|row| SearchResult {
