@@ -3,6 +3,7 @@
 //! Combina búsqueda vectorial (pgvector) con traversales de grafo (petgraph)
 
 use crate::Result;
+use moka::sync::Cache;
 use petgraph::graph::{DiGraph, NodeIndex};
 use sqlx::{PgPool, Row};
 use std::collections::HashMap;
@@ -12,6 +13,8 @@ pub struct GraphRAG {
     db: PgPool,
     graph: DiGraph<DocumentNode, EdgeType>,
     node_map: HashMap<i32, NodeIndex>,
+    /// Cache de resultados de búsqueda (embedding_hash -> results)
+    search_cache: Cache<u64, Vec<SearchResult>>,
 }
 
 #[derive(Debug, Clone)]
@@ -57,6 +60,7 @@ impl GraphRAG {
             db,
             graph,
             node_map,
+            search_cache: Cache::new(1000),
         })
     }
 
@@ -182,6 +186,23 @@ impl GraphRAG {
         query_embedding: &[f32],
         limit: usize,
     ) -> Result<Vec<SearchResult>> {
+        // Check cache first
+        let cache_key = {
+            use std::collections::hash_map::DefaultHasher;
+            use std::hash::{Hash, Hasher};
+            let mut hasher = DefaultHasher::new();
+            for v in query_embedding.iter().step_by(4) {
+                v.to_bits().hash(&mut hasher);
+            }
+            limit.hash(&mut hasher);
+            hasher.finish()
+        };
+
+        if let Some(cached) = self.search_cache.get(&cache_key) {
+            tracing::debug!("vector_search: cache hit for key {}", cache_key);
+            return Ok(cached);
+        }
+
         let embedding_str = format!(
             "[{}]",
             query_embedding
@@ -212,7 +233,7 @@ impl GraphRAG {
         })?;
 
         tracing::debug!("vector_search: {} resultados", rows.len());
-        let results = rows
+        let results: Vec<SearchResult> = rows
             .into_iter()
             .map(|row| SearchResult {
                 fragment_id: row.get("id"),
@@ -226,6 +247,9 @@ impl GraphRAG {
                 doc_path: row.get("ruta_relativa"),
             })
             .collect();
+
+        // Cache the results
+        self.search_cache.insert(cache_key, results.clone());
 
         Ok(results)
     }
