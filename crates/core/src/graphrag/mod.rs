@@ -224,17 +224,21 @@ impl GraphRAG {
     }
 
     fn expand_with_graph(&self, doc_ids: &[i32], degrees: usize) -> Vec<i32> {
+        let max_expanded = 50; // Limitar expansion para evitar O(N)
         let mut expanded = std::collections::HashSet::new();
         let mut queue: std::collections::VecDeque<(i32, usize)> =
             doc_ids.iter().map(|&id| (id, 0)).collect();
 
         while let Some((current_id, depth)) = queue.pop_front() {
-            if depth >= degrees {
+            if depth >= degrees || expanded.len() >= max_expanded {
                 continue;
             }
 
             if let Some(&node_idx) = self.node_map.get(&current_id) {
                 for neighbor in self.graph.neighbors_undirected(node_idx) {
+                    if expanded.len() >= max_expanded {
+                        break;
+                    }
                     if let Some(neighbor_id) = self.graph.node_weight(neighbor).map(|n| n.id) {
                         if !expanded.contains(&neighbor_id) && !doc_ids.contains(&neighbor_id) {
                             expanded.insert(neighbor_id);

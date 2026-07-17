@@ -444,9 +444,28 @@ pub async fn graph_stats(State(state): State<AppState>) -> impl IntoResponse {
 }
 
 /// Health check endpoint
-pub async fn health_handler() -> impl IntoResponse {
+pub async fn health_handler(State(state): State<AppState>) -> impl IntoResponse {
+    // Check DB connectivity
+    let db_ok = sqlx::query("SELECT 1")
+        .fetch_optional(&state.db)
+        .await
+        .is_ok();
+
+    let llm_available = state.llm_engine.is_available();
+    let llm_backend = state.llm_engine.backend_name();
+
+    let status = if db_ok { "ok" } else { "degraded" };
+
     Json(serde_json::json!({
-        "status": "ok",
+        "status": status,
         "version": env!("CARGO_PKG_VERSION"),
+        "db": if db_ok { "connected" } else { "disconnected" },
+        "llm": {
+            "available": llm_available,
+            "backend": llm_backend,
+        },
+        "embedder": {
+            "loaded": state.embedder.is_available(),
+        },
     }))
 }
