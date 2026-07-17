@@ -7,9 +7,10 @@ use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct AppState {
-    pub _db: PgPool,
+    #[allow(dead_code)] // Mantenido para keep-alive del pool; usado via SessionManager
+    pub db: PgPool,
     pub graphrag: Arc<GraphRAG>,
-    pub _session_manager: SessionManager,
+    pub session_manager: SessionManager,
     pub llm_engine: Arc<LLMBackend>,
     pub embedder: Arc<ONNXEmbedder>,
 }
@@ -47,9 +48,9 @@ impl AppState {
         let embedder = Arc::new(embedder);
 
         Ok(Self {
-            _db: db,
+            db,
             graphrag,
-            _session_manager: session_manager,
+            session_manager,
             llm_engine,
             embedder,
         })
