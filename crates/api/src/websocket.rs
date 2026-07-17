@@ -52,17 +52,22 @@ async fn handle_websocket_chat(socket: WebSocket, state: AppState) {
                 let ws_msg: WSMessage = match serde_json::from_str(&text) {
                     Ok(m) => m,
                     Err(e) => {
+                        tracing::debug!("WS parse error: {}", e);
                         let response = WSResponse {
                             msg_type: "error".to_string(),
                             content: None,
                             sources: None,
-                            error: Some(format!("Error al parsear mensaje: {}", e)),
+                            error: Some("Formato de mensaje invalido".to_string()),
                         };
-                        let _ = sender
+                        if sender
                             .send(axum::extract::ws::Message::Text(
                                 serde_json::to_string(&response).unwrap().into(),
                             ))
-                            .await;
+                            .await
+                            .is_err()
+                        {
+                            break;
+                        }
                         continue;
                     }
                 };
@@ -75,26 +80,35 @@ async fn handle_websocket_chat(socket: WebSocket, state: AppState) {
                             sources: None,
                             error: None,
                         };
-                        let _ = sender
+                        if sender
                             .send(axum::extract::ws::Message::Text(
                                 serde_json::to_string(&start_response).unwrap().into(),
                             ))
-                            .await;
+                            .await
+                            .is_err()
+                        {
+                            break;
+                        }
 
                         let query_embedding = match state.embedder.encode(&query) {
                             Ok(emb) => emb,
                             Err(e) => {
+                                tracing::error!("WS embedding error: {}", e);
                                 let response = WSResponse {
                                     msg_type: "error".to_string(),
                                     content: None,
                                     sources: None,
-                                    error: Some(format!("Error al generar embedding: {}", e)),
+                                    error: Some("Error generando embedding".to_string()),
                                 };
-                                let _ = sender
+                                if sender
                                     .send(axum::extract::ws::Message::Text(
                                         serde_json::to_string(&response).unwrap().into(),
                                     ))
-                                    .await;
+                                    .await
+                                    .is_err()
+                                {
+                                    break;
+                                }
                                 continue;
                             }
                         };
@@ -103,17 +117,22 @@ async fn handle_websocket_chat(socket: WebSocket, state: AppState) {
                             match state.graphrag.hybrid_search(&query_embedding, 5, 1).await {
                                 Ok(results) => results,
                                 Err(e) => {
+                                    tracing::error!("WS search error: {}", e);
                                     let response = WSResponse {
                                         msg_type: "error".to_string(),
                                         content: None,
                                         sources: None,
-                                        error: Some(format!("Error en búsqueda: {}", e)),
+                                        error: Some("Error en busqueda".to_string()),
                                     };
-                                    let _ = sender
+                                    if sender
                                         .send(axum::extract::ws::Message::Text(
                                             serde_json::to_string(&response).unwrap().into(),
                                         ))
-                                        .await;
+                                        .await
+                                        .is_err()
+                                    {
+                                        break;
+                                    }
                                     continue;
                                 }
                             };
@@ -156,19 +175,24 @@ async fn handle_websocket_chat(socket: WebSocket, state: AppState) {
                                             }
                                         }
                                         Err(e) => {
+                                            tracing::error!("WS stream error: {}", e);
                                             let response = WSResponse {
                                                 msg_type: "error".to_string(),
                                                 content: None,
                                                 sources: None,
-                                                error: Some(format!("Error en streaming: {}", e)),
+                                                error: Some("Error generando respuesta".to_string()),
                                             };
-                                            let _ = sender
+                                            if sender
                                                 .send(axum::extract::ws::Message::Text(
                                                     serde_json::to_string(&response)
                                                         .unwrap()
                                                         .into(),
                                                 ))
-                                                .await;
+                                                .await
+                                                .is_err()
+                                            {
+                                                break;
+                                            }
                                             break;
                                         }
                                     }
@@ -199,11 +223,12 @@ async fn handle_websocket_chat(socket: WebSocket, state: AppState) {
                                     .await;
                             }
                             Err(e) => {
+                                tracing::error!("WS LLM error: {}", e);
                                 let response = WSResponse {
                                     msg_type: "error".to_string(),
                                     content: None,
                                     sources: None,
-                                    error: Some(format!("Error en LLM: {}", e)),
+                                    error: Some("Error generando respuesta".to_string()),
                                 };
                                 let _ = sender
                                     .send(axum::extract::ws::Message::Text(

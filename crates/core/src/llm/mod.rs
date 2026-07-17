@@ -129,6 +129,10 @@ impl ONNXEmbedder {
     pub fn encode_batch(&self, texts: &[&str]) -> Result<Vec<Vec<f32>>> {
         texts.iter().map(|text| self.encode(text)).collect()
     }
+
+    pub fn is_available(&self) -> bool {
+        self.loaded
+    }
 }
 
 #[allow(clippy::derivable_impls)]
