@@ -1,20 +1,20 @@
 //! ALEsys API - Backend REST + WebSocket
 //!
 //! Endpoints:
-//! - POST /api/chat           → Chat con GraphRAG
-//! - POST /api/generate       → Generar archivos (FASE 2)
-//! - POST /api/sessions       → Gestionar sesiones
-//! - GET  /ws/chat            → WebSocket para streaming
-//! - GET  /api/graph/stats    → Estadísticas del grafo
-//! - GET  /health             → Health check
-//!
-//! FASE AVANZADA (Fase 7+):
-//! - POST /api/execute        → Ejecutar código
-//! - POST /api/modify         → Modificar archivos
+//! - POST /api/chat               -> Chat con GraphRAG + sesiones
+//! - POST /api/generate           -> Generar archivos (FASE 2)
+//! - GET  /api/sessions           -> Listar sesiones activas
+//! - POST /api/sessions           -> Crear sesion
+//! - GET  /api/sessions/:id       -> Detalle de sesion
+//! - DELETE /api/sessions/:id     -> Cerrar sesion
+//! - GET  /api/sessions/:id/history -> Historial de chat
+//! - GET  /ws/chat                -> WebSocket para streaming
+//! - GET  /api/graph/stats        -> Estadisticas del grafo
+//! - GET  /health                 -> Health check
 
 use anyhow::Result;
 use axum::{
-    routing::{get, post},
+    routing::{delete, get, post},
     Router,
 };
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
@@ -25,7 +25,8 @@ mod state;
 mod websocket;
 
 use handlers::{
-    chat_handler, create_session, generate_handler, graph_stats, health_handler, list_sessions,
+    chat_handler, create_session, delete_session, generate_handler, get_session,
+    get_session_history, graph_stats, health_handler, list_sessions,
 };
 use state::AppState;
 use websocket::ws_chat_handler;
@@ -69,7 +70,11 @@ async fn main() -> Result<()> {
             "http://localhost:5173".parse().unwrap(),
             "http://localhost:8080".parse().unwrap(),
         ])
-        .allow_methods([axum::http::Method::GET, axum::http::Method::POST])
+        .allow_methods([
+            axum::http::Method::GET,
+            axum::http::Method::POST,
+            axum::http::Method::DELETE,
+        ])
         .allow_headers([
             axum::http::header::CONTENT_TYPE,
             axum::http::header::AUTHORIZATION,
@@ -81,6 +86,9 @@ async fn main() -> Result<()> {
         .route("/api/generate", post(generate_handler))
         .route("/api/sessions", get(list_sessions))
         .route("/api/sessions", post(create_session))
+        .route("/api/sessions/:id", get(get_session))
+        .route("/api/sessions/:id", delete(delete_session))
+        .route("/api/sessions/:id/history", get(get_session_history))
         .route("/api/graph/stats", get(graph_stats))
         .route("/health", get(health_handler))
         .with_state(state)
