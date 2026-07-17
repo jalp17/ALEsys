@@ -7,6 +7,7 @@ import { Chat } from './pages/Chat';
 import { Generate } from './pages/Generate';
 import { Sessions } from './pages/Sessions';
 import { Settings } from './pages/Settings';
+import { GraphViewer } from './pages/graph';
 
 const queryClient = new QueryClient();
 
@@ -23,6 +24,7 @@ function App() {
             <Route path="/generate" element={<Generate />} />
             <Route path="/sessions" element={<Sessions />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/graph" element={<GraphViewer />} />
           </Routes>
         </Layout>
       </BrowserRouter>

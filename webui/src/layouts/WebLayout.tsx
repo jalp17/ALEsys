@@ -27,6 +27,9 @@ export function WebLayout({ children }: WebLayoutProps) {
           <Link to="/sessions" className="text-gray-300 hover:text-primary-400 transition">
             Sesiones
           </Link>
+          <Link to="/graph" className="text-gray-300 hover:text-primary-400 transition">
+            Grafo
+          </Link>
           <Link to="/settings" className="text-gray-300 hover:text-primary-400 transition">
             Configuración
           </Link>
