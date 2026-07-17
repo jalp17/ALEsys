@@ -96,6 +96,8 @@ impl SessionManager {
     }
 
     pub async fn add_message(&self, session_id: &str, message: &ChatMessage) -> Result<()> {
+        let mut tx = self.db.begin().await?;
+
         sqlx::query(
             r#"
             INSERT INTO session_messages (session_id, role, content, timestamp, sources)
@@ -112,14 +114,15 @@ impl SessionManager {
                 .as_ref()
                 .map(|s| serde_json::to_value(s).unwrap()),
         )
-        .execute(&self.db)
+        .execute(&mut *tx)
         .await?;
 
         sqlx::query("UPDATE user_sessions SET last_activity = NOW() WHERE id = $1")
             .bind(session_id)
-            .execute(&self.db)
+            .execute(&mut *tx)
             .await?;
 
+        tx.commit().await?;
         Ok(())
     }
 

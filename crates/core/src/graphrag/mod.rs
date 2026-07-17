@@ -67,43 +67,74 @@ impl GraphRAG {
         let mut graph = DiGraph::new();
         let mut node_map = HashMap::new();
 
-        let doc_rows = sqlx::query("SELECT id, ruta_relativa, tipo FROM documentos")
+        // Paginated load using cursor-based pagination (OFFSET-free)
+        let batch_size: i64 = 500;
+        let mut last_id: i32 = 0;
+
+        loop {
+            let rows = sqlx::query(
+                "SELECT id, ruta_relativa, tipo FROM documentos WHERE id > $1 ORDER BY id LIMIT $2",
+            )
+            .bind(last_id)
+            .bind(batch_size)
             .fetch_all(db)
             .await?;
 
-        for row in doc_rows {
-            let id: i32 = row.get("id");
-            let ruta_relativa: String = row.get("ruta_relativa");
-            let tipo: String = row.get("tipo");
-            let idx = graph.add_node(DocumentNode {
-                id,
-                path: ruta_relativa,
-                doc_type: tipo,
-            });
-            node_map.insert(id, idx);
+            if rows.is_empty() {
+                break;
+            }
+
+            for row in &rows {
+                let id: i32 = row.get("id");
+                let ruta_relativa: String = row.get("ruta_relativa");
+                let tipo: String = row.get("tipo");
+                let idx = graph.add_node(DocumentNode {
+                    id,
+                    path: ruta_relativa,
+                    doc_type: tipo,
+                });
+                node_map.insert(id, idx);
+            }
+
+            last_id = rows.last().unwrap().get("id");
         }
 
-        let enlace_rows =
-            sqlx::query("SELECT origen_id, destino_id, tipo_enlace, contexto FROM enlaces")
-                .fetch_all(db)
-                .await?;
+        // Paginated edge load
+        let mut last_origen: i32 = 0;
 
-        for row in enlace_rows {
-            let origen_id: i32 = row.get("origen_id");
-            let destino_id: i32 = row.get("destino_id");
-            let tipo_enlace: Option<String> = row.get("tipo_enlace");
-            let contexto: Option<String> = row.get("contexto");
+        loop {
+            let rows = sqlx::query(
+                "SELECT origen_id, destino_id, tipo_enlace, contexto FROM enlaces WHERE origen_id > $1 ORDER BY origen_id LIMIT $2",
+            )
+            .bind(last_origen)
+            .bind(batch_size)
+            .fetch_all(db)
+            .await?;
 
-            if let (Some(&src), Some(&dst)) = (node_map.get(&origen_id), node_map.get(&destino_id))
-            {
-                let ctx = contexto.unwrap_or_default();
-                let edge_type = match tipo_enlace.as_deref() {
-                    Some("wiki_link") => EdgeType::WikiLink { context: ctx },
-                    Some("backlink") => EdgeType::Backlink { context: ctx },
-                    _ => EdgeType::Reference { context: ctx },
-                };
-                graph.add_edge(src, dst, edge_type);
+            if rows.is_empty() {
+                break;
             }
+
+            for row in &rows {
+                let origen_id: i32 = row.get("origen_id");
+                let destino_id: i32 = row.get("destino_id");
+                let tipo_enlace: Option<String> = row.get("tipo_enlace");
+                let contexto: Option<String> = row.get("contexto");
+
+                if let (Some(&src), Some(&dst)) =
+                    (node_map.get(&origen_id), node_map.get(&destino_id))
+                {
+                    let ctx = contexto.unwrap_or_default();
+                    let edge_type = match tipo_enlace.as_deref() {
+                        Some("wiki_link") => EdgeType::WikiLink { context: ctx },
+                        Some("backlink") => EdgeType::Backlink { context: ctx },
+                        _ => EdgeType::Reference { context: ctx },
+                    };
+                    graph.add_edge(src, dst, edge_type);
+                }
+            }
+
+            last_origen = rows.last().unwrap().get("origen_id");
         }
 
         Ok((graph, node_map))

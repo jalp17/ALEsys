@@ -43,6 +43,15 @@ async fn main() -> Result<()> {
 
     dotenvy::dotenv().ok();
 
+    // Validate critical env vars at startup
+    let db_url_result = std::env::var("DATABASE_URL");
+    let pg_result = std::env::var("PGHOST");
+    if db_url_result.is_err() && pg_result.is_err() {
+        tracing::warn!(
+            "Neither DATABASE_URL nor PGHOST set — usando defaults de docker-compose"
+        );
+    }
+
     let database_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
         let host = std::env::var("PGHOST").unwrap_or_else(|_| "localhost".to_string());
         let port = std::env::var("PGPORT").unwrap_or_else(|_| "5433".to_string());
