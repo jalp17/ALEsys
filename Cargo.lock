@@ -105,6 +105,7 @@ dependencies = [
  "hf-hub",
  "llama_cpp",
  "mistralrs",
+ "moka",
  "num_cpus",
  "once_cell",
  "petgraph",

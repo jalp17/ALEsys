@@ -61,6 +61,6 @@ toml = "0.8"
 
 # Phase 4: Performance
 async-trait = "0.1"
-moka = { version = "0.12", features = ["future"] }
+moka = { version = "0.12", features = ["future", "sync"] }
 tokio-stream = "0.1"
 futures = "0.3"
