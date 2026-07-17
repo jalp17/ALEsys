@@ -4,6 +4,7 @@ import { isDesktop } from './utils/platform';
 import { DesktopLayout } from './layouts/DesktopLayout';
 import { WebLayout } from './layouts/WebLayout';
 import { Chat } from './pages/Chat';
+import { Generate } from './pages/Generate';
 import { Settings } from './pages/Settings';
 
 const queryClient = new QueryClient();
@@ -18,6 +19,7 @@ function App() {
           <Routes>
             <Route path="/" element={<Chat />} />
             <Route path="/chat" element={<Chat />} />
+            <Route path="/generate" element={<Generate />} />
             <Route path="/settings" element={<Settings />} />
           </Routes>
         </Layout>
