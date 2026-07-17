@@ -17,7 +17,7 @@ use axum::{
     routing::{delete, get, post},
     Router,
 };
-use tower_http::{cors::CorsLayer, trace::TraceLayer};
+use tower_http::{cors::CorsLayer, timeout::TimeoutLayer, trace::TraceLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod handlers;
@@ -77,11 +77,14 @@ async fn main() -> Result<()> {
 
     let state = AppState::new(db_pool, llm_config, embedder_path.as_deref()).await?;
 
+    let cors_origins: Vec<_> = std::env::var("CORS_ORIGINS")
+        .unwrap_or_else(|_| "http://localhost:5173,http://localhost:8080".into())
+        .split(',')
+        .filter_map(|o| o.trim().parse().ok())
+        .collect();
+
     let cors = CorsLayer::new()
-        .allow_origin([
-            "http://localhost:5173".parse().unwrap(),
-            "http://localhost:8080".parse().unwrap(),
-        ])
+        .allow_origin(cors_origins)
         .allow_methods([
             axum::http::Method::GET,
             axum::http::Method::POST,
@@ -91,6 +94,11 @@ async fn main() -> Result<()> {
             axum::http::header::CONTENT_TYPE,
             axum::http::header::AUTHORIZATION,
         ]);
+
+    let timeout_secs: u64 = std::env::var("REQUEST_TIMEOUT_SECS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(120);
 
     let app = Router::new()
         .route("/api/chat", post(chat_handler))
@@ -105,14 +113,28 @@ async fn main() -> Result<()> {
         .route("/health", get(health_handler))
         .with_state(state)
         .layer(cors)
+        .layer(TimeoutLayer::with_status_code(
+            axum::http::StatusCode::REQUEST_TIMEOUT,
+            std::time::Duration::from_secs(timeout_secs),
+        ))
         .layer(TraceLayer::new_for_http());
 
     let addr = std::env::var("API_ADDR").unwrap_or_else(|_| "0.0.0.0:3000".to_string());
     let listener = tokio::net::TcpListener::bind(&addr).await?;
 
-    tracing::info!("ALEsys API listening on {}", addr);
+    tracing::info!("ALEsys API listening on {} (timeout={}s)", addr, timeout_secs);
 
-    axum::serve(listener, app).await?;
+    let shutdown_signal = async {
+        let _ = tokio::signal::ctrl_c().await;
+        tracing::info!("Shutdown signal received, draining connections...");
+        // Give in-flight requests time to complete
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+    };
 
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal)
+        .await?;
+
+    tracing::info!("ALEsys API stopped");
     Ok(())
 }

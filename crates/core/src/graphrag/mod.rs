@@ -46,7 +46,13 @@ pub enum SearchResultSource {
 
 impl GraphRAG {
     pub async fn new(db: PgPool) -> Result<Self> {
+        tracing::info!("Inicializando GraphRAG...");
         let (graph, node_map) = Self::load_graph_from_db(&db).await?;
+        tracing::info!(
+            "GraphRAG inicializado: {} nodos, {} edges",
+            graph.node_count(),
+            graph.edge_count()
+        );
         Ok(Self {
             db,
             graph,
@@ -55,7 +61,13 @@ impl GraphRAG {
     }
 
     pub async fn reload_graph(&mut self) -> Result<()> {
+        tracing::info!("Recargando grafo desde DB...");
         let (graph, node_map) = Self::load_graph_from_db(&self.db).await?;
+        tracing::info!(
+            "Grafo recargado: {} nodos, {} edges",
+            graph.node_count(),
+            graph.edge_count()
+        );
         self.graph = graph;
         self.node_map = node_map;
         Ok(())
@@ -70,6 +82,7 @@ impl GraphRAG {
         // Paginated load using cursor-based pagination (OFFSET-free)
         let batch_size: i64 = 500;
         let mut last_id: i32 = 0;
+        let mut total_docs = 0usize;
 
         loop {
             let rows = sqlx::query(
@@ -78,12 +91,17 @@ impl GraphRAG {
             .bind(last_id)
             .bind(batch_size)
             .fetch_all(db)
-            .await?;
+            .await
+            .map_err(|e| {
+                tracing::error!("DB error cargando documentos (batch desde id={}): {}", last_id, e);
+                crate::AlesysError::Database(e)
+            })?;
 
             if rows.is_empty() {
                 break;
             }
 
+            total_docs += rows.len();
             for row in &rows {
                 let id: i32 = row.get("id");
                 let ruta_relativa: String = row.get("ruta_relativa");
@@ -105,6 +123,7 @@ impl GraphRAG {
 
         // Paginated edge load
         let mut last_origen: i32 = 0;
+        let mut total_edges = 0usize;
 
         loop {
             let rows = sqlx::query(
@@ -113,12 +132,17 @@ impl GraphRAG {
             .bind(last_origen)
             .bind(batch_size)
             .fetch_all(db)
-            .await?;
+            .await
+            .map_err(|e| {
+                tracing::error!("DB error cargando enlaces (batch desde id={}): {}", last_origen, e);
+                crate::AlesysError::Database(e)
+            })?;
 
             if rows.is_empty() {
                 break;
             }
 
+            total_edges += rows.len();
             for row in &rows {
                 let origen_id: i32 = row.get("origen_id");
                 let destino_id: i32 = row.get("destino_id");
@@ -145,6 +169,11 @@ impl GraphRAG {
             }
         }
 
+        tracing::debug!(
+            "Grafo cargado: {} documentos, {} enlaces",
+            total_docs,
+            total_edges
+        );
         Ok((graph, node_map))
     }
 
@@ -176,8 +205,13 @@ impl GraphRAG {
         .bind(&embedding_str)
         .bind(limit as i64)
         .fetch_all(&self.db)
-        .await?;
+        .await
+        .map_err(|e| {
+            tracing::error!("DB error en vector_search: {}", e);
+            crate::AlesysError::Database(e)
+        })?;
 
+        tracing::debug!("vector_search: {} resultados", rows.len());
         let results = rows
             .into_iter()
             .map(|row| SearchResult {
@@ -225,7 +259,18 @@ impl GraphRAG {
             )
             .bind(&new_doc_ids)
             .fetch_all(&self.db)
-            .await?;
+            .await
+            .map_err(|e| {
+                tracing::error!("DB error cargando fragmentos expandidos: {}", e);
+                crate::AlesysError::Database(e)
+            })?;
+
+            tracing::debug!(
+                "hybrid_search: {} docs vectoriales, {} expandidos, {} fragmentos graph",
+                doc_ids.len(),
+                new_doc_ids.len(),
+                rows.len()
+            );
 
             for row in rows {
                 let frag_id: i32 = row.get("id");
@@ -251,6 +296,7 @@ impl GraphRAG {
                 .partial_cmp(&a.similarity)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
+        tracing::debug!("hybrid_search total: {} resultados", results.len());
         Ok(results)
     }
 
@@ -298,8 +344,13 @@ impl GraphRAG {
         )
         .bind(format!("%{}%", escaped))
         .fetch_all(&self.db)
-        .await?;
+        .await
+        .map_err(|e| {
+            tracing::error!("DB error en search_by_path: {}", e);
+            crate::AlesysError::Database(e)
+        })?;
 
+        tracing::debug!("search_by_path '{}': {} resultados", path_pattern, rows.len());
         let results = rows
             .into_iter()
             .map(|row| SearchResult {
