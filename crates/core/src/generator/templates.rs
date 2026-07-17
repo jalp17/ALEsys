@@ -41,9 +41,15 @@ impl PromptTemplate {
 
         // Context
         if let Some(ctx) = context {
-            prompt.push_str("\nContexto de archivos existentes:\n");
-            for file in &ctx.existing_files {
-                prompt.push_str(&format!("\n--- {} ---\n{}\n", file.name, file.content));
+            if let Some(ref project_type) = ctx.project_type {
+                prompt.push_str(&format!("\nTipo de proyecto: {}\n", project_type));
+            }
+
+            if !ctx.existing_files.is_empty() {
+                prompt.push_str("\nContexto de archivos existentes:\n");
+                for file in &ctx.existing_files {
+                    prompt.push_str(&format!("\n--- {} ---\n{}\n", file.name, file.content));
+                }
             }
 
             if !ctx.dependencies.is_empty() {
