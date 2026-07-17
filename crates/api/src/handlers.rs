@@ -111,12 +111,30 @@ pub async fn chat_handler(
     Ok(Json(response))
 }
 
-/// Request para generación
+/// Request para generacion
 #[derive(Deserialize)]
 pub struct GenerateRequest {
     pub prompt: String,
     pub language: String,
     pub max_tokens: Option<usize>,
+    #[serde(default)]
+    pub context: Option<GenerateContext>,
+}
+
+/// Contexto de archivos existentes enviado desde el frontend
+#[derive(Deserialize)]
+pub struct GenerateContext {
+    pub project_type: Option<String>,
+    #[serde(default)]
+    pub existing_files: Vec<GenerateFileInfo>,
+    #[serde(default)]
+    pub dependencies: Vec<String>,
+}
+
+#[derive(Deserialize)]
+pub struct GenerateFileInfo {
+    pub name: String,
+    pub content: String,
 }
 
 /// Response de generación
@@ -143,10 +161,25 @@ pub async fn generate_handler(
         payload.language
     );
 
+    let context = payload.context.map(|ctx| {
+        alesys_core::generator::BuildContext {
+            project_type: ctx.project_type,
+            existing_files: ctx
+                .existing_files
+                .into_iter()
+                .map(|f| alesys_core::generator::FileInfo {
+                    name: f.name,
+                    content: f.content,
+                })
+                .collect(),
+            dependencies: ctx.dependencies,
+        }
+    });
+
     let gen_request = alesys_core::generator::GenerateRequest {
         prompt: payload.prompt,
         language: payload.language,
-        context: None,
+        context,
         max_tokens: payload.max_tokens.unwrap_or(2048),
     };
 
