@@ -8,7 +8,8 @@
 use mistralrs::{GgufModelBuilder, Model, TextMessageRole, TextMessages};
 
 use async_trait::async_trait;
-use super::{ChatMessage, ChatResponse, LLMConfig, LLMEngine, Usage};
+use futures::stream::BoxStream;
+use super::{ChatMessage, ChatResponse, LLMConfig, LLMEngine, StreamChunk, Usage};
 use crate::Result;
 
 pub struct MistralEngine {
@@ -161,5 +162,18 @@ impl LLMEngine for MistralEngine {
 
     fn backend_name(&self) -> &str {
         "mistralrs"
+    }
+
+    fn chat_stream<'a>(
+        &'a self,
+        messages: &'a [ChatMessage],
+    ) -> BoxStream<'a, Result<StreamChunk>> {
+        Box::pin(futures::stream::once(async move {
+            let response = self.chat(messages).await?;
+            Ok(StreamChunk {
+                delta: response.content,
+                finish_reason: Some("stop".to_string()),
+            })
+        }))
     }
 }

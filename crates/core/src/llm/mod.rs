@@ -30,6 +30,7 @@ pub use config::{Entity, KnowledgeExtraction, LLMBackendType, LLMConfig, Relatio
 
 use crate::Result;
 use async_trait::async_trait;
+use futures::stream::BoxStream;
 
 /// Mensaje de chat
 #[derive(Debug, Clone)]
@@ -67,17 +68,11 @@ pub trait LLMEngine: Send + Sync {
     /// Chat con contexto de documentos
     async fn chat(&self, messages: &[ChatMessage]) -> Result<ChatResponse>;
 
-    /// Chat con streaming de tokens (default: single-chunk via chat)
-    async fn chat_stream(
-        &self,
-        messages: &[ChatMessage],
-    ) -> Result<Vec<StreamChunk>> {
-        let response = self.chat(messages).await?;
-        Ok(vec![StreamChunk {
-            delta: response.content,
-            finish_reason: Some("stop".to_string()),
-        }])
-    }
+    /// Chat con streaming real de tokens (cada chunk se envía individualmente)
+    fn chat_stream<'a>(
+        &'a self,
+        messages: &'a [ChatMessage],
+    ) -> BoxStream<'a, Result<StreamChunk>>;
 
     /// Generación de código (default: chat con system prompt de programación)
     async fn generate_code(&self, prompt: &str, language: &str) -> Result<String> {
@@ -119,6 +114,21 @@ pub trait LLMEngine: Send + Sync {
 
     /// Nombre del backend
     fn backend_name(&self) -> &str;
+}
+
+/// Helper: crea un BoxStream con un solo chunk desde un ChatResponse
+pub fn single_chunk_stream(response: ChatResponse) -> BoxStream<'static, Result<StreamChunk>> {
+    Box::pin(futures::stream::once(async move {
+        Ok(StreamChunk {
+            delta: response.content,
+            finish_reason: Some("stop".to_string()),
+        })
+    }))
+}
+
+/// Helper: crea un BoxStream con un solo error
+pub fn error_stream(err: crate::AlesysError) -> BoxStream<'static, Result<StreamChunk>> {
+    Box::pin(futures::stream::once(async move { Err(err) }))
 }
 
 /// Embedder con ONNX Runtime (stub por ahora)
