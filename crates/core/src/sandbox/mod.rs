@@ -55,8 +55,9 @@ impl CodeSandbox {
 
     /// Ejecutar código
     pub async fn execute(&self, _code: &str, _language: &str) -> Result<ExecutionResult> {
-        // ⚠️  TODO: Implementar en Fase 7
-        todo!("Implementar sandbox de ejecución - FASE 7")
+        Err(crate::AlesysError::Sandbox(
+            "Sandbox no implementado — planeado para Fase 7".to_string(),
+        ))
     }
 
     /// Ejecutar con streaming de output
@@ -67,8 +68,9 @@ impl CodeSandbox {
         mut _stdout_callback: impl FnMut(String),
         mut _stderr_callback: impl FnMut(String),
     ) -> Result<ExecutionResult> {
-        // ⚠️  TODO: Implementar en Fase 7
-        todo!("Implementar ejecución con streaming - FASE 7")
+        Err(crate::AlesysError::Sandbox(
+            "Sandbox streaming no implementado — planeado para Fase 7".to_string(),
+        ))
     }
 }
 

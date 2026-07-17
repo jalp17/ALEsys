@@ -100,44 +100,58 @@ export function Chat() {
     });
   };
 
+  const MAX_QUERY_LENGTH = 4000;
+
   const sendViaWebSocket = (query: string) => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-      const wsUrl = API_BASE_URL.replace(/^http/, 'ws') + '/ws/chat';
-      wsRef.current = new WebSocket(wsUrl);
-
-      wsRef.current.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-
-        switch (data.type) {
-          case 'start':
-            break;
-          case 'chunk':
-            updateLastMessage(data.content || '');
-            break;
-          case 'done':
-            updateLastMessage('', data.sources);
-            markLastMessageDone();
-            setIsLoading(false);
-            break;
-          case 'error':
-            updateLastMessage(`\n\nError: ${data.error}`);
-            markLastMessageDone();
-            setIsLoading(false);
-            break;
-        }
-      };
-
-      wsRef.current.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        updateLastMessage('\n\nError: Conexion WebSocket fallida');
-        markLastMessageDone();
-        setIsLoading(false);
-      };
-
-      wsRef.current.onclose = () => {
-        wsRef.current = null;
-      };
+    // Cerrar conexion existente antes de crear nueva
+    if (wsRef.current) {
+      if (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING) {
+        wsRef.current.close();
+      }
+      wsRef.current = null;
     }
+
+    const wsUrl = API_BASE_URL.replace(/^http/, 'ws') + '/ws/chat';
+    wsRef.current = new WebSocket(wsUrl);
+
+    wsRef.current.onmessage = (event) => {
+      let data;
+      try {
+        data = JSON.parse(event.data);
+      } catch {
+        console.error('Invalid WebSocket message');
+        return;
+      }
+
+      switch (data.type) {
+        case 'start':
+          break;
+        case 'chunk':
+          updateLastMessage(data.content || '');
+          break;
+        case 'done':
+          updateLastMessage('', data.sources);
+          markLastMessageDone();
+          setIsLoading(false);
+          break;
+        case 'error':
+          updateLastMessage(`\n\nError: ${data.error || 'Error desconocido'}`);
+          markLastMessageDone();
+          setIsLoading(false);
+          break;
+      }
+    };
+
+    wsRef.current.onerror = (error) => {
+      console.error('WebSocket error:', error);
+      updateLastMessage('\n\nError: Conexion WebSocket fallida');
+      markLastMessageDone();
+      setIsLoading(false);
+    };
+
+    wsRef.current.onclose = () => {
+      wsRef.current = null;
+    };
 
     const send = () => {
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -181,9 +195,13 @@ export function Chat() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!query.trim() || isLoading) return;
+    const trimmed = query.trim();
+    if (!trimmed || isLoading) return;
+    if (trimmed.length > MAX_QUERY_LENGTH) {
+      return;
+    }
 
-    const userMessage = query;
+    const userMessage = trimmed;
     setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
     setQuery('');
     setIsLoading(true);
@@ -291,17 +309,27 @@ export function Chat() {
 
       {/* Input form */}
       <form onSubmit={handleSubmit} className="flex gap-3">
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={activeSession ? 'Escribe en esta sesion...' : 'Escribe tu pregunta...'}
-          className="flex-1 px-4 py-3 bg-dark-800 border border-gray-700 rounded-lg focus:outline-none focus:border-primary-500 text-white placeholder-gray-500"
-          disabled={isLoading}
-        />
+        <div className="flex-1 relative">
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={activeSession ? 'Escribe en esta sesion...' : 'Escribe tu pregunta...'}
+            maxLength={MAX_QUERY_LENGTH}
+            className="w-full px-4 py-3 bg-dark-800 border border-gray-700 rounded-lg focus:outline-none focus:border-primary-500 text-white placeholder-gray-500"
+            disabled={isLoading}
+          />
+          {query.length > MAX_QUERY_LENGTH * 0.8 && (
+            <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-xs ${
+              query.length >= MAX_QUERY_LENGTH ? 'text-red-400' : 'text-gray-500'
+            }`}>
+              {query.length}/{MAX_QUERY_LENGTH}
+            </span>
+          )}
+        </div>
         <button
           type="submit"
-          disabled={isLoading || !query.trim()}
+          disabled={isLoading || !query.trim() || query.trim().length > MAX_QUERY_LENGTH}
           className="px-6 py-3 bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition font-semibold"
         >
           Enviar

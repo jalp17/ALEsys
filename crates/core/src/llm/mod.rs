@@ -65,17 +65,53 @@ pub trait LLMEngine: Send + Sync {
     /// Chat con contexto de documentos
     fn chat(&self, messages: &[ChatMessage]) -> Result<ChatResponse>;
 
-    /// Chat con streaming de tokens
+    /// Chat con streaming de tokens (default: single-chunk via chat)
     fn chat_stream(
         &self,
         messages: &[ChatMessage],
-    ) -> Result<Box<dyn Iterator<Item = Result<StreamChunk>> + Send>>;
+    ) -> Result<Box<dyn Iterator<Item = Result<StreamChunk>> + Send>> {
+        let response = self.chat(messages)?;
+        let chunks = vec![Ok(StreamChunk {
+            delta: response.content,
+            finish_reason: Some("stop".to_string()),
+        })];
+        Ok(Box::new(chunks.into_iter()))
+    }
 
-    /// Generación de código
-    fn generate_code(&self, prompt: &str, language: &str) -> Result<String>;
+    /// Generación de código (default: chat con system prompt de programación)
+    fn generate_code(&self, prompt: &str, language: &str) -> Result<String> {
+        let messages = vec![
+            ChatMessage {
+                role: "system".to_string(),
+                content: format!(
+                    "Eres un asistente de programación. Genera código en {}.",
+                    language
+                ),
+            },
+            ChatMessage {
+                role: "user".to_string(),
+                content: prompt.to_string(),
+            },
+        ];
+        let response = self.chat(&messages)?;
+        Ok(response.content)
+    }
 
-    /// Extracción de conocimiento
-    fn extract_knowledge(&self, text: &str, schema: &str) -> Result<String>;
+    /// Extracción de conocimiento (default: chat con system prompt de extracción)
+    fn extract_knowledge(&self, text: &str, schema: &str) -> Result<String> {
+        let messages = vec![
+            ChatMessage {
+                role: "system".to_string(),
+                content: format!("Extrae conocimiento del texto según el esquema: {}", schema),
+            },
+            ChatMessage {
+                role: "user".to_string(),
+                content: text.to_string(),
+            },
+        ];
+        let response = self.chat(&messages)?;
+        Ok(response.content)
+    }
 
     /// Verifica si el backend está disponible
     fn is_available(&self) -> bool;
@@ -128,6 +164,10 @@ impl ONNXEmbedder {
 
     pub fn encode_batch(&self, texts: &[&str]) -> Result<Vec<Vec<f32>>> {
         texts.iter().map(|text| self.encode(text)).collect()
+    }
+
+    pub fn is_available(&self) -> bool {
+        self.loaded
     }
 }
 

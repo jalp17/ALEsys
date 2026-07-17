@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS enlaces (
 CREATE INDEX IF NOT EXISTS idx_fragmentos_documento ON fragmentos(documento_id);
 CREATE INDEX IF NOT EXISTS idx_fragmentos_embedding ON fragmentos USING hnsw (embedding vector_cosine_ops);
 CREATE INDEX IF NOT EXISTS idx_entidades_documento ON entidades(documento_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_documentos_contenido_hash ON documentos(contenido_hash) WHERE contenido_hash IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_enlaces_origen ON enlaces(origen_id);
 CREATE INDEX IF NOT EXISTS idx_enlaces_destino ON enlaces(destino_id);
 
@@ -89,5 +90,8 @@ CREATE TABLE IF NOT EXISTS session_context (
 
 CREATE INDEX IF NOT EXISTS idx_user_sessions_user ON user_sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_sessions_active ON user_sessions(is_active);
+CREATE INDEX IF NOT EXISTS idx_user_sessions_user_active ON user_sessions(user_id, is_active) WHERE is_active = true;
 CREATE INDEX IF NOT EXISTS idx_session_messages_session ON session_messages(session_id);
 CREATE INDEX IF NOT EXISTS idx_session_messages_timestamp ON session_messages(session_id, timestamp);
+CREATE INDEX IF NOT EXISTS idx_relaciones_origen ON relaciones(origen_id);
+CREATE INDEX IF NOT EXISTS idx_relaciones_destino ON relaciones(destino_id);

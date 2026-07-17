@@ -40,6 +40,9 @@ pub enum LLMBackend {
 
     #[cfg(feature = "transformers-backend")]
     Transformers(TransformersEngine),
+
+    /// Backend sin LLM — permite modo solo búsqueda sin crash
+    Noop,
 }
 
 impl LLMBackend {
@@ -120,6 +123,11 @@ impl LLMBackend {
                 "Feature 'transformers-backend' no habilitada".to_string(),
             )),
         }
+    }
+
+    /// Crea un backend noop para modo solo búsqueda (sin LLM)
+    pub fn noop() -> Self {
+        Self::Noop
     }
 
     /// Auto-selección inteligente de backend
@@ -305,101 +313,45 @@ impl LLMBackend {
     }
 }
 
+macro_rules! delegate_backend {
+    ($self:expr, $method:ident($($arg:expr),*)) => {
+        match $self {
+            #[cfg(feature = "llama-cpp")]
+            Self::LlamaCpp(e) => e.$method($($arg),*),
+            #[cfg(feature = "mistralrs-backend")]
+            Self::Mistralrs(e) => e.$method($($arg),*),
+            #[cfg(feature = "candle-backend")]
+            Self::Candle(e) => e.$method($($arg),*),
+            #[cfg(feature = "vllm-backend")]
+            Self::Vllm(e) => e.$method($($arg),*),
+            #[cfg(feature = "transformers-backend")]
+            Self::Transformers(e) => e.$method($($arg),*),
+            Self::Noop => Err(crate::AlesysError::LLM(
+                "LLM no disponible — modo solo búsqueda".to_string(),
+            )),
+        }
+    };
+}
+
 #[allow(unused_variables)]
 impl LLMEngine for LLMBackend {
     fn chat(&self, messages: &[ChatMessage]) -> Result<ChatResponse> {
-        match self {
-            #[cfg(feature = "llama-cpp")]
-            Self::LlamaCpp(e) => e.chat(messages),
-            #[cfg(feature = "mistralrs-backend")]
-            Self::Mistralrs(e) => e.chat(messages),
-            #[cfg(feature = "candle-backend")]
-            Self::Candle(e) => e.chat(messages),
-            #[cfg(feature = "vllm-backend")]
-            Self::Vllm(e) => e.chat(messages),
-            #[cfg(feature = "transformers-backend")]
-            Self::Transformers(e) => e.chat(messages),
-            #[cfg(not(any(
-                feature = "llama-cpp",
-                feature = "mistralrs-backend",
-                feature = "candle-backend",
-                feature = "vllm-backend",
-                feature = "transformers-backend"
-            )))]
-            _ => unreachable!("No LLM backend feature enabled"),
-        }
+        delegate_backend!(self, chat(messages))
     }
 
     fn chat_stream(
         &self,
         messages: &[ChatMessage],
     ) -> Result<Box<dyn Iterator<Item = Result<StreamChunk>> + Send>> {
-        match self {
-            #[cfg(feature = "llama-cpp")]
-            Self::LlamaCpp(e) => e.chat_stream(messages),
-            #[cfg(feature = "mistralrs-backend")]
-            Self::Mistralrs(e) => e.chat_stream(messages),
-            #[cfg(feature = "candle-backend")]
-            Self::Candle(e) => e.chat_stream(messages),
-            #[cfg(feature = "vllm-backend")]
-            Self::Vllm(e) => e.chat_stream(messages),
-            #[cfg(feature = "transformers-backend")]
-            Self::Transformers(e) => e.chat_stream(messages),
-            #[cfg(not(any(
-                feature = "llama-cpp",
-                feature = "mistralrs-backend",
-                feature = "candle-backend",
-                feature = "vllm-backend",
-                feature = "transformers-backend"
-            )))]
-            _ => unreachable!("No LLM backend feature enabled"),
-        }
+        delegate_backend!(self, chat_stream(messages))
     }
 
     fn generate_code(&self, prompt: &str, language: &str) -> Result<String> {
-        match self {
-            #[cfg(feature = "llama-cpp")]
-            Self::LlamaCpp(e) => e.generate_code(prompt, language),
-            #[cfg(feature = "mistralrs-backend")]
-            Self::Mistralrs(e) => e.generate_code(prompt, language),
-            #[cfg(feature = "candle-backend")]
-            Self::Candle(e) => e.generate_code(prompt, language),
-            #[cfg(feature = "vllm-backend")]
-            Self::Vllm(e) => e.generate_code(prompt, language),
-            #[cfg(feature = "transformers-backend")]
-            Self::Transformers(e) => e.generate_code(prompt, language),
-            #[cfg(not(any(
-                feature = "llama-cpp",
-                feature = "mistralrs-backend",
-                feature = "candle-backend",
-                feature = "vllm-backend",
-                feature = "transformers-backend"
-            )))]
-            _ => unreachable!("No LLM backend feature enabled"),
-        }
+        delegate_backend!(self, generate_code(prompt, language))
     }
 
     fn extract_knowledge(&self, text: &str, schema: &str) -> Result<String> {
-        match self {
-            #[cfg(feature = "llama-cpp")]
-            Self::LlamaCpp(e) => e.extract_knowledge(text, schema),
-            #[cfg(feature = "mistralrs-backend")]
-            Self::Mistralrs(e) => e.extract_knowledge(text, schema),
-            #[cfg(feature = "candle-backend")]
-            Self::Candle(e) => e.extract_knowledge(text, schema),
-            #[cfg(feature = "vllm-backend")]
-            Self::Vllm(e) => e.extract_knowledge(text, schema),
-            #[cfg(feature = "transformers-backend")]
-            Self::Transformers(e) => e.extract_knowledge(text, schema),
-            #[cfg(not(any(
-                feature = "llama-cpp",
-                feature = "mistralrs-backend",
-                feature = "candle-backend",
-                feature = "vllm-backend",
-                feature = "transformers-backend"
-            )))]
-            _ => unreachable!("No LLM backend feature enabled"),
-        }
+        delegate_backend!(self, extract_knowledge(text, schema))
     }
 
     fn is_available(&self) -> bool {
@@ -414,14 +366,7 @@ impl LLMEngine for LLMBackend {
             Self::Vllm(e) => e.is_available(),
             #[cfg(feature = "transformers-backend")]
             Self::Transformers(e) => e.is_available(),
-            #[cfg(not(any(
-                feature = "llama-cpp",
-                feature = "mistralrs-backend",
-                feature = "candle-backend",
-                feature = "vllm-backend",
-                feature = "transformers-backend"
-            )))]
-            _ => unreachable!("No LLM backend feature enabled"),
+            Self::Noop => false,
         }
     }
 
@@ -437,14 +382,7 @@ impl LLMEngine for LLMBackend {
             Self::Vllm(e) => e.backend_name(),
             #[cfg(feature = "transformers-backend")]
             Self::Transformers(e) => e.backend_name(),
-            #[cfg(not(any(
-                feature = "llama-cpp",
-                feature = "mistralrs-backend",
-                feature = "candle-backend",
-                feature = "vllm-backend",
-                feature = "transformers-backend"
-            )))]
-            _ => unreachable!("No LLM backend feature enabled"),
+            Self::Noop => "noop",
         }
     }
 }
