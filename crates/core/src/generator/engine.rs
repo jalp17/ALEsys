@@ -22,9 +22,16 @@ impl CodeGenerator {
 
     /// Genera código desde un prompt
     pub async fn generate(&self, request: GenerateRequest) -> Result<GenerationResult> {
+        tracing::info!(
+            "Generación solicitada: lang={}, prompt_len={}",
+            request.language,
+            request.prompt.len()
+        );
+
         // 1. Seleccionar template según lenguaje
         let template = templates::get_template(&request.language)
             .unwrap_or(templates::PromptTemplate::generic());
+        tracing::debug!("Template seleccionado: {}", request.language);
 
         // 2. Renderizar prompt completo (system + requirements + context + user)
         let full_prompt = template.render(&request.prompt, request.context.as_ref());
@@ -35,9 +42,15 @@ impl CodeGenerator {
         // 4. Validar sintaxis del código generado
         let validation_result = SyntaxValidator::validate(&response, &request.language);
         let validation_warnings = match validation_result {
-            Ok(true) => Vec::new(),
-            Ok(false) => Vec::new(), // validate() solo retorna Ok(true) o Err
-            Err(e) => vec![format!("Advertencia de sintaxis: {}", e)],
+            Ok(true) => {
+                tracing::debug!("Validación de sintaxis: OK");
+                Vec::new()
+            }
+            Ok(false) => Vec::new(),
+            Err(e) => {
+                tracing::warn!("Validación de sintaxis falló: {}", e);
+                vec![format!("Advertencia de sintaxis: {}", e)]
+            }
         };
 
         // 5. Extraer nombre de archivo sugerido
@@ -46,6 +59,12 @@ impl CodeGenerator {
         // 6. Análisis estático → explicación + sugerencias
         let (explanation, mut suggestions) = self.analyze_generation(&response);
         suggestions.extend(validation_warnings);
+
+        tracing::info!(
+            "Generación completada: file={}, lines={}",
+            file_name,
+            response.lines().count()
+        );
 
         Ok(GenerationResult {
             file_name,

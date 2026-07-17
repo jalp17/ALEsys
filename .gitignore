@@ -41,6 +41,7 @@ dist/
 **/dist/
 .cache/
 *.tsbuildinfo
+pnpm-lock.yaml
 
 # === PHP ===
 /vendor/

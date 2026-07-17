@@ -27,7 +27,7 @@ alesys-core = { path = "../core", default-features = false }
 # Web framework
 axum.workspace = true
 tower.workspace = true
-tower-http = { workspace = true, features = ["cors", "trace"] }
+tower-http = { workspace = true, features = ["cors", "trace", "timeout"] }
 
 # Environment
 dotenvy = "0.15"

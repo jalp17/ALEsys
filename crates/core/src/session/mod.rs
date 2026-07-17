@@ -53,8 +53,13 @@ impl SessionManager {
         .bind(user_id)
         .bind(&session_name)
         .execute(&self.db)
-        .await?;
+        .await
+        .map_err(|e| {
+            tracing::error!("DB error creando sesión: {}", e);
+            crate::AlesysError::Session(format!("Error creando sesión: {}", e))
+        })?;
 
+        tracing::info!("Sesión creada: {} (user={})", session_id, user_id);
         Ok(session_id)
     }
 
@@ -69,8 +74,13 @@ impl SessionManager {
         )
         .bind(user_id)
         .fetch_all(&self.db)
-        .await?;
+        .await
+        .map_err(|e| {
+            tracing::error!("DB error listando sesiones activas: {}", e);
+            crate::AlesysError::Session(format!("Error listando sesiones: {}", e))
+        })?;
 
+        tracing::debug!("Sesiones activas para user={}: {}", user_id, rows.len());
         let sessions = rows
             .iter()
             .map(|row| Session {
@@ -96,7 +106,11 @@ impl SessionManager {
         )
         .bind(session_id)
         .fetch_optional(&self.db)
-        .await?;
+        .await
+        .map_err(|e| {
+            tracing::error!("DB error obteniendo sesión {}: {}", session_id, e);
+            crate::AlesysError::Session(format!("Error obteniendo sesión: {}", e))
+        })?;
 
         Ok(row.map(|r| Session {
             id: r.get("id"),
@@ -114,20 +128,29 @@ impl SessionManager {
         )
         .bind(session_id)
         .execute(&self.db)
-        .await?;
+        .await
+        .map_err(|e| {
+            tracing::error!("DB error cerrando sesión {}: {}", session_id, e);
+            crate::AlesysError::Session(format!("Error cerrando sesión: {}", e))
+        })?;
 
         if result.rows_affected() == 0 {
+            tracing::warn!("Sesión {} no encontrada para cerrar", session_id);
             return Err(crate::AlesysError::Session(format!(
                 "Sesión {} no encontrada",
                 session_id
             )));
         }
 
+        tracing::info!("Sesión cerrada: {}", session_id);
         Ok(())
     }
 
     pub async fn add_message(&self, session_id: &str, message: &ChatMessage) -> Result<()> {
-        let mut tx = self.db.begin().await?;
+        let mut tx = self.db.begin().await.map_err(|e| {
+            tracing::error!("DB error iniciando transacción para mensaje: {}", e);
+            crate::AlesysError::Session(format!("Error iniciando transacción: {}", e))
+        })?;
 
         sqlx::query(
             r#"
@@ -146,14 +169,27 @@ impl SessionManager {
                 .and_then(|s| serde_json::to_value(s).ok()),
         )
         .execute(&mut *tx)
-        .await?;
+        .await
+        .map_err(|e| {
+            tracing::error!("DB error insertando mensaje en sesión {}: {}", session_id, e);
+            crate::AlesysError::Session(format!("Error guardando mensaje: {}", e))
+        })?;
 
         sqlx::query("UPDATE user_sessions SET last_activity = NOW() WHERE id = $1")
             .bind(session_id)
             .execute(&mut *tx)
-            .await?;
+            .await
+            .map_err(|e| {
+                tracing::error!("DB error actualizando last_activity sesión {}: {}", session_id, e);
+                crate::AlesysError::Session(format!("Error actualizando actividad: {}", e))
+            })?;
 
-        tx.commit().await?;
+        tx.commit().await.map_err(|e| {
+            tracing::error!("DB error commitiendo transacción sesión {}: {}", session_id, e);
+            crate::AlesysError::Session(format!("Error confirmando mensaje: {}", e))
+        })?;
+
+        tracing::debug!("Mensaje guardado en sesión {} (role={})", session_id, message.role);
         Ok(())
     }
 
@@ -174,8 +210,13 @@ impl SessionManager {
         .bind(session_id)
         .bind(limit as i64)
         .fetch_all(&self.db)
-        .await?;
+        .await
+        .map_err(|e| {
+            tracing::error!("DB error cargando historial sesión {}: {}", session_id, e);
+            crate::AlesysError::Session(format!("Error cargando historial: {}", e))
+        })?;
 
+        tracing::debug!("Historial sesión {}: {} mensajes", session_id, rows.len());
         let messages = rows
             .iter()
             .rev()
@@ -194,7 +235,11 @@ impl SessionManager {
         let result = sqlx::query("SELECT context_data FROM session_context WHERE session_id = $1")
             .bind(session_id)
             .fetch_optional(&self.db)
-            .await?;
+            .await
+            .map_err(|e| {
+                tracing::error!("DB error cargando contexto sesión {}: {}", session_id, e);
+                crate::AlesysError::Session(format!("Error cargando contexto: {}", e))
+            })?;
 
         Ok(result
             .and_then(|r| r.get::<Option<serde_json::Value>, _>("context_data"))
@@ -216,8 +261,13 @@ impl SessionManager {
         .bind(session_id)
         .bind(context)
         .execute(&self.db)
-        .await?;
+        .await
+        .map_err(|e| {
+            tracing::error!("DB error actualizando contexto sesión {}: {}", session_id, e);
+            crate::AlesysError::Session(format!("Error actualizando contexto: {}", e))
+        })?;
 
+        tracing::debug!("Contexto sesión {} actualizado", session_id);
         Ok(())
     }
 }

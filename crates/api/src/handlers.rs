@@ -22,6 +22,24 @@ pub struct ChatRequest {
     pub _stream: Option<bool>,
 }
 
+/// Error JSON response
+#[derive(Serialize)]
+pub struct ApiError {
+    pub error: String,
+    pub code: String,
+}
+
+impl IntoResponse for ApiError {
+    fn into_response(self) -> axum::response::Response {
+        let status = match self.code.as_str() {
+            "NOT_FOUND" => StatusCode::NOT_FOUND,
+            "VALIDATION" => StatusCode::BAD_REQUEST,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        };
+        (status, Json(self)).into_response()
+    }
+}
+
 /// Response de chat
 #[derive(Serialize)]
 pub struct ChatResponse {
@@ -46,7 +64,7 @@ pub struct Source {
 pub async fn chat_handler(
     State(state): State<AppState>,
     Json(payload): Json<ChatRequest>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<impl IntoResponse, ApiError> {
     tracing::info!("Chat request: '{}' (session: {:?})", payload.query, payload.session_id);
 
     // 1. Cargar historial de sesion si existe
@@ -59,10 +77,7 @@ pub async fn chat_handler(
             .await
             .map_err(|e| {
                 tracing::error!("Error cargando historial sesion {}: {}", session_id, e);
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "Error interno cargando historial".to_string(),
-                )
+                ApiError { error: "Error interno cargando historial".into(), code: "INTERNAL".into() }
             })?;
 
         for msg in history {
@@ -76,10 +91,7 @@ pub async fn chat_handler(
     // 2. Generar embedding del query
     let query_embedding = state.embedder.encode(&payload.query).map_err(|e| {
         tracing::error!("Error generando embedding: {}", e);
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Error interno generando embedding".to_string(),
-        )
+        ApiError { error: "Error interno generando embedding".into(), code: "INTERNAL".into() }
     })?;
 
     // 3. Busqueda hibrida (vector + grafo)
@@ -89,10 +101,7 @@ pub async fn chat_handler(
         .await
         .map_err(|e| {
             tracing::error!("Error en busqueda hibrida: {}", e);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Error interno en busqueda".to_string(),
-            )
+            ApiError { error: "Error interno en busqueda".into(), code: "INTERNAL".into() }
         })?;
 
     // 4. Construir contexto RAG
@@ -115,10 +124,7 @@ pub async fn chat_handler(
     // 7. Llamar al LLM
     let llm_response = state.llm_engine.chat(&messages).map_err(|e| {
         tracing::error!("Error en LLM chat: {}", e);
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Error generando respuesta".to_string(),
-        )
+        ApiError { error: "Error generando respuesta".into(), code: "INTERNAL".into() }
     })?;
 
     // 8. Guardar mensajes en sesion si hay session_id
@@ -224,7 +230,7 @@ pub struct GenerateResponse {
 pub async fn generate_handler(
     State(state): State<AppState>,
     Json(payload): Json<GenerateRequest>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<impl IntoResponse, ApiError> {
     tracing::info!(
         "Generate request: '{}' -> {}",
         payload.prompt,
@@ -257,10 +263,7 @@ pub async fn generate_handler(
 
     let result = generator.generate(gen_request).await.map_err(|e| {
         tracing::error!("Error generando codigo: {}", e);
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Error generando codigo".to_string(),
-        )
+        ApiError { error: "Error generando codigo".into(), code: "INTERNAL".into() }
     })?;
 
     let response = GenerateResponse {
@@ -295,17 +298,14 @@ pub struct SessionResponse {
 /// Handler para GET /api/sessions
 pub async fn list_sessions(
     State(state): State<AppState>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<impl IntoResponse, ApiError> {
     let sessions = state
         .session_manager
         .get_active_sessions(0)
         .await
         .map_err(|e| {
             tracing::error!("Error listando sesiones: {}", e);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Error interno listando sesiones".to_string(),
-            )
+            ApiError { error: "Error interno listando sesiones".into(), code: "INTERNAL".into() }
         })?;
 
     let responses: Vec<SessionResponse> = sessions
@@ -326,17 +326,14 @@ pub async fn list_sessions(
 pub async fn create_session(
     State(state): State<AppState>,
     Json(payload): Json<CreateSessionRequest>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<impl IntoResponse, ApiError> {
     let session_id = state
         .session_manager
         .create_session(0, payload.name)
         .await
         .map_err(|e| {
             tracing::error!("Error creando sesion: {}", e);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Error interno creando sesion".to_string(),
-            )
+            ApiError { error: "Error interno creando sesion".into(), code: "INTERNAL".into() }
         })?;
 
     tracing::info!("Sesion creada: {}", session_id);
@@ -351,17 +348,14 @@ pub async fn create_session(
 pub async fn get_session(
     State(state): State<AppState>,
     Path(session_id): Path<String>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<impl IntoResponse, ApiError> {
     let session = state
         .session_manager
         .get_by_id(&session_id)
         .await
         .map_err(|e| {
             tracing::error!("Error obteniendo sesion {}: {}", session_id, e);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Error interno obteniendo sesion".to_string(),
-            )
+            ApiError { error: "Error interno obteniendo sesion".into(), code: "INTERNAL".into() }
         })?;
 
     match session {
@@ -372,7 +366,7 @@ pub async fn get_session(
             "last_activity": s.last_activity.to_rfc3339(),
             "is_active": s.is_active,
         }))),
-        None => Err((StatusCode::NOT_FOUND, "Sesion no encontrada".to_string())),
+        None => Err(ApiError { error: "Sesion no encontrada".into(), code: "NOT_FOUND".into() }),
     }
 }
 
@@ -380,17 +374,14 @@ pub async fn get_session(
 pub async fn delete_session(
     State(state): State<AppState>,
     Path(session_id): Path<String>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<impl IntoResponse, ApiError> {
     state
         .session_manager
         .close_session(&session_id)
         .await
         .map_err(|e| {
             tracing::error!("Error cerrando sesion {}: {}", session_id, e);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Error interno cerrando sesion".to_string(),
-            )
+            ApiError { error: "Error interno cerrando sesion".into(), code: "INTERNAL".into() }
         })?;
 
     tracing::info!("Sesion cerrada: {}", session_id);
@@ -404,17 +395,14 @@ pub async fn delete_session(
 pub async fn get_session_history(
     State(state): State<AppState>,
     Path(session_id): Path<String>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<impl IntoResponse, ApiError> {
     let messages = state
         .session_manager
         .get_session_history(&session_id, 100)
         .await
         .map_err(|e| {
             tracing::error!("Error cargando historial sesion {}: {}", session_id, e);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Error interno cargando historial".to_string(),
-            )
+            ApiError { error: "Error interno cargando historial".into(), code: "INTERNAL".into() }
         })?;
 
     let responses: Vec<serde_json::Value> = messages
@@ -443,14 +431,10 @@ pub async fn graph_stats(State(state): State<AppState>) -> impl IntoResponse {
 
 /// Health check endpoint
 pub async fn health_handler(State(state): State<AppState>) -> impl IntoResponse {
-    // Check DB connectivity
     let db_ok = sqlx::query("SELECT 1")
         .fetch_optional(&state.db)
         .await
         .is_ok();
-
-    let llm_available = state.llm_engine.is_available();
-    let llm_backend = state.llm_engine.backend_name();
 
     let status = if db_ok { "ok" } else { "degraded" };
 
@@ -458,12 +442,7 @@ pub async fn health_handler(State(state): State<AppState>) -> impl IntoResponse 
         "status": status,
         "version": env!("CARGO_PKG_VERSION"),
         "db": if db_ok { "connected" } else { "disconnected" },
-        "llm": {
-            "available": llm_available,
-            "backend": llm_backend,
-        },
-        "embedder": {
-            "loaded": state.embedder.is_available(),
-        },
+        "llm": state.llm_engine.is_available(),
+        "embedder": state.embedder.is_available(),
     }))
 }
