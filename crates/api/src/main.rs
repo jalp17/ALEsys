@@ -24,6 +24,9 @@ mod handlers;
 mod state;
 mod websocket;
 
+pub(crate) const CHAT_SYSTEM_PROMPT: &str =
+    "Eres un asistente de IA experto en programación y análisis de documentos. Responde de forma clara y concisa basándote en el contexto proporcionado.";
+
 use handlers::{
     chat_handler, create_session, delete_session, generate_handler, get_session,
     get_session_history, graph_stats, health_handler, list_sessions,

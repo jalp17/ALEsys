@@ -86,11 +86,42 @@ impl SessionManager {
         Ok(sessions)
     }
 
+    pub async fn get_by_id(&self, session_id: &str) -> Result<Option<Session>> {
+        let row = sqlx::query(
+            r#"
+            SELECT id, user_id, name, created_at, last_activity, is_active
+            FROM user_sessions
+            WHERE id = $1
+            "#,
+        )
+        .bind(session_id)
+        .fetch_optional(&self.db)
+        .await?;
+
+        Ok(row.map(|r| Session {
+            id: r.get("id"),
+            user_id: r.get("user_id"),
+            name: r.get("name"),
+            created_at: r.get("created_at"),
+            last_activity: r.get("last_activity"),
+            is_active: r.get("is_active"),
+        }))
+    }
+
     pub async fn close_session(&self, session_id: &str) -> Result<()> {
-        sqlx::query("UPDATE user_sessions SET is_active = false, closed_at = NOW() WHERE id = $1")
-            .bind(session_id)
-            .execute(&self.db)
-            .await?;
+        let result = sqlx::query(
+            "UPDATE user_sessions SET is_active = false, closed_at = NOW() WHERE id = $1",
+        )
+        .bind(session_id)
+        .execute(&self.db)
+        .await?;
+
+        if result.rows_affected() == 0 {
+            return Err(crate::AlesysError::Session(format!(
+                "Sesión {} no encontrada",
+                session_id
+            )));
+        }
 
         Ok(())
     }
@@ -112,7 +143,7 @@ impl SessionManager {
             message
                 .sources
                 .as_ref()
-                .map(|s| serde_json::to_value(s).unwrap()),
+                .and_then(|s| serde_json::to_value(s).ok()),
         )
         .execute(&mut *tx)
         .await?;

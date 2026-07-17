@@ -96,7 +96,11 @@ impl GraphRAG {
                 node_map.insert(id, idx);
             }
 
-            last_id = rows.last().unwrap().get("id");
+            if let Some(last) = rows.last() {
+                last_id = last.get("id");
+            } else {
+                break;
+            }
         }
 
         // Paginated edge load
@@ -134,7 +138,11 @@ impl GraphRAG {
                 }
             }
 
-            last_origen = rows.last().unwrap().get("origen_id");
+            if let Some(last) = rows.last() {
+                last_origen = last.get("origen_id");
+            } else {
+                break;
+            }
         }
 
         Ok((graph, node_map))
@@ -205,24 +213,36 @@ impl GraphRAG {
 
         let expanded = self.expand_with_graph(&doc_ids, graph_degrees);
 
-        for doc_id in &expanded {
-            if !doc_ids.contains(doc_id) {
-                if let Some(fragments) = self.load_fragments_for_document(*doc_id).await? {
-                    for (frag_id, frag_content) in fragments {
-                        results.push(SearchResult {
-                            fragment_id: frag_id,
-                            document_id: *doc_id,
-                            content: frag_content,
-                            similarity: 0.3,
-                            source: SearchResultSource::Graph,
-                            doc_path: self
-                                .node_map
-                                .get(doc_id)
-                                .and_then(|&idx| self.graph.node_weight(idx))
-                                .map(|n| n.path.clone()),
-                        });
-                    }
-                }
+        let new_doc_ids: Vec<i32> = expanded
+            .iter()
+            .filter(|id| !doc_ids.contains(id))
+            .copied()
+            .collect();
+
+        if !new_doc_ids.is_empty() {
+            let rows = sqlx::query(
+                "SELECT id, documento_id, contenido FROM fragmentos WHERE documento_id = ANY($1) ORDER BY documento_id, indice_orden",
+            )
+            .bind(&new_doc_ids)
+            .fetch_all(&self.db)
+            .await?;
+
+            for row in rows {
+                let frag_id: i32 = row.get("id");
+                let doc_id: i32 = row.get("documento_id");
+                let frag_content: String = row.get("contenido");
+                results.push(SearchResult {
+                    fragment_id: frag_id,
+                    document_id: doc_id,
+                    content: frag_content,
+                    similarity: 0.3,
+                    source: SearchResultSource::Graph,
+                    doc_path: self
+                        .node_map
+                        .get(&doc_id)
+                        .and_then(|&idx| self.graph.node_weight(idx))
+                        .map(|n| n.path.clone()),
+                });
             }
         }
 
@@ -232,26 +252,6 @@ impl GraphRAG {
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
         Ok(results)
-    }
-
-    async fn load_fragments_for_document(&self, doc_id: i32) -> Result<Option<Vec<(i32, String)>>> {
-        let rows = sqlx::query(
-            "SELECT id, contenido FROM fragmentos WHERE documento_id = $1 ORDER BY indice_orden",
-        )
-        .bind(doc_id)
-        .fetch_all(&self.db)
-        .await?;
-
-        if rows.is_empty() {
-            return Ok(None);
-        }
-
-        let fragments = rows
-            .into_iter()
-            .map(|row| (row.get("id"), row.get("contenido")))
-            .collect();
-
-        Ok(Some(fragments))
     }
 
     fn expand_with_graph(&self, doc_ids: &[i32], degrees: usize) -> Vec<i32> {
@@ -284,16 +284,19 @@ impl GraphRAG {
     }
 
     pub async fn search_by_path(&self, path_pattern: &str) -> Result<Vec<SearchResult>> {
+        let escaped = path_pattern
+            .replace('%', "\\%")
+            .replace('_', "\\_");
         let rows = sqlx::query(
             r#"
             SELECT f.id, f.documento_id, f.contenido, d.ruta_relativa
             FROM fragmentos f
             JOIN documentos d ON d.id = f.documento_id
-            WHERE d.ruta_relativa LIKE $1
+            WHERE d.ruta_relativa LIKE $1 ESCAPE '\'
             LIMIT 10
             "#,
         )
-        .bind(format!("%{}%", path_pattern))
+        .bind(format!("%{}%", escaped))
         .fetch_all(&self.db)
         .await?;
 

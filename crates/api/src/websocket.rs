@@ -36,6 +36,39 @@ pub struct WSSource {
     pub similarity: f32,
 }
 
+fn ws_error(msg: &str) -> WSResponse {
+    WSResponse {
+        msg_type: "error".to_string(),
+        content: None,
+        sources: None,
+        error: Some(msg.to_string()),
+    }
+}
+
+async fn send_ws_response(
+    sender: &mut futures::stream::SplitSink<WebSocket, axum::extract::ws::Message>,
+    response: &WSResponse,
+) -> bool {
+    match serde_json::to_string(response) {
+        Ok(json) => {
+            if sender
+                .send(axum::extract::ws::Message::Text(json.into()))
+                .await
+                .is_err()
+            {
+                tracing::warn!("WS send failed — client disconnected");
+                false
+            } else {
+                true
+            }
+        }
+        Err(e) => {
+            tracing::error!("WS serialize error: {}", e);
+            false
+        }
+    }
+}
+
 pub async fn ws_chat_handler(
     ws: WebSocketUpgrade,
     State(state): State<AppState>,
@@ -53,19 +86,7 @@ async fn handle_websocket_chat(socket: WebSocket, state: AppState) {
                     Ok(m) => m,
                     Err(e) => {
                         tracing::debug!("WS parse error: {}", e);
-                        let response = WSResponse {
-                            msg_type: "error".to_string(),
-                            content: None,
-                            sources: None,
-                            error: Some("Formato de mensaje invalido".to_string()),
-                        };
-                        if sender
-                            .send(axum::extract::ws::Message::Text(
-                                serde_json::to_string(&response).unwrap().into(),
-                            ))
-                            .await
-                            .is_err()
-                        {
+                        if !send_ws_response(&mut sender, &ws_error("Formato de mensaje invalido")).await {
                             break;
                         }
                         continue;
@@ -74,18 +95,16 @@ async fn handle_websocket_chat(socket: WebSocket, state: AppState) {
 
                 if ws_msg.msg_type == "chat" {
                     if let Some(query) = ws_msg.query {
-                        let start_response = WSResponse {
-                            msg_type: "start".to_string(),
-                            content: None,
-                            sources: None,
-                            error: None,
-                        };
-                        if sender
-                            .send(axum::extract::ws::Message::Text(
-                                serde_json::to_string(&start_response).unwrap().into(),
-                            ))
-                            .await
-                            .is_err()
+                        if !send_ws_response(
+                            &mut sender,
+                            &WSResponse {
+                                msg_type: "start".to_string(),
+                                content: None,
+                                sources: None,
+                                error: None,
+                            },
+                        )
+                        .await
                         {
                             break;
                         }
@@ -94,19 +113,7 @@ async fn handle_websocket_chat(socket: WebSocket, state: AppState) {
                             Ok(emb) => emb,
                             Err(e) => {
                                 tracing::error!("WS embedding error: {}", e);
-                                let response = WSResponse {
-                                    msg_type: "error".to_string(),
-                                    content: None,
-                                    sources: None,
-                                    error: Some("Error generando embedding".to_string()),
-                                };
-                                if sender
-                                    .send(axum::extract::ws::Message::Text(
-                                        serde_json::to_string(&response).unwrap().into(),
-                                    ))
-                                    .await
-                                    .is_err()
-                                {
+                                if !send_ws_response(&mut sender, &ws_error("Error generando embedding")).await {
                                     break;
                                 }
                                 continue;
@@ -118,19 +125,7 @@ async fn handle_websocket_chat(socket: WebSocket, state: AppState) {
                                 Ok(results) => results,
                                 Err(e) => {
                                     tracing::error!("WS search error: {}", e);
-                                    let response = WSResponse {
-                                        msg_type: "error".to_string(),
-                                        content: None,
-                                        sources: None,
-                                        error: Some("Error en busqueda".to_string()),
-                                    };
-                                    if sender
-                                        .send(axum::extract::ws::Message::Text(
-                                            serde_json::to_string(&response).unwrap().into(),
-                                        ))
-                                        .await
-                                        .is_err()
-                                    {
+                                    if !send_ws_response(&mut sender, &ws_error("Error en busqueda")).await {
                                         break;
                                     }
                                     continue;
@@ -143,7 +138,7 @@ async fn handle_websocket_chat(socket: WebSocket, state: AppState) {
                         let messages = vec![
                             ChatMessage {
                                 role: "system".to_string(),
-                                content: "Eres un asistente de IA experto en programación y análisis de documentos. Responde de forma clara y concisa basándote en el contexto proporcionado.".to_string(),
+                                content: crate::CHAT_SYSTEM_PROMPT.to_string(),
                             },
                             ChatMessage {
                                 role: "user".to_string(),
@@ -156,40 +151,27 @@ async fn handle_websocket_chat(socket: WebSocket, state: AppState) {
                                 for chunk_result in iterator {
                                     match chunk_result {
                                         Ok(chunk) => {
-                                            let chunk_response = WSResponse {
-                                                msg_type: "chunk".to_string(),
-                                                content: Some(chunk.delta),
-                                                sources: None,
-                                                error: None,
-                                            };
-                                            if sender
-                                                .send(axum::extract::ws::Message::Text(
-                                                    serde_json::to_string(&chunk_response)
-                                                        .unwrap()
-                                                        .into(),
-                                                ))
-                                                .await
-                                                .is_err()
+                                            if !send_ws_response(
+                                                &mut sender,
+                                                &WSResponse {
+                                                    msg_type: "chunk".to_string(),
+                                                    content: Some(chunk.delta),
+                                                    sources: None,
+                                                    error: None,
+                                                },
+                                            )
+                                            .await
                                             {
                                                 break;
                                             }
                                         }
                                         Err(e) => {
                                             tracing::error!("WS stream error: {}", e);
-                                            let response = WSResponse {
-                                                msg_type: "error".to_string(),
-                                                content: None,
-                                                sources: None,
-                                                error: Some("Error generando respuesta".to_string()),
-                                            };
-                                            if sender
-                                                .send(axum::extract::ws::Message::Text(
-                                                    serde_json::to_string(&response)
-                                                        .unwrap()
-                                                        .into(),
-                                                ))
-                                                .await
-                                                .is_err()
+                                            if !send_ws_response(
+                                                &mut sender,
+                                                &ws_error("Error generando respuesta"),
+                                            )
+                                            .await
                                             {
                                                 break;
                                             }
@@ -210,31 +192,23 @@ async fn handle_websocket_chat(socket: WebSocket, state: AppState) {
                                     })
                                     .collect();
 
-                                let done_response = WSResponse {
-                                    msg_type: "done".to_string(),
-                                    content: None,
-                                    sources: Some(sources),
-                                    error: None,
-                                };
-                                let _ = sender
-                                    .send(axum::extract::ws::Message::Text(
-                                        serde_json::to_string(&done_response).unwrap().into(),
-                                    ))
-                                    .await;
+                                if !send_ws_response(
+                                    &mut sender,
+                                    &WSResponse {
+                                        msg_type: "done".to_string(),
+                                        content: None,
+                                        sources: Some(sources),
+                                        error: None,
+                                    },
+                                )
+                                .await
+                                {
+                                    break;
+                                }
                             }
                             Err(e) => {
                                 tracing::error!("WS LLM error: {}", e);
-                                let response = WSResponse {
-                                    msg_type: "error".to_string(),
-                                    content: None,
-                                    sources: None,
-                                    error: Some("Error generando respuesta".to_string()),
-                                };
-                                let _ = sender
-                                    .send(axum::extract::ws::Message::Text(
-                                        serde_json::to_string(&response).unwrap().into(),
-                                    ))
-                                    .await;
+                                send_ws_response(&mut sender, &ws_error("Error generando respuesta")).await;
                             }
                         }
                     }
