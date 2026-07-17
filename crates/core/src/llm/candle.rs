@@ -4,7 +4,7 @@
 //! Soporta CUDA, Metal y CPU. Modelos desde HuggingFace Hub.
 
 use super::config::{GpuType, ModelArch, QuantType};
-use super::{ChatMessage, ChatResponse, LLMConfig, LLMEngine, StreamChunk};
+use super::{ChatMessage, ChatResponse, LLMConfig, LLMEngine};
 use crate::Result;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -328,56 +328,6 @@ impl LLMEngine for CandleEngine {
                 total_tokens: tokens.len(),
             },
         })
-    }
-
-    fn chat_stream(
-        &self,
-        messages: &[ChatMessage],
-    ) -> Result<Box<dyn Iterator<Item = Result<StreamChunk>> + Send>> {
-        // Implementación similar a chat pero con yield
-        let response = self.chat(messages)?;
-
-        let chunks = vec![Ok(StreamChunk {
-            delta: response.content.clone(),
-            finish_reason: Some("stop".to_string()),
-        })];
-
-        Ok(Box::new(chunks.into_iter()))
-    }
-
-    fn generate_code(&self, prompt: &str, language: &str) -> Result<String> {
-        let messages = vec![
-            ChatMessage {
-                role: "system".to_string(),
-                content: format!(
-                    "Eres un asistente de programación. Genera código en {}.",
-                    language
-                ),
-            },
-            ChatMessage {
-                role: "user".to_string(),
-                content: prompt.to_string(),
-            },
-        ];
-
-        let response = self.chat(&messages)?;
-        Ok(response.content)
-    }
-
-    fn extract_knowledge(&self, text: &str, schema: &str) -> Result<String> {
-        let messages = vec![
-            ChatMessage {
-                role: "system".to_string(),
-                content: format!("Extrae conocimiento del texto según el esquema: {}", schema),
-            },
-            ChatMessage {
-                role: "user".to_string(),
-                content: text.to_string(),
-            },
-        ];
-
-        let response = self.chat(&messages)?;
-        Ok(response.content)
     }
 
     fn is_available(&self) -> bool {
