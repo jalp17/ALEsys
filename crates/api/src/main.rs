@@ -16,9 +16,16 @@
 
 use anyhow::Result;
 use axum::{
+    extract::State,
+    http::{Request, StatusCode},
+    middleware::{self, Next},
+    response::{IntoResponse, Response},
     routing::{delete, get, post},
-    Router,
+    Json, Router,
 };
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 use tower_http::{cors::CorsLayer, timeout::TimeoutLayer, trace::TraceLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -35,6 +42,69 @@ use handlers::{
 };
 use state::AppState;
 use websocket::ws_chat_handler;
+
+/// Simple sliding-window rate limiter per IP
+struct RateLimiterState {
+    window_secs: u64,
+    max_requests: usize,
+    windows: RwLock<HashMap<std::net::IpAddr, (u64, usize)>>,
+}
+
+impl RateLimiterState {
+    fn new(max_requests_per_min: usize) -> Self {
+        Self {
+            window_secs: 60,
+            max_requests: max_requests_per_min,
+            windows: RwLock::new(HashMap::new()),
+        }
+    }
+
+    async fn check(&self, ip: std::net::IpAddr) -> bool {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let window_start = now / self.window_secs * self.window_secs;
+
+        let mut windows = self.windows.write().await;
+        let entry = windows.entry(ip).or_insert((window_start, 0));
+
+        if entry.0 < window_start {
+            *entry = (window_start, 1);
+            true
+        } else if entry.1 < self.max_requests {
+            entry.1 += 1;
+            true
+        } else {
+            false
+        }
+    }
+}
+
+async fn rate_limit_middleware(
+    State(limiter): State<Arc<RateLimiterState>>,
+    request: Request<axum::body::Body>,
+    next: Next,
+) -> Response {
+    let ip = request
+        .headers()
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.split(',').next())
+        .and_then(|v| v.trim().parse::<std::net::IpAddr>().ok())
+        .unwrap_or(std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)));
+
+    if limiter.check(ip).await {
+        next.run(request).await
+    } else {
+        tracing::warn!("Rate limit exceeded for IP: {}", ip);
+        (StatusCode::TOO_MANY_REQUESTS, Json(serde_json::json!({
+            "error": "Rate limit exceeded",
+            "code": "RATE_LIMITED",
+            "retry_after": 60,
+        }))).into_response()
+    }
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -112,6 +182,15 @@ async fn main() -> Result<()> {
         .and_then(|v| v.parse().ok())
         .unwrap_or(120);
 
+    // Rate limiting config
+    let rate_limit_per_min: u32 = std::env::var("RATE_LIMIT_PER_MIN")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(100);
+    tracing::info!("Rate limit configured: {} req/min per IP", rate_limit_per_min);
+
+    let rate_limiter = Arc::new(RateLimiterState::new(rate_limit_per_min as usize));
+
     let api_v1 = Router::new()
         .route("/chat", post(chat_handler))
         .route("/generate", post(generate_handler))
@@ -130,6 +209,10 @@ async fn main() -> Result<()> {
         .route("/health", get(health_handler))
         .with_state(state)
         .layer(cors)
+        .layer(middleware::from_fn_with_state(
+            rate_limiter.clone(),
+            rate_limit_middleware,
+        ))
         .layer(TimeoutLayer::with_status_code(
             axum::http::StatusCode::REQUEST_TIMEOUT,
             std::time::Duration::from_secs(timeout_secs),
