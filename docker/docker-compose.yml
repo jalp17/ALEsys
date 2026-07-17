@@ -5,10 +5,12 @@ services:
   postgres-core:
     image: pgvector/pgvector:pg16
     container_name: alesys-postgres-core
+    env_file:
+      - .env
     environment:
-      POSTGRES_DB: alesys
-      POSTGRES_USER: alesys
-      POSTGRES_PASSWORD: alesys_dev
+      POSTGRES_DB: ${POSTGRES_DB:-alesys}
+      POSTGRES_USER: ${POSTGRES_USER:-alesys}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "5432:5432"
     volumes:
@@ -16,7 +18,7 @@ services:
     networks:
       - alesys-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U alesys"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-alesys}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -25,10 +27,12 @@ services:
   postgres-users:
     image: postgres:16
     container_name: alesys-postgres-users
+    env_file:
+      - .env
     environment:
-      POSTGRES_DB: alesys_users
-      POSTGRES_USER: alesys
-      POSTGRES_PASSWORD: alesys_dev
+      POSTGRES_DB: ${USERS_POSTGRES_DB:-alesys_users}
+      POSTGRES_USER: ${USERS_POSTGRES_USER:-alesys}
+      POSTGRES_PASSWORD: ${USERS_POSTGRES_PASSWORD}
     ports:
       - "5433:5432"
     volumes:
@@ -37,7 +41,7 @@ services:
     networks:
       - alesys-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U alesys"]
+      test: ["CMD-SHELL", "pg_isready -U ${USERS_POSTGRES_USER:-alesys}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -48,9 +52,11 @@ services:
       context: ..
       dockerfile: docker/Dockerfile.core
     container_name: alesys-core
+    env_file:
+      - .env
     environment:
-      DATABASE_URL: postgresql://alesys:alesys_dev@postgres-core:5432/alesys
-      RUST_LOG: info
+      DATABASE_URL: postgresql://${POSTGRES_USER:-alesys}:${POSTGRES_PASSWORD}@postgres-core:5432/${POSTGRES_DB:-alesys}
+      RUST_LOG: ${RUST_LOG:-info}
     ports:
       - "3000:3000"
     volumes:
@@ -68,13 +74,15 @@ services:
       context: .
       dockerfile: docker/Dockerfile.php
     container_name: alesys-php
+    env_file:
+      - .env
     environment:
       ALESYS_CORE_URL: http://alesys-core:3000
       DB_HOST: postgres-users
-      DB_NAME: alesys_users
-      DB_USER: alesys
-      DB_PASSWORD: alesys_dev
-      ALESYS_SERVICE_TOKEN: dev-token
+      DB_NAME: ${USERS_POSTGRES_DB:-alesys_users}
+      DB_USER: ${USERS_POSTGRES_USER:-alesys}
+      DB_PASSWORD: ${USERS_POSTGRES_PASSWORD}
+      ALESYS_SERVICE_TOKEN: ${ALESYS_SERVICE_TOKEN}
     ports:
       - "8080:9000"
     volumes:

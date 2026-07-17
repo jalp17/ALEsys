@@ -16,7 +16,9 @@ use serde::{Deserialize, Serialize};
 #[derive(Deserialize)]
 pub struct ChatRequest {
     pub query: String,
+    #[serde(default)]
     pub session_id: Option<String>,
+    #[serde(default)]
     pub _stream: Option<bool>,
 }
 
@@ -56,9 +58,10 @@ pub async fn chat_handler(
             .get_session_history(session_id, 20)
             .await
             .map_err(|e| {
+                tracing::error!("Error cargando historial sesion {}: {}", session_id, e);
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Error cargando historial: {}", e),
+                    "Error interno cargando historial".to_string(),
                 )
             })?;
 
@@ -72,9 +75,10 @@ pub async fn chat_handler(
 
     // 2. Generar embedding del query
     let query_embedding = state.embedder.encode(&payload.query).map_err(|e| {
+        tracing::error!("Error generando embedding: {}", e);
         (
             StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Error al generar embedding: {}", e),
+            "Error interno generando embedding".to_string(),
         )
     })?;
 
@@ -84,9 +88,10 @@ pub async fn chat_handler(
         .hybrid_search(&query_embedding, 5, 1)
         .await
         .map_err(|e| {
+            tracing::error!("Error en busqueda hibrida: {}", e);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Error en busqueda: {}", e),
+                "Error interno en busqueda".to_string(),
             )
         })?;
 
@@ -109,9 +114,10 @@ pub async fn chat_handler(
 
     // 7. Llamar al LLM
     let llm_response = state.llm_engine.chat(&messages).map_err(|e| {
+        tracing::error!("Error en LLM chat: {}", e);
         (
             StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Error en LLM: {}", e),
+            "Error generando respuesta".to_string(),
         )
     })?;
 
@@ -123,7 +129,9 @@ pub async fn chat_handler(
             timestamp: Utc::now(),
             sources: None,
         };
-        let _ = state.session_manager.add_message(session_id, &user_msg).await;
+        if let Err(e) = state.session_manager.add_message(session_id, &user_msg).await {
+            tracing::warn!("No se pudo guardar mensaje de usuario en sesion {}: {}", session_id, e);
+        }
 
         let source_paths: Vec<String> = search_results
             .iter()
@@ -139,10 +147,13 @@ pub async fn chat_handler(
                 Some(source_paths)
             },
         };
-        let _ = state
+        if let Err(e) = state
             .session_manager
             .add_message(session_id, &assistant_msg)
-            .await;
+            .await
+        {
+            tracing::warn!("No se pudo guardar mensaje de asistente en sesion {}: {}", session_id, e);
+        }
     }
 
     // 9. Convertir resultados a formato de respuesta
@@ -245,9 +256,10 @@ pub async fn generate_handler(
     let generator = alesys_core::generator::CodeGenerator::new(state.llm_engine.clone());
 
     let result = generator.generate(gen_request).await.map_err(|e| {
+        tracing::error!("Error generando codigo: {}", e);
         (
             StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Error al generar codigo: {}", e),
+            "Error generando codigo".to_string(),
         )
     })?;
 
@@ -289,9 +301,10 @@ pub async fn list_sessions(
         .get_active_sessions(0)
         .await
         .map_err(|e| {
+            tracing::error!("Error listando sesiones: {}", e);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Error listando sesiones: {}", e),
+                "Error interno listando sesiones".to_string(),
             )
         })?;
 
@@ -319,9 +332,10 @@ pub async fn create_session(
         .create_session(0, payload.name)
         .await
         .map_err(|e| {
+            tracing::error!("Error creando sesion: {}", e);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Error creando sesion: {}", e),
+                "Error interno creando sesion".to_string(),
             )
         })?;
 
@@ -343,9 +357,10 @@ pub async fn get_session(
         .get_active_sessions(0)
         .await
         .map_err(|e| {
+            tracing::error!("Error obteniendo sesiones: {}", e);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Error obteniendo sesiones: {}", e),
+                "Error interno obteniendo sesiones".to_string(),
             )
         })?;
 
@@ -373,9 +388,10 @@ pub async fn delete_session(
         .close_session(&session_id)
         .await
         .map_err(|e| {
+            tracing::error!("Error cerrando sesion {}: {}", session_id, e);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Error cerrando sesion: {}", e),
+                "Error interno cerrando sesion".to_string(),
             )
         })?;
 
@@ -396,9 +412,10 @@ pub async fn get_session_history(
         .get_session_history(&session_id, 100)
         .await
         .map_err(|e| {
+            tracing::error!("Error cargando historial sesion {}: {}", session_id, e);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Error cargando historial: {}", e),
+                "Error interno cargando historial".to_string(),
             )
         })?;
 

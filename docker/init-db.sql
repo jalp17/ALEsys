@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS enlaces (
 CREATE INDEX IF NOT EXISTS idx_fragmentos_documento ON fragmentos(documento_id);
 CREATE INDEX IF NOT EXISTS idx_fragmentos_embedding ON fragmentos USING hnsw (embedding vector_cosine_ops);
 CREATE INDEX IF NOT EXISTS idx_entidades_documento ON entidades(documento_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_documentos_contenido_hash ON documentos(contenido_hash) WHERE contenido_hash IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_enlaces_origen ON enlaces(origen_id);
 CREATE INDEX IF NOT EXISTS idx_enlaces_destino ON enlaces(destino_id);
 
