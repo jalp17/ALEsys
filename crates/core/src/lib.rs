@@ -41,6 +41,12 @@ pub enum AlesysError {
 
     #[error("Sandbox error: {0}")]
     Sandbox(String),
+
+    #[error("Internal error: {0}")]
+    Internal(String),
+
+    #[error("API error: {0}")]
+    ApiError(String),
 }
 
 impl From<anyhow::Error> for AlesysError {
