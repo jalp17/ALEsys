@@ -64,3 +64,5 @@ async-trait = "0.1"
 moka = { version = "0.12", features = ["future", "sync"] }
 tokio-stream = "0.1"
 futures = "0.3"
+metrics = "0.22"
+metrics-exporter-prometheus = "0.15"
