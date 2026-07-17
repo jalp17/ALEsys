@@ -12,6 +12,7 @@ pub struct AppState {
     pub graphrag: Arc<GraphRAG>,
     pub session_manager: SessionManager,
     pub llm_engine: Arc<LLMBackend>,
+    pub llm_config: LLMConfig,
     pub embedder: Arc<ONNXEmbedder>,
 }
 
@@ -25,7 +26,7 @@ impl AppState {
         let session_manager = SessionManager::new(db.clone());
 
         // Inicializar LLM engine (selecciona backend automáticamente)
-        let llm_engine = match LLMBackend::from_config(llm_config).await {
+        let llm_engine = match LLMBackend::from_config(llm_config.clone()).await {
             Ok(engine) => Arc::new(engine),
             Err(e) => {
                 tracing::warn!("No se pudo cargar modelo LLM: {}. Modo solo búsqueda.", e);
@@ -50,6 +51,7 @@ impl AppState {
             graphrag,
             session_manager,
             llm_engine,
+            llm_config,
             embedder,
         };
 
