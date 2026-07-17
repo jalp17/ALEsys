@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// Backend de inferencia LLM disponible
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum LLMBackendType {
     LlamaCpp,
@@ -12,6 +12,40 @@ pub enum LLMBackendType {
     Candle,
     Vllm,
     Transformers,
+    /// Backend HTTP para proveedores cloud/remote (Ollama, Anthropic, Gemini, Groq, etc.)
+    #[cfg(feature = "http-backend")]
+    #[serde(rename = "ollama")]
+    Ollama,
+    #[cfg(feature = "http-backend")]
+    #[serde(rename = "openrouter")]
+    OpenRouter,
+    #[cfg(feature = "http-backend")]
+    #[serde(rename = "anthropic")]
+    Anthropic,
+    #[cfg(feature = "http-backend")]
+    #[serde(rename = "gemini")]
+    Gemini,
+    #[cfg(feature = "http-backend")]
+    #[serde(rename = "perplexity")]
+    Perplexity,
+    #[cfg(feature = "http-backend")]
+    #[serde(rename = "cerebras")]
+    Cerebras,
+    #[cfg(feature = "http-backend")]
+    #[serde(rename = "cohere")]
+    Cohere,
+    #[cfg(feature = "http-backend")]
+    #[serde(rename = "nvidia")]
+    Nvidia,
+    #[cfg(feature = "http-backend")]
+    #[serde(rename = "groq")]
+    Groq,
+    #[cfg(feature = "http-backend")]
+    #[serde(rename = "huggingface")]
+    HuggingFace,
+    #[cfg(feature = "http-backend")]
+    #[serde(rename = "githubmodels")]
+    GitHubModels,
     #[default]
     Auto,
 }
@@ -24,6 +58,28 @@ impl std::fmt::Display for LLMBackendType {
             Self::Candle => write!(f, "candle"),
             Self::Vllm => write!(f, "vllm"),
             Self::Transformers => write!(f, "transformers"),
+            #[cfg(feature = "http-backend")]
+            Self::Ollama => write!(f, "ollama"),
+            #[cfg(feature = "http-backend")]
+            Self::OpenRouter => write!(f, "openrouter"),
+            #[cfg(feature = "http-backend")]
+            Self::Anthropic => write!(f, "anthropic"),
+            #[cfg(feature = "http-backend")]
+            Self::Gemini => write!(f, "gemini"),
+            #[cfg(feature = "http-backend")]
+            Self::Perplexity => write!(f, "perplexity"),
+            #[cfg(feature = "http-backend")]
+            Self::Cerebras => write!(f, "cerebras"),
+            #[cfg(feature = "http-backend")]
+            Self::Cohere => write!(f, "cohere"),
+            #[cfg(feature = "http-backend")]
+            Self::Nvidia => write!(f, "nvidia"),
+            #[cfg(feature = "http-backend")]
+            Self::Groq => write!(f, "groq"),
+            #[cfg(feature = "http-backend")]
+            Self::HuggingFace => write!(f, "huggingface"),
+            #[cfg(feature = "http-backend")]
+            Self::GitHubModels => write!(f, "githubmodels"),
             Self::Auto => write!(f, "auto"),
         }
     }
@@ -39,12 +95,73 @@ impl std::str::FromStr for LLMBackendType {
             "candle" => Ok(Self::Candle),
             "vllm" => Ok(Self::Vllm),
             "transformers" | "hf" => Ok(Self::Transformers),
+            #[cfg(feature = "http-backend")]
+            "ollama" => Ok(Self::Ollama),
+            #[cfg(feature = "http-backend")]
+            "openrouter" => Ok(Self::OpenRouter),
+            #[cfg(feature = "http-backend")]
+            "anthropic" | "claude" => Ok(Self::Anthropic),
+            #[cfg(feature = "http-backend")]
+            "gemini" | "google" => Ok(Self::Gemini),
+            #[cfg(feature = "http-backend")]
+            "perplexity" | "pplx" => Ok(Self::Perplexity),
+            #[cfg(feature = "http-backend")]
+            "cerebras" => Ok(Self::Cerebras),
+            #[cfg(feature = "http-backend")]
+            "cohere" | "command" => Ok(Self::Cohere),
+            #[cfg(feature = "http-backend")]
+            "nvidia" | "nim" => Ok(Self::Nvidia),
+            #[cfg(feature = "http-backend")]
+            "groq" => Ok(Self::Groq),
+            #[cfg(feature = "http-backend")]
+            "huggingface" | "hfinference" => Ok(Self::HuggingFace),
+            #[cfg(feature = "http-backend")]
+            "githubmodels" | "github" => Ok(Self::GitHubModels),
             "auto" | "" => Ok(Self::Auto),
             _ => Err(anyhow::anyhow!(
                 "Backend desconocido: '{}'. Opciones: llama_cpp, mistralrs, candle, vllm, transformers, auto",
                 s
             )),
         }
+    }
+}
+
+#[cfg(feature = "http-backend")]
+impl LLMBackendType {
+    /// Convierte un LLMBackendType HTTP al Provider enum de http.rs
+    pub fn to_http_provider(&self) -> Option<super::http::Provider> {
+        match self {
+            Self::Ollama => Some(super::http::Provider::Ollama),
+            Self::OpenRouter => Some(super::http::Provider::OpenRouter),
+            Self::Anthropic => Some(super::http::Provider::Anthropic),
+            Self::Gemini => Some(super::http::Provider::Gemini),
+            Self::Perplexity => Some(super::http::Provider::Perplexity),
+            Self::Cerebras => Some(super::http::Provider::Cerebras),
+            Self::Cohere => Some(super::http::Provider::Cohere),
+            Self::Nvidia => Some(super::http::Provider::Nvidia),
+            Self::Groq => Some(super::http::Provider::Groq),
+            Self::HuggingFace => Some(super::http::Provider::HuggingFace),
+            Self::GitHubModels => Some(super::http::Provider::GitHubModels),
+            _ => None,
+        }
+    }
+
+    /// Returns true if this backend type is an HTTP cloud/remote provider
+    pub fn is_http_provider(&self) -> bool {
+        matches!(
+            self,
+            Self::Ollama
+                | Self::OpenRouter
+                | Self::Anthropic
+                | Self::Gemini
+                | Self::Perplexity
+                | Self::Cerebras
+                | Self::Cohere
+                | Self::Nvidia
+                | Self::Groq
+                | Self::HuggingFace
+                | Self::GitHubModels
+        )
     }
 }
 

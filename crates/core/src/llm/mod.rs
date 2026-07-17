@@ -23,10 +23,14 @@ pub mod mistral;
 pub mod transformers;
 #[cfg(feature = "vllm-backend")]
 pub mod vllm;
+#[cfg(feature = "http-backend")]
+pub mod http;
 
 pub use backend::LLMBackend;
 pub use backend_manager::BackendManager;
 pub use config::{Entity, KnowledgeExtraction, LLMBackendType, LLMConfig, Relation};
+#[cfg(feature = "http-backend")]
+pub use http::HttpLLMEngine;
 
 use crate::Result;
 use async_trait::async_trait;

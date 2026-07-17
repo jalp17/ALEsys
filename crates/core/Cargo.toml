@@ -56,3 +56,4 @@ candle-backend = [
 ]
 vllm-backend = ["dep:reqwest"]
 transformers-backend = ["dep:reqwest"]
+http-backend = ["dep:reqwest"]

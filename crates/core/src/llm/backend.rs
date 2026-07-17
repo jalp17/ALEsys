@@ -6,6 +6,7 @@
 //! - candle (Rust nativo) - Experimental
 //! - vLLM (Python subprocess) - GPU de alto rendimiento
 //! - transformers (Python subprocess) - Modelos HF
+//! - HTTP providers (Ollama, Anthropic, Gemini, Groq, etc.) - Cloud/remote
 
 use async_trait::async_trait;
 use futures::stream::BoxStream;
@@ -26,6 +27,9 @@ use super::vllm::VllmEngine;
 #[cfg(feature = "transformers-backend")]
 use super::transformers::TransformersEngine;
 
+#[cfg(feature = "http-backend")]
+use super::http::HttpLLMEngine;
+
 /// Backend unificado que delega a la implementación correcta
 pub enum LLMBackend {
     #[cfg(feature = "llama-cpp")]
@@ -42,6 +46,9 @@ pub enum LLMBackend {
 
     #[cfg(feature = "transformers-backend")]
     Transformers(TransformersEngine),
+
+    #[cfg(feature = "http-backend")]
+    Http(Box<HttpLLMEngine>),
 
     /// Backend sin LLM — permite modo solo búsqueda sin crash
     Noop,
@@ -95,10 +102,52 @@ impl LLMBackend {
                 Ok(Self::Transformers(engine))
             }
 
+            // --- HTTP providers ---
+            #[cfg(feature = "http-backend")]
+            LLMBackendType::Ollama => Self::create_http(config, super::http::Provider::Ollama),
+            #[cfg(feature = "http-backend")]
+            LLMBackendType::OpenRouter => Self::create_http(config, super::http::Provider::OpenRouter),
+            #[cfg(feature = "http-backend")]
+            LLMBackendType::Anthropic => Self::create_http(config, super::http::Provider::Anthropic),
+            #[cfg(feature = "http-backend")]
+            LLMBackendType::Gemini => Self::create_http(config, super::http::Provider::Gemini),
+            #[cfg(feature = "http-backend")]
+            LLMBackendType::Perplexity => Self::create_http(config, super::http::Provider::Perplexity),
+            #[cfg(feature = "http-backend")]
+            LLMBackendType::Cerebras => Self::create_http(config, super::http::Provider::Cerebras),
+            #[cfg(feature = "http-backend")]
+            LLMBackendType::Cohere => Self::create_http(config, super::http::Provider::Cohere),
+            #[cfg(feature = "http-backend")]
+            LLMBackendType::Nvidia => Self::create_http(config, super::http::Provider::Nvidia),
+            #[cfg(feature = "http-backend")]
+            LLMBackendType::Groq => Self::create_http(config, super::http::Provider::Groq),
+            #[cfg(feature = "http-backend")]
+            LLMBackendType::HuggingFace => Self::create_http(config, super::http::Provider::HuggingFace),
+            #[cfg(feature = "http-backend")]
+            LLMBackendType::GitHubModels => Self::create_http(config, super::http::Provider::GitHubModels),
+
+            #[cfg(any(
+                feature = "llama-cpp",
+                feature = "mistralrs-backend",
+                feature = "candle-backend",
+                feature = "vllm-backend",
+                feature = "transformers-backend"
+            ))]
             LLMBackendType::Auto => {
                 tracing::info!("Auto-seleccionando backend...");
                 Self::auto_select(config).await
             }
+
+            #[cfg(not(any(
+                feature = "llama-cpp",
+                feature = "mistralrs-backend",
+                feature = "candle-backend",
+                feature = "vllm-backend",
+                feature = "transformers-backend"
+            )))]
+            LLMBackendType::Auto => Err(crate::AlesysError::LLM(
+                "Auto-selección requiere al menos un backend local (llama-cpp, mistralrs, candle, vllm, transformers)".to_string(),
+            )),
 
             #[cfg(not(feature = "llama-cpp"))]
             LLMBackendType::LlamaCpp => Err(crate::AlesysError::LLM(
@@ -127,12 +176,31 @@ impl LLMBackend {
         }
     }
 
+    /// Helper: crea un backend HTTP para un provider dado
+    #[cfg(feature = "http-backend")]
+    fn create_http(config: LLMConfig, provider: super::http::Provider) -> Result<Self> {
+        tracing::info!(
+            "Usando backend HTTP (cloud/remote) — provider={}, model={}",
+            provider,
+            if config.model_path.is_empty() { provider.default_model() } else { &config.model_path },
+        );
+        // HttpLLMEngine::new is async because it builds reqwest::Client
+        // We block here since from_config is already async and client build is fast
+        let engine = tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async {
+                HttpLLMEngine::new(config, provider).await
+            })
+        })?;
+        Ok(Self::Http(Box::new(engine)))
+    }
+
     /// Crea un backend noop para modo solo búsqueda (sin LLM)
     pub fn noop() -> Self {
         Self::Noop
     }
 
     /// Auto-selección inteligente de backend
+    /// Nota: HTTP providers no se auto-seleccionan (requieren API keys explícitas)
     #[cfg(any(
         feature = "llama-cpp",
         feature = "mistralrs-backend",
@@ -141,19 +209,12 @@ impl LLMBackend {
         feature = "transformers-backend"
     ))]
     async fn auto_select(config: LLMConfig) -> Result<Self> {
-        #[cfg(not(any(
-            feature = "llama-cpp",
-            feature = "mistralrs-backend",
-            feature = "candle-backend",
-            feature = "vllm-backend",
-            feature = "transformers-backend"
-        )))]
-        let _config = config; // silence unused warning when no features
-                              // Detectar GPU disponible
+        // Detectar GPU disponible
         let gpu = Self::detect_gpu().await;
         tracing::info!("GPU detectada: {:?}", gpu);
 
         // Prioridad: llama.cpp > candle > vllm > transformers > mistralrs
+        // HTTP providers are not auto-selected (require explicit API keys)
         #[cfg(feature = "llama-cpp")]
         {
             tracing::info!("Intentando llama.cpp (Vulkan GPU)...");
@@ -208,7 +269,7 @@ impl LLMBackend {
         }
 
         Err(crate::AlesysError::LLM(
-            "Ningún backend LLM disponible. Habilitar al menos una feature: llama-cpp, mistralrs-backend, candle-backend".to_string()
+            "Ningún backend LLM disponible. Habilitar al menos una feature: llama-cpp, mistralrs-backend, candle-backend, http-backend".to_string()
         ))
     }
 
@@ -219,9 +280,10 @@ impl LLMBackend {
         feature = "vllm-backend",
         feature = "transformers-backend"
     )))]
+    #[allow(dead_code)] // Only reachable when no local backends + http-backend
     async fn auto_select(_config: LLMConfig) -> Result<Self> {
         Err(crate::AlesysError::LLM(
-            "No LLM backend feature enabled. Habilitar al menos una: llama-cpp, mistralrs-backend, candle-backend".to_string()
+            "No LLM backend feature enabled. Habilitar al menos una: llama-cpp, mistralrs-backend, candle-backend, http-backend".to_string()
         ))
     }
 
@@ -311,6 +373,14 @@ impl LLMBackend {
             "gpu_support": { "cuda": false, "vulkan": false, "cpu": true },
         }));
 
+        #[cfg(feature = "http-backend")]
+        info.push(serde_json::json!({
+            "name": "http",
+            "description": "Backend HTTP para proveedores cloud (Ollama, Anthropic, Gemini, Groq, etc.)",
+            "features": ["http-backend"],
+            "providers": ["ollama", "openrouter", "anthropic", "gemini", "perplexity", "cerebras", "cohere", "nvidia", "groq", "huggingface", "githubmodels"],
+        }));
+
         info
     }
 }
@@ -328,6 +398,8 @@ macro_rules! delegate_backend {
             Self::Vllm(e) => e.$method($($arg),*).await,
             #[cfg(feature = "transformers-backend")]
             Self::Transformers(e) => e.$method($($arg),*).await,
+            #[cfg(feature = "http-backend")]
+            Self::Http(e) => e.$method($($arg),*).await,
             Self::Noop => Err(crate::AlesysError::LLM(
                 "LLM no disponible — modo solo búsqueda".to_string(),
             )),
@@ -357,6 +429,8 @@ impl LLMEngine for LLMBackend {
             Self::Vllm(e) => e.chat_stream(messages),
             #[cfg(feature = "transformers-backend")]
             Self::Transformers(e) => e.chat_stream(messages),
+            #[cfg(feature = "http-backend")]
+            Self::Http(e) => e.chat_stream(messages),
             Self::Noop => Box::pin(futures::stream::once(async {
                 Err(crate::AlesysError::LLM(
                     "LLM no disponible — modo solo búsqueda".to_string(),
@@ -385,6 +459,8 @@ impl LLMEngine for LLMBackend {
             Self::Vllm(e) => e.is_available(),
             #[cfg(feature = "transformers-backend")]
             Self::Transformers(e) => e.is_available(),
+            #[cfg(feature = "http-backend")]
+            Self::Http(e) => e.is_available(),
             Self::Noop => false,
         }
     }
@@ -401,6 +477,8 @@ impl LLMEngine for LLMBackend {
             Self::Vllm(e) => e.backend_name(),
             #[cfg(feature = "transformers-backend")]
             Self::Transformers(e) => e.backend_name(),
+            #[cfg(feature = "http-backend")]
+            Self::Http(e) => e.backend_name(),
             Self::Noop => "noop",
         }
     }
@@ -413,7 +491,8 @@ mod tests {
         feature = "mistralrs-backend",
         feature = "candle-backend",
         feature = "vllm-backend",
-        feature = "transformers-backend"
+        feature = "transformers-backend",
+        feature = "http-backend"
     ))]
     #[test]
     fn test_availability_info() {
