@@ -1,47 +1,51 @@
 //! Implementación del generador de código
 
-use super::{GenerateRequest, GenerationResult};
-use crate::llm::{LLMBackend, LLMBackendType, LLMConfig, LLMEngine};
+use super::{templates, GenerateRequest, GenerationResult};
+use crate::llm::{LLMBackend, LLMEngine};
+use crate::generator::validation::SyntaxValidator;
 use anyhow::Result;
 use std::sync::Arc;
 
 /// Generador principal de código
+///
+/// Reutiliza un `LLMBackend` compartido (inyectado via `AppState`).
+/// No crea instancias propias del backend LLM.
 pub struct CodeGenerator {
     llm: Arc<LLMBackend>,
 }
 
 impl CodeGenerator {
-    /// Crea un nuevo generador con el backend LLM configurado
-    pub async fn new() -> Result<Self> {
-        let config = LLMConfig {
-            backend: LLMBackendType::Auto,
-            max_tokens: 2048,
-            temperature: 0.7,
-            ..Default::default()
-        };
-
-        let llm = LLMBackend::from_config(config).await?;
-        Ok(Self {
-            llm: Arc::new(llm),
-        })
+    /// Crea un generador reutilizando el backend LLM existente
+    pub fn new(llm: Arc<LLMBackend>) -> Self {
+        Self { llm }
     }
 
     /// Genera código desde un prompt
     pub async fn generate(&self, request: GenerateRequest) -> Result<GenerationResult> {
-        // Construir prompt completo con templates
-        let template = super::templates::get_template(&request.language)
-            .unwrap_or(super::templates::PromptTemplate::generic());
+        // 1. Seleccionar template según lenguaje
+        let template = templates::get_template(&request.language)
+            .unwrap_or(templates::PromptTemplate::generic());
 
+        // 2. Renderizar prompt completo (system + requirements + context + user)
         let full_prompt = template.render(&request.prompt, request.context.as_ref());
 
-        // Generar código usando LLM
+        // 3. Generar código usando LLM compartido
         let response = self.llm.generate_code(&full_prompt, &request.language)?;
 
-        // Extraer nombre de archivo sugerido
+        // 4. Validar sintaxis del código generado
+        let validation_result = SyntaxValidator::validate(&response, &request.language);
+        let validation_warnings = match validation_result {
+            Ok(true) => Vec::new(),
+            Ok(false) => vec!["Validación retornó sin errores pero sin confirmación".to_string()],
+            Err(e) => vec![format!("Advertencia de sintaxis: {}", e)],
+        };
+
+        // 5. Extraer nombre de archivo sugerido
         let file_name = self.suggest_filename(&request.prompt, &request.language);
 
-        // Generar explicación y sugerencias
-        let (explanation, suggestions) = self.analyze_generation(&response).await;
+        // 6. Análisis estático → explicación + sugerencias
+        let (explanation, mut suggestions) = self.analyze_generation(&response);
+        suggestions.extend(validation_warnings);
 
         Ok(GenerationResult {
             file_name,
@@ -54,11 +58,7 @@ impl CodeGenerator {
 
     /// Sugiere un nombre de archivo basado en el prompt
     fn suggest_filename(&self, prompt: &str, language: &str) -> String {
-        // Extraer palabras clave del prompt
-        let words: Vec<&str> = prompt
-            .split_whitespace()
-            .take(3)
-            .collect();
+        let words: Vec<&str> = prompt.split_whitespace().take(3).collect();
 
         let base_name = words
             .iter()
@@ -80,11 +80,10 @@ impl CodeGenerator {
         format!("{}.{}", base_name, extension)
     }
 
-    /// Analiza el código generado para extraer explicación y sugerencias
-    async fn analyze_generation(&self, code: &str) -> (String, Vec<String>) {
+    /// Análisis estático básico del código generado
+    fn analyze_generation(&self, code: &str) -> (String, Vec<String>) {
         let mut suggestions = Vec::new();
 
-        // Análisis básico de código
         if code.contains("TODO") || code.contains("FIXME") {
             suggestions.push("Revisar marcadores TODO/FIXME".to_string());
         }
@@ -93,23 +92,24 @@ impl CodeGenerator {
             suggestions.push("Verificar que el código tenga funciones definidas".to_string());
         }
 
-        // Contar líneas
         let line_count = code.lines().count();
         if line_count > 100 {
             suggestions.push(format!("Código extenso ({} líneas), considerar dividir", line_count));
         }
 
-        // Detección de patrones comunes
         if code.contains("unwrap()") || code.contains(".unwrap") {
             suggestions.push("Considerar manejar errores explícitamente en vez de unwrap()".to_string());
         }
 
-        let explanation = format!("Generado {} líneas de código {}", line_count, self.detect_language_pattern(code));
+        let explanation = format!(
+            "Generado {} líneas de código {}",
+            line_count,
+            self.detect_language_pattern(code)
+        );
 
         (explanation, suggestions)
     }
 
-    /// Detecta el patrón de lenguaje usado
     fn detect_language_pattern(&self, code: &str) -> &'static str {
         if code.contains("fn ") && code.contains("->") {
             "Rust"
@@ -129,7 +129,6 @@ mod tests {
 
     #[test]
     fn test_suggest_filename_python() {
-        // Test unitario sin dependencias LLM
         let filename = suggest_filename_internal("Crear función factorial", "python");
         assert_eq!(filename, "crear_función_factorial.py");
     }
@@ -140,10 +139,13 @@ mod tests {
         assert_eq!(filename, "implementar_clase_user.js");
     }
 
-    // Función helper para tests
     fn suggest_filename_internal(prompt: &str, language: &str) -> String {
         let words: Vec<&str> = prompt.split_whitespace().take(3).collect();
-        let base_name = words.iter().map(|s| s.to_lowercase()).collect::<Vec<_>>().join("_");
+        let base_name = words
+            .iter()
+            .map(|s| s.to_lowercase())
+            .collect::<Vec<_>>()
+            .join("_");
         let extension = match language.to_lowercase().as_str() {
             "python" | "py" => "py",
             "javascript" | "js" => "js",

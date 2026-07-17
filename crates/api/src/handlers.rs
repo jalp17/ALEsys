@@ -115,7 +115,6 @@ pub async fn chat_handler(
 #[derive(Deserialize)]
 pub struct GenerateRequest {
     pub prompt: String,
-    pub _file_path: Option<String>,
     pub language: String,
     pub max_tokens: Option<usize>,
 }
@@ -131,8 +130,11 @@ pub struct GenerateResponse {
 }
 
 /// Handler para POST /api/generate
+///
+/// Reutiliza el LLMBackend compartido de AppState (no crea instancias nuevas).
+/// Incluye validación de sintaxis post-generación via SyntaxValidator.
 pub async fn generate_handler(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     Json(payload): Json<GenerateRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     tracing::info!(
@@ -148,12 +150,7 @@ pub async fn generate_handler(
         max_tokens: payload.max_tokens.unwrap_or(2048),
     };
 
-    let generator = alesys_core::generator::CodeGenerator::new().await.map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Error al inicializar generador: {}", e),
-        )
-    })?;
+    let generator = alesys_core::generator::CodeGenerator::new(state.llm_engine.clone());
 
     let result = generator.generate(gen_request).await.map_err(|e| {
         (
