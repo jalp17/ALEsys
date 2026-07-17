@@ -429,6 +429,108 @@ pub async fn graph_stats(State(state): State<AppState>) -> impl IntoResponse {
     }))
 }
 
+/// Handler para GET /api/v1/graph
+pub async fn get_graph(
+    State(state): State<AppState>,
+    axum::extract::Query(query): axum::extract::Query<alesys_core::graphrag::api::GraphQuery>,
+) -> Result<impl IntoResponse, ApiError> {
+    let response = state
+        .graphrag
+        .get_graph_api(&query, 0) // user_id 0 = admin
+        .await
+        .map_err(|e| {
+            tracing::error!("Error obteniendo grafo: {}", e);
+            ApiError {
+                error: "Error obteniendo grafo".into(),
+                code: "INTERNAL".into(),
+            }
+        })?;
+    Ok(Json(response))
+}
+
+/// Handler para GET /api/v1/graph/centrality
+pub async fn get_centrality(
+    State(state): State<AppState>,
+    axum::extract::Query(query): axum::extract::Query<alesys_core::graphrag::api::CentralityQuery>,
+) -> Result<impl IntoResponse, ApiError> {
+    let response = state
+        .graphrag
+        .get_centrality(&query)
+        .await
+        .map_err(|e| {
+            tracing::error!("Error calculando centralidad: {}", e);
+            ApiError {
+                error: "Error calculando centralidad".into(),
+                code: "INTERNAL".into(),
+            }
+        })?;
+    Ok(Json(response))
+}
+
+/// Handler para GET /api/v1/graph/communities
+pub async fn get_communities(
+    State(state): State<AppState>,
+    axum::extract::Query(query): axum::extract::Query<alesys_core::graphrag::api::CommunitiesQuery>,
+) -> Result<impl IntoResponse, ApiError> {
+    let response = state
+        .graphrag
+        .get_communities(&query)
+        .await
+        .map_err(|e| {
+            tracing::error!("Error calculando comunidades: {}", e);
+            ApiError {
+                error: "Error calculando comunidades".into(),
+                code: "INTERNAL".into(),
+            }
+        })?;
+    Ok(Json(response))
+}
+
+/// Handler para GET /api/v1/graph/path
+pub async fn get_shortest_path(
+    State(state): State<AppState>,
+    axum::extract::Query(query): axum::extract::Query<alesys_core::graphrag::api::PathQuery>,
+) -> Result<impl IntoResponse, ApiError> {
+    let response = state
+        .graphrag
+        .get_shortest_path(&query)
+        .await
+        .map_err(|e| {
+            tracing::error!("Error calculando camino: {}", e);
+            ApiError {
+                error: "Error calculando camino".into(),
+                code: "INTERNAL".into(),
+            }
+        })?;
+    Ok(Json(response))
+}
+
+/// Handler para GET /api/v1/graph/search
+pub async fn search_graph(
+    State(state): State<AppState>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Result<impl IntoResponse, ApiError> {
+    let query = params.get("q").map(|s| s.as_str()).unwrap_or("");
+    let limit: usize = params
+        .get("limit")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(20)
+        .min(100);
+
+    let results = state
+        .graphrag
+        .search_graph(query, limit)
+        .await
+        .map_err(|e| {
+            tracing::error!("Error buscando en grafo: {}", e);
+            ApiError {
+                error: "Error buscando en grafo".into(),
+                code: "INTERNAL".into(),
+            }
+        })?;
+    Ok(Json(serde_json::json!({ "nodes": results })))
+}
+
 /// Health check endpoint
 pub async fn health_handler(State(state): State<AppState>) -> impl IntoResponse {
     let db_ok = sqlx::query("SELECT 1")
