@@ -11,16 +11,6 @@ impl SyntaxValidator {
         // Validaciones básicas sin ejecutar Python
         let mut errors = Vec::new();
 
-        // Check indentation básica
-        for (line_num, line) in code.lines().enumerate() {
-            let indent = line.chars().take_while(|c| *c == ' ').count();
-
-            // Indentación debería ser múltiplo de 4
-            if !indent.is_multiple_of(4) && !line.trim().is_empty() {
-                errors.push(format!("Line {}: Indentación no múltiplo de 4", line_num + 1));
-            }
-        }
-
         // Check balance de paréntesis
         let paren_count = code.matches('(').count() - code.matches(')').count();
         if paren_count != 0 {
