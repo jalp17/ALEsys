@@ -69,9 +69,19 @@ async fn main() -> Result<()> {
         )
     });
 
-    let db_pool = sqlx::PgPool::connect(&database_url)
+    let db_pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(
+            std::env::var("DB_MAX_CONNECTIONS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(25),
+        )
+        .idle_timeout(std::time::Duration::from_secs(300))
+        .connect(&database_url)
         .await
         .expect("Failed to connect to database");
+
+    tracing::info!("Database pool configured (max={})", db_pool.options().get_max_connections());
 
     let llm_config = alesys_core::llm::LLMConfig::from_env();
 

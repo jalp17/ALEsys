@@ -29,6 +29,7 @@ pub use backend_manager::BackendManager;
 pub use config::{Entity, KnowledgeExtraction, LLMBackendType, LLMConfig, Relation};
 
 use crate::Result;
+use async_trait::async_trait;
 
 /// Mensaje de chat
 #[derive(Debug, Clone)]
@@ -61,25 +62,25 @@ pub struct StreamChunk {
 }
 
 /// Trait que define la interfaz de un motor LLM
+#[async_trait]
 pub trait LLMEngine: Send + Sync {
     /// Chat con contexto de documentos
-    fn chat(&self, messages: &[ChatMessage]) -> Result<ChatResponse>;
+    async fn chat(&self, messages: &[ChatMessage]) -> Result<ChatResponse>;
 
     /// Chat con streaming de tokens (default: single-chunk via chat)
-    fn chat_stream(
+    async fn chat_stream(
         &self,
         messages: &[ChatMessage],
-    ) -> Result<Box<dyn Iterator<Item = Result<StreamChunk>> + Send>> {
-        let response = self.chat(messages)?;
-        let chunks = vec![Ok(StreamChunk {
+    ) -> Result<Vec<StreamChunk>> {
+        let response = self.chat(messages).await?;
+        Ok(vec![StreamChunk {
             delta: response.content,
             finish_reason: Some("stop".to_string()),
-        })];
-        Ok(Box::new(chunks.into_iter()))
+        }])
     }
 
     /// Generación de código (default: chat con system prompt de programación)
-    fn generate_code(&self, prompt: &str, language: &str) -> Result<String> {
+    async fn generate_code(&self, prompt: &str, language: &str) -> Result<String> {
         let messages = vec![
             ChatMessage {
                 role: "system".to_string(),
@@ -93,12 +94,12 @@ pub trait LLMEngine: Send + Sync {
                 content: prompt.to_string(),
             },
         ];
-        let response = self.chat(&messages)?;
+        let response = self.chat(&messages).await?;
         Ok(response.content)
     }
 
     /// Extracción de conocimiento (default: chat con system prompt de extracción)
-    fn extract_knowledge(&self, text: &str, schema: &str) -> Result<String> {
+    async fn extract_knowledge(&self, text: &str, schema: &str) -> Result<String> {
         let messages = vec![
             ChatMessage {
                 role: "system".to_string(),
@@ -109,7 +110,7 @@ pub trait LLMEngine: Send + Sync {
                 content: text.to_string(),
             },
         ];
-        let response = self.chat(&messages)?;
+        let response = self.chat(&messages).await?;
         Ok(response.content)
     }
 

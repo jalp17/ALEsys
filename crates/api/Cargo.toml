@@ -33,7 +33,9 @@ tower-http = { workspace = true, features = ["cors", "trace", "timeout"] }
 dotenvy = "0.15"
 
 # WebSocket
-futures = "0.3"
+futures.workspace = true
+moka.workspace = true
+async-trait.workspace = true
 
 [dev-dependencies]
 tokio-test = "0.4"

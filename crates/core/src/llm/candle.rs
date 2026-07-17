@@ -4,6 +4,7 @@
 //! Soporta CUDA, Metal y CPU. Modelos desde HuggingFace Hub.
 
 use super::config::{GpuType, ModelArch, QuantType};
+use async_trait::async_trait;
 use super::{ChatMessage, ChatResponse, LLMConfig, LLMEngine};
 use crate::Result;
 use std::path::{Path, PathBuf};
@@ -290,8 +291,9 @@ impl CandleEngine {
     }
 }
 
+#[async_trait]
 impl LLMEngine for CandleEngine {
-    fn chat(&self, messages: &[ChatMessage]) -> Result<ChatResponse> {
+    async fn chat(&self, messages: &[ChatMessage]) -> Result<ChatResponse> {
         let _model = self
             .model
             .as_ref()

@@ -7,6 +7,7 @@
 //! - vLLM (Python subprocess) - GPU de alto rendimiento
 //! - transformers (Python subprocess) - Modelos HF
 
+use async_trait::async_trait;
 use super::{ChatMessage, ChatResponse, LLMBackendType, LLMConfig, LLMEngine, Result, StreamChunk};
 
 #[cfg(feature = "llama-cpp")]
@@ -317,15 +318,15 @@ macro_rules! delegate_backend {
     ($self:expr, $method:ident($($arg:expr),*)) => {
         match $self {
             #[cfg(feature = "llama-cpp")]
-            Self::LlamaCpp(e) => e.$method($($arg),*),
+            Self::LlamaCpp(e) => e.$method($($arg),*).await,
             #[cfg(feature = "mistralrs-backend")]
-            Self::Mistralrs(e) => e.$method($($arg),*),
+            Self::Mistralrs(e) => e.$method($($arg),*).await,
             #[cfg(feature = "candle-backend")]
-            Self::Candle(e) => e.$method($($arg),*),
+            Self::Candle(e) => e.$method($($arg),*).await,
             #[cfg(feature = "vllm-backend")]
-            Self::Vllm(e) => e.$method($($arg),*),
+            Self::Vllm(e) => e.$method($($arg),*).await,
             #[cfg(feature = "transformers-backend")]
-            Self::Transformers(e) => e.$method($($arg),*),
+            Self::Transformers(e) => e.$method($($arg),*).await,
             Self::Noop => Err(crate::AlesysError::LLM(
                 "LLM no disponible — modo solo búsqueda".to_string(),
             )),
@@ -333,24 +334,25 @@ macro_rules! delegate_backend {
     };
 }
 
+#[async_trait]
 #[allow(unused_variables)]
 impl LLMEngine for LLMBackend {
-    fn chat(&self, messages: &[ChatMessage]) -> Result<ChatResponse> {
+    async fn chat(&self, messages: &[ChatMessage]) -> Result<ChatResponse> {
         delegate_backend!(self, chat(messages))
     }
 
-    fn chat_stream(
+    async fn chat_stream(
         &self,
         messages: &[ChatMessage],
-    ) -> Result<Box<dyn Iterator<Item = Result<StreamChunk>> + Send>> {
+    ) -> Result<Vec<StreamChunk>> {
         delegate_backend!(self, chat_stream(messages))
     }
 
-    fn generate_code(&self, prompt: &str, language: &str) -> Result<String> {
+    async fn generate_code(&self, prompt: &str, language: &str) -> Result<String> {
         delegate_backend!(self, generate_code(prompt, language))
     }
 
-    fn extract_knowledge(&self, text: &str, schema: &str) -> Result<String> {
+    async fn extract_knowledge(&self, text: &str, schema: &str) -> Result<String> {
         delegate_backend!(self, extract_knowledge(text, schema))
     }
 

@@ -6,6 +6,7 @@
 #[cfg(feature = "llama-cpp")]
 use llama_cpp::{standard_sampler::StandardSampler, LlamaModel, LlamaParams, SessionParams};
 
+use async_trait::async_trait;
 use super::{ChatMessage, ChatResponse, LLMConfig, LLMEngine, Usage};
 use crate::Result;
 
@@ -87,8 +88,9 @@ impl LlamaCppEngine {
     }
 }
 
+#[async_trait]
 impl LLMEngine for LlamaCppEngine {
-    fn chat(&self, messages: &[ChatMessage]) -> Result<ChatResponse> {
+    async fn chat(&self, messages: &[ChatMessage]) -> Result<ChatResponse> {
         #[cfg(feature = "llama-cpp")]
         {
             let prompt = self.format_messages(messages);
@@ -96,41 +98,36 @@ impl LLMEngine for LlamaCppEngine {
             let max_tokens = self.config.max_tokens;
             let context_size = self.config.context_size;
 
-            let response_text = tokio::task::block_in_place(|| {
-                tokio::runtime::Handle::current().block_on(async {
-                    tokio::task::spawn_blocking(move || -> Result<String> {
-                        let session_params = SessionParams {
-                            n_ctx: context_size as u32,
-                            ..Default::default()
-                        };
+            let response_text = tokio::task::spawn_blocking(move || -> Result<String> {
+                let session_params = SessionParams {
+                    n_ctx: context_size as u32,
+                    ..Default::default()
+                };
 
-                        let mut session = model.create_session(session_params).map_err(|e| {
-                            crate::AlesysError::LLM(format!("Error creando sesión: {}", e))
-                        })?;
+                let mut session = model.create_session(session_params).map_err(|e| {
+                    crate::AlesysError::LLM(format!("Error creando sesión: {}", e))
+                })?;
 
-                        session.advance_context(prompt).map_err(|e| {
-                            crate::AlesysError::LLM(format!("Error en advance_context: {}", e))
-                        })?;
+                session.advance_context(prompt).map_err(|e| {
+                    crate::AlesysError::LLM(format!("Error en advance_context: {}", e))
+                })?;
 
-                        let handle = session
-                            .start_completing_with(StandardSampler::default(), max_tokens)
-                            .map_err(|e| {
-                                crate::AlesysError::LLM(format!("Error en start_completing: {}", e))
-                            })?;
+                let handle = session
+                    .start_completing_with(StandardSampler::default(), max_tokens)
+                    .map_err(|e| {
+                        crate::AlesysError::LLM(format!("Error en start_completing: {}", e))
+                    })?;
 
-                        let mut out = String::new();
-                        for token_str in handle.into_strings() {
-                            out.push_str(&token_str);
-                        }
+                let mut out = String::new();
+                for token_str in handle.into_strings() {
+                    out.push_str(&token_str);
+                }
 
-                        Ok(out)
-                    })
-                    .await
-                    .map_err(|e| crate::AlesysError::LLM(format!("Join error: {}", e)))?
-                })
-            });
+                Ok(out)
+            })
+            .await
+            .map_err(|e| crate::AlesysError::LLM(format!("Join error: {}", e)))??;
 
-            let response_text = response_text?;
             let prompt_tokens = messages.iter().map(|m| m.content.len() / 4).sum();
             let completion_tokens = response_text.len() / 4;
 

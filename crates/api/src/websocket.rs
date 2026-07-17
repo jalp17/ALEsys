@@ -1,7 +1,7 @@
 //! WebSocket handlers para streaming
 
 use crate::state::AppState;
-use alesys_core::llm::{ChatMessage, LLMEngine};
+use alesys_core::llm::ChatMessage;
 use axum::{
     extract::{
         ws::{WebSocket, WebSocketUpgrade},
@@ -146,37 +146,21 @@ async fn handle_websocket_chat(socket: WebSocket, state: AppState) {
                             },
                         ];
 
-                        match state.llm_engine.chat_stream(&messages) {
-                            Ok(iterator) => {
-                                for chunk_result in iterator {
-                                    match chunk_result {
-                                        Ok(chunk) => {
-                                            if !send_ws_response(
-                                                &mut sender,
-                                                &WSResponse {
-                                                    msg_type: "chunk".to_string(),
-                                                    content: Some(chunk.delta),
-                                                    sources: None,
-                                                    error: None,
-                                                },
-                                            )
-                                            .await
-                                            {
-                                                break;
-                                            }
-                                        }
-                                        Err(e) => {
-                                            tracing::error!("WS stream error: {}", e);
-                                            if !send_ws_response(
-                                                &mut sender,
-                                                &ws_error("Error generando respuesta"),
-                                            )
-                                            .await
-                                            {
-                                                break;
-                                            }
-                                            break;
-                                        }
+                        match state.llm_queue.chat_stream(&messages).await {
+                            Ok(chunks) => {
+                                for chunk in chunks {
+                                    if !send_ws_response(
+                                        &mut sender,
+                                        &WSResponse {
+                                            msg_type: "chunk".to_string(),
+                                            content: Some(chunk.delta),
+                                            sources: None,
+                                            error: None,
+                                        },
+                                    )
+                                    .await
+                                    {
+                                        break;
                                     }
                                 }
 
