@@ -157,3 +157,8 @@ export async function searchGraph(q: string, limit = 20): Promise<{ nodes: ApiNo
   const { data } = await api.get('/graph/search', { params: { q, limit } });
   return data;
 }
+
+export async function exportGraphJson(): Promise<GraphResponse> {
+  const { data } = await api.get<GraphResponse>('/graph/export');
+  return data;
+}

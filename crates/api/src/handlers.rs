@@ -531,6 +531,33 @@ pub async fn search_graph(
     Ok(Json(serde_json::json!({ "nodes": results })))
 }
 
+/// Handler para GET /api/v1/graph/export — export graph as JSON
+pub async fn export_graph_json(
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, ApiError> {
+    let response = state
+        .graphrag
+        .get_graph_api(&alesys_core::graphrag::api::GraphQuery {
+            doc_type: None,
+            edge_type: None,
+            depth: None,
+            limit: Some(10000),
+            cursor: None,
+            center_node_id: None,
+            include_metrics: Some(true),
+        }, 0)
+        .await
+        .map_err(|e| {
+            tracing::error!("Error exportando grafo: {}", e);
+            ApiError {
+                error: "Error exportando grafo".into(),
+                code: "INTERNAL".into(),
+            }
+        })?;
+
+    Ok(Json(response))
+}
+
 /// Health check endpoint
 pub async fn health_handler(State(state): State<AppState>) -> impl IntoResponse {
     let db_ok = sqlx::query("SELECT 1")
