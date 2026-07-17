@@ -111,36 +111,93 @@ pub async fn chat_handler(
     Ok(Json(response))
 }
 
-/// Request para generación
+/// Request para generacion
 #[derive(Deserialize)]
 pub struct GenerateRequest {
     pub prompt: String,
-    pub file_path: String,
-    pub _language: String,
+    pub language: String,
+    pub max_tokens: Option<usize>,
+    #[serde(default)]
+    pub context: Option<GenerateContext>,
+}
+
+/// Contexto de archivos existentes enviado desde el frontend
+#[derive(Deserialize)]
+pub struct GenerateContext {
+    pub project_type: Option<String>,
+    #[serde(default)]
+    pub existing_files: Vec<GenerateFileInfo>,
+    #[serde(default)]
+    pub dependencies: Vec<String>,
+}
+
+#[derive(Deserialize)]
+pub struct GenerateFileInfo {
+    pub name: String,
+    pub content: String,
 }
 
 /// Response de generación
 #[derive(Serialize)]
 pub struct GenerateResponse {
-    pub generated_code: String,
-    pub file_path: String,
+    pub file_name: String,
+    pub content: String,
+    pub language: String,
+    pub explanation: String,
+    pub suggestions: Vec<String>,
 }
 
-/// Handler para POST /api/generate (FASE 2)
+/// Handler para POST /api/generate
+///
+/// Reutiliza el LLMBackend compartido de AppState (no crea instancias nuevas).
+/// Incluye validación de sintaxis post-generación via SyntaxValidator.
 pub async fn generate_handler(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     Json(payload): Json<GenerateRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     tracing::info!(
-        "Generate request: {} → {}",
+        "Generate request: '{}' → {}",
         payload.prompt,
-        payload.file_path
+        payload.language
     );
 
-    // TODO: Implementar en Fase 2
+    let context = payload.context.map(|ctx| {
+        alesys_core::generator::BuildContext {
+            project_type: ctx.project_type,
+            existing_files: ctx
+                .existing_files
+                .into_iter()
+                .map(|f| alesys_core::generator::FileInfo {
+                    name: f.name,
+                    content: f.content,
+                })
+                .collect(),
+            dependencies: ctx.dependencies,
+        }
+    });
+
+    let gen_request = alesys_core::generator::GenerateRequest {
+        prompt: payload.prompt,
+        language: payload.language,
+        context,
+        max_tokens: payload.max_tokens.unwrap_or(2048),
+    };
+
+    let generator = alesys_core::generator::CodeGenerator::new(state.llm_engine.clone());
+
+    let result = generator.generate(gen_request).await.map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Error al generar código: {}", e),
+        )
+    })?;
+
     let response = GenerateResponse {
-        generated_code: "// Código generado - Implementar en Fase 2".to_string(),
-        file_path: payload.file_path,
+        file_name: result.file_name,
+        content: result.content,
+        language: result.language,
+        explanation: result.explanation,
+        suggestions: result.suggestions,
     };
 
     Ok(Json(response))

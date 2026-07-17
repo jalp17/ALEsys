@@ -1,16 +1,22 @@
-//! ALEsys Core - Lógica de negocio principal
+//! ALEsys Core - Logica de negocio principal
 //!
-//! Módulos:
-//! - llm: Motor de inferencia con mistralrs + ort
+//! Modulos:
+//! - llm: Motor de inferencia con multi-backend (llama.cpp, mistralrs, candle, vLLM, transformers)
 //! - graphrag: GraphRAG con pgvector + petgraph
-//! - session: Gestión de sesiones multi-usuario
-//! - sandbox: Ejecución de código (FASE AVANZADA)
+//! - generator: Servicio de generacion de codigo (Fase 2)
+//!   - engine: CodeGenerator con LLM compartido
+//!   - templates: PromptTemplate por lenguaje
+//!   - validation: SyntaxValidator post-generacion
+//! - session: Gestion de sesiones multi-usuario (Fase 3)
+//! - sandbox: Ejecucion de codigo en Docker (Fase 7)
 
+pub mod generator;
 pub mod graphrag;
 pub mod llm;
 pub mod sandbox;
-pub mod session; // FASE AVANZADA - no implementar hasta Fase 7
+pub mod session; // Fase 3 - Gestion de sesiones multi-usuario
 
+pub use generator::{CodeGenerator, GenerateRequest, GenerationResult};
 pub use graphrag::GraphRAG;
 pub use llm::LLMEngine;
 pub use session::SessionManager;
