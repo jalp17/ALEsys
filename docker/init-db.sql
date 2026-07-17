@@ -60,3 +60,34 @@ CREATE INDEX IF NOT EXISTS idx_enlaces_destino ON enlaces(destino_id);
 -- Grant permissions
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO alesys;
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO alesys;
+
+-- Fase 3: Session management
+CREATE TABLE IF NOT EXISTS user_sessions (
+    id VARCHAR(36) PRIMARY KEY,
+    user_id INTEGER NOT NULL DEFAULT 0,
+    name VARCHAR(200) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    is_active BOOLEAN DEFAULT true,
+    closed_at TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS session_messages (
+    id SERIAL PRIMARY KEY,
+    session_id VARCHAR(36) REFERENCES user_sessions(id) ON DELETE CASCADE,
+    role VARCHAR(20) NOT NULL,
+    content TEXT NOT NULL,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    sources JSONB
+);
+
+CREATE TABLE IF NOT EXISTS session_context (
+    session_id VARCHAR(36) REFERENCES user_sessions(id) ON DELETE CASCADE,
+    context_data JSONB NOT NULL DEFAULT '{}',
+    PRIMARY KEY (session_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_sessions_user ON user_sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_sessions_active ON user_sessions(is_active);
+CREATE INDEX IF NOT EXISTS idx_session_messages_session ON session_messages(session_id);
+CREATE INDEX IF NOT EXISTS idx_session_messages_timestamp ON session_messages(session_id, timestamp);

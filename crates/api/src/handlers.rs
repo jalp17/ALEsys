@@ -3,18 +3,20 @@
 use crate::state::AppState;
 use alesys_core::graphrag::SearchResultSource;
 use alesys_core::llm::{ChatMessage, LLMEngine};
+use alesys_core::session::ChatMessage as SessionChatMessage;
 use axum::{
-    extract::{Json, State},
+    extract::{Json, Path, State},
     http::StatusCode,
     response::IntoResponse,
 };
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
 /// Request para chat
 #[derive(Deserialize)]
 pub struct ChatRequest {
     pub query: String,
-    pub _session_id: Option<String>,
+    pub session_id: Option<String>,
     pub _stream: Option<bool>,
 }
 
@@ -24,6 +26,7 @@ pub struct ChatResponse {
     pub response: String,
     pub sources: Vec<Source>,
     pub query: String,
+    pub session_id: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -36,13 +39,38 @@ pub struct Source {
 }
 
 /// Handler para POST /api/chat
+///
+/// Si se provee session_id, carga historial previo y guarda mensajes.
 pub async fn chat_handler(
     State(state): State<AppState>,
     Json(payload): Json<ChatRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
-    tracing::info!("Chat request: {}", payload.query);
+    tracing::info!("Chat request: '{}' (session: {:?})", payload.query, payload.session_id);
 
-    // 1. Generar embedding del query
+    // 1. Cargar historial de sesion si existe
+    let mut messages: Vec<ChatMessage> = Vec::new();
+
+    if let Some(ref session_id) = payload.session_id {
+        let history = state
+            .session_manager
+            .get_session_history(session_id, 20)
+            .await
+            .map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    format!("Error cargando historial: {}", e),
+                )
+            })?;
+
+        for msg in history {
+            messages.push(ChatMessage {
+                role: msg.role,
+                content: msg.content,
+            });
+        }
+    }
+
+    // 2. Generar embedding del query
     let query_embedding = state.embedder.encode(&payload.query).map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -50,7 +78,7 @@ pub async fn chat_handler(
         )
     })?;
 
-    // 2. Búsqueda híbrida (vector + grafo)
+    // 3. Busqueda hibrida (vector + grafo)
     let search_results = state
         .graphrag
         .hybrid_search(&query_embedding, 5, 1)
@@ -58,25 +86,28 @@ pub async fn chat_handler(
         .map_err(|e| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Error en búsqueda: {}", e),
+                format!("Error en busqueda: {}", e),
             )
         })?;
 
-    // 3. Construir contexto RAG
+    // 4. Construir contexto RAG
     let context = alesys_core::graphrag::build_rag_context(&search_results, 2000);
 
-    // 4. Llamar al LLM
-    let messages = vec![
-        ChatMessage {
+    // 5. Agregar system prompt si no hay historial
+    if messages.is_empty() {
+        messages.push(ChatMessage {
             role: "system".to_string(),
-            content: "Eres un asistente de IA experto en programación y análisis de documentos. Responde de forma clara y concisa basándote en el contexto proporcionado.".to_string(),
-        },
-        ChatMessage {
-            role: "user".to_string(),
-            content: format!("Contexto:\n{}\n\nPregunta: {}", context, payload.query),
-        },
-    ];
+            content: "Eres un asistente de IA experto en programacion y analisis de documentos. Responde de forma clara y concisa basandote en el contexto proporcionado.".to_string(),
+        });
+    }
 
+    // 6. Agregar query con contexto RAG
+    messages.push(ChatMessage {
+        role: "user".to_string(),
+        content: format!("Contexto:\n{}\n\nPregunta: {}", context, payload.query),
+    });
+
+    // 7. Llamar al LLM
     let llm_response = state.llm_engine.chat(&messages).map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -84,7 +115,37 @@ pub async fn chat_handler(
         )
     })?;
 
-    // 5. Convertir resultados a formato de respuesta
+    // 8. Guardar mensajes en sesion si hay session_id
+    if let Some(ref session_id) = payload.session_id {
+        let user_msg = SessionChatMessage {
+            role: "user".to_string(),
+            content: payload.query.clone(),
+            timestamp: Utc::now(),
+            sources: None,
+        };
+        let _ = state.session_manager.add_message(session_id, &user_msg).await;
+
+        let source_paths: Vec<String> = search_results
+            .iter()
+            .filter_map(|r| r.doc_path.clone())
+            .collect();
+        let assistant_msg = SessionChatMessage {
+            role: "assistant".to_string(),
+            content: llm_response.content.clone(),
+            timestamp: Utc::now(),
+            sources: if source_paths.is_empty() {
+                None
+            } else {
+                Some(source_paths)
+            },
+        };
+        let _ = state
+            .session_manager
+            .add_message(session_id, &assistant_msg)
+            .await;
+    }
+
+    // 9. Convertir resultados a formato de respuesta
     let sources: Vec<Source> = search_results
         .iter()
         .map(|r| Source {
@@ -106,6 +167,7 @@ pub async fn chat_handler(
         response: llm_response.content,
         sources,
         query: payload.query,
+        session_id: payload.session_id,
     };
 
     Ok(Json(response))
@@ -137,7 +199,7 @@ pub struct GenerateFileInfo {
     pub content: String,
 }
 
-/// Response de generación
+/// Response de generacion
 #[derive(Serialize)]
 pub struct GenerateResponse {
     pub file_name: String,
@@ -148,15 +210,12 @@ pub struct GenerateResponse {
 }
 
 /// Handler para POST /api/generate
-///
-/// Reutiliza el LLMBackend compartido de AppState (no crea instancias nuevas).
-/// Incluye validación de sintaxis post-generación via SyntaxValidator.
 pub async fn generate_handler(
     State(state): State<AppState>,
     Json(payload): Json<GenerateRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     tracing::info!(
-        "Generate request: '{}' → {}",
+        "Generate request: '{}' -> {}",
         payload.prompt,
         payload.language
     );
@@ -188,7 +247,7 @@ pub async fn generate_handler(
     let result = generator.generate(gen_request).await.map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Error al generar código: {}", e),
+            format!("Error al generar codigo: {}", e),
         )
     })?;
 
@@ -203,20 +262,159 @@ pub async fn generate_handler(
     Ok(Json(response))
 }
 
+// === Session Handlers ===
+
+/// Request para crear sesion
+#[derive(Deserialize)]
+pub struct CreateSessionRequest {
+    pub name: Option<String>,
+}
+
+/// Response de sesion
+#[derive(Serialize)]
+pub struct SessionResponse {
+    pub id: String,
+    pub name: String,
+    pub created_at: String,
+    pub last_activity: String,
+    pub is_active: bool,
+}
+
 /// Handler para GET /api/sessions
-pub async fn list_sessions(State(_state): State<AppState>) -> impl IntoResponse {
-    // TODO: Implementar list de sesiones
-    Json(serde_json::json!({
-        "sessions": []
-    }))
+pub async fn list_sessions(
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let sessions = state
+        .session_manager
+        .get_active_sessions(0)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Error listando sesiones: {}", e),
+            )
+        })?;
+
+    let responses: Vec<SessionResponse> = sessions
+        .into_iter()
+        .map(|s| SessionResponse {
+            id: s.id,
+            name: s.name,
+            created_at: s.created_at.to_rfc3339(),
+            last_activity: s.last_activity.to_rfc3339(),
+            is_active: s.is_active,
+        })
+        .collect();
+
+    Ok(Json(serde_json::json!({ "sessions": responses })))
 }
 
 /// Handler para POST /api/sessions
-pub async fn create_session(State(_state): State<AppState>) -> impl IntoResponse {
-    // TODO: Implementar creación de sesión
-    Json(serde_json::json!({
-        "session_id": "placeholder"
-    }))
+pub async fn create_session(
+    State(state): State<AppState>,
+    Json(payload): Json<CreateSessionRequest>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let session_id = state
+        .session_manager
+        .create_session(0, payload.name)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Error creando sesion: {}", e),
+            )
+        })?;
+
+    tracing::info!("Sesion creada: {}", session_id);
+
+    Ok(Json(serde_json::json!({
+        "session_id": session_id,
+        "message": "Sesion creada correctamente"
+    })))
+}
+
+/// Handler para GET /api/sessions/:id
+pub async fn get_session(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let sessions = state
+        .session_manager
+        .get_active_sessions(0)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Error obteniendo sesiones: {}", e),
+            )
+        })?;
+
+    let session = sessions.into_iter().find(|s| s.id == session_id);
+
+    match session {
+        Some(s) => Ok(Json(serde_json::json!({
+            "id": s.id,
+            "name": s.name,
+            "created_at": s.created_at.to_rfc3339(),
+            "last_activity": s.last_activity.to_rfc3339(),
+            "is_active": s.is_active,
+        }))),
+        None => Err((StatusCode::NOT_FOUND, "Sesion no encontrada".to_string())),
+    }
+}
+
+/// Handler para DELETE /api/sessions/:id
+pub async fn delete_session(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    state
+        .session_manager
+        .close_session(&session_id)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Error cerrando sesion: {}", e),
+            )
+        })?;
+
+    tracing::info!("Sesion cerrada: {}", session_id);
+
+    Ok(Json(serde_json::json!({
+        "message": "Sesion cerrada correctamente"
+    })))
+}
+
+/// Handler para GET /api/sessions/:id/history
+pub async fn get_session_history(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let messages = state
+        .session_manager
+        .get_session_history(&session_id, 100)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Error cargando historial: {}", e),
+            )
+        })?;
+
+    let responses: Vec<serde_json::Value> = messages
+        .into_iter()
+        .map(|m| {
+            serde_json::json!({
+                "role": m.role,
+                "content": m.content,
+                "timestamp": m.timestamp.to_rfc3339(),
+                "sources": m.sources,
+            })
+        })
+        .collect();
+
+    Ok(Json(serde_json::json!({ "messages": responses })))
 }
 
 /// Handler para GET /api/graph/stats

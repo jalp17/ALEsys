@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { API_BASE_URL } from '../utils/platform';
+import { useSessionStore } from '../store/session';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -13,12 +14,44 @@ interface Message {
 }
 
 export function Chat() {
+  const { activeSessionId, sessions } = useSessionStore();
   const [query, setQuery] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [useWebSocket, setUseWebSocket] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const prevSessionIdRef = useRef<string | null>(null);
+
+  const activeSession = sessions.find((s) => s.id === activeSessionId);
+
+  // Cargar historial cuando cambia la sesion activa
+  useEffect(() => {
+    if (activeSessionId && activeSessionId !== prevSessionIdRef.current) {
+      prevSessionIdRef.current = activeSessionId;
+      loadHistory(activeSessionId);
+    } else if (!activeSessionId) {
+      prevSessionIdRef.current = null;
+      setMessages([]);
+    }
+  }, [activeSessionId]);
+
+  const loadHistory = async (sessionId: string) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/sessions/${sessionId}/history`);
+      const data = await res.json();
+      const history: Message[] = (data.messages || []).map(
+        (m: { role: string; content: string }) => ({
+          role: m.role === 'assistant' ? 'assistant' as const : 'user' as const,
+          content: m.content,
+        })
+      );
+      setMessages(history);
+    } catch (e) {
+      console.error('Error loading history:', e);
+      setMessages([]);
+    }
+  };
 
   // Auto-scroll al final
   useEffect(() => {
@@ -68,7 +101,6 @@ export function Chat() {
   };
 
   const sendViaWebSocket = (query: string) => {
-    // Conectar WebSocket si no está conectado
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
       const wsUrl = API_BASE_URL.replace(/^http/, 'ws') + '/ws/chat';
       wsRef.current = new WebSocket(wsUrl);
@@ -78,7 +110,6 @@ export function Chat() {
 
         switch (data.type) {
           case 'start':
-            // Inicio de respuesta
             break;
           case 'chunk':
             updateLastMessage(data.content || '');
@@ -98,7 +129,7 @@ export function Chat() {
 
       wsRef.current.onerror = (error) => {
         console.error('WebSocket error:', error);
-        updateLastMessage('\n\nError: Conexión WebSocket fallida');
+        updateLastMessage('\n\nError: Conexion WebSocket fallida');
         markLastMessageDone();
         setIsLoading(false);
       };
@@ -108,12 +139,12 @@ export function Chat() {
       };
     }
 
-    // Enviar mensaje cuando esté listo
     const send = () => {
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
         wsRef.current.send(JSON.stringify({
           type: 'chat',
           query,
+          session_id: activeSessionId,
         }));
       } else {
         setTimeout(send, 100);
@@ -124,10 +155,15 @@ export function Chat() {
 
   const sendViaHTTP = async (query: string) => {
     try {
+      const body: Record<string, unknown> = { query };
+      if (activeSessionId) {
+        body.session_id = activeSessionId;
+      }
+
       const response = await fetch(`${API_BASE_URL}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query }),
+        body: JSON.stringify(body),
       });
 
       const data = await response.json();
@@ -152,7 +188,6 @@ export function Chat() {
     setQuery('');
     setIsLoading(true);
 
-    // Agregar mensaje vacío del asistente
     addMessage({ role: 'assistant', content: '', isStreaming: true });
 
     if (useWebSocket) {
@@ -164,6 +199,16 @@ export function Chat() {
 
   return (
     <div className="max-w-4xl mx-auto h-full flex flex-col">
+      {/* Session indicator */}
+      {activeSession && (
+        <div className="mb-3 px-4 py-2 bg-primary-900/30 border border-primary-700 rounded-lg flex items-center justify-between">
+          <span className="text-sm text-primary-300">
+            Sesion: <strong>{activeSession.name}</strong>
+          </span>
+          <span className="text-xs text-gray-400">{messages.length} mensajes</span>
+        </div>
+      )}
+
       {/* Chat messages */}
       <div className="flex-1 overflow-y-auto mb-4 space-y-4">
         {messages.length === 0 ? (
@@ -172,11 +217,18 @@ export function Chat() {
               Bienvenido a ALEsys
             </h2>
             <p className="text-lg">
-              Haz una pregunta sobre tu base de conocimiento
+              {activeSession
+                ? 'Empieza a chatear en esta sesion'
+                : 'Haz una pregunta sobre tu base de conocimiento'}
             </p>
+            {!activeSession && (
+              <p className="text-sm text-gray-500 mt-2">
+                Tip: Crea una sesion en la pestaña Sesiones para guardar historial
+              </p>
+            )}
             <div className="mt-4 text-sm text-gray-500">
-              <p>Modo de conexión: 
-                <button 
+              <p>Modo de conexion:
+                <button
                   onClick={() => setUseWebSocket(!useWebSocket)}
                   className="ml-2 text-primary-400 hover:text-primary-300"
                 >
@@ -221,7 +273,7 @@ export function Chat() {
             </div>
           ))
         )}
-        
+
         {isLoading && messages[messages.length - 1]?.role !== 'assistant' && (
           <div className="flex justify-start">
             <div className="bg-dark-800 p-4 rounded-lg">
@@ -233,7 +285,7 @@ export function Chat() {
             </div>
           </div>
         )}
-        
+
         <div ref={messagesEndRef} />
       </div>
 
@@ -243,7 +295,7 @@ export function Chat() {
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Escribe tu pregunta..."
+          placeholder={activeSession ? 'Escribe en esta sesion...' : 'Escribe tu pregunta...'}
           className="flex-1 px-4 py-3 bg-dark-800 border border-gray-700 rounded-lg focus:outline-none focus:border-primary-500 text-white placeholder-gray-500"
           disabled={isLoading}
         />
