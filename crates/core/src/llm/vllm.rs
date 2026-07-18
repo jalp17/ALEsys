@@ -4,10 +4,10 @@
 //! con API compatible OpenAI.
 
 use super::config::{GpuType, PythonConfig};
-use async_trait::async_trait;
-use futures::stream::BoxStream;
 use super::{ChatMessage, ChatResponse, LLMConfig, LLMEngine, StreamChunk};
 use crate::Result;
+use async_trait::async_trait;
+use futures::stream::BoxStream;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
@@ -49,10 +49,16 @@ impl VllmEngine {
 
         for candidate in &candidates {
             // Validar que el nombre no contenga caracteres peligrosos
-            if candidate.contains(';') || candidate.contains('|') || candidate.contains('&')
-                || candidate.contains('$') || candidate.contains('`')
+            if candidate.contains(';')
+                || candidate.contains('|')
+                || candidate.contains('&')
+                || candidate.contains('$')
+                || candidate.contains('`')
             {
-                tracing::warn!("Nombre de python candidato contiene caracteres peligrosos: {}", candidate);
+                tracing::warn!(
+                    "Nombre de python candidato contiene caracteres peligrosos: {}",
+                    candidate
+                );
                 continue;
             }
             if let Ok(output) = Command::new(candidate).arg("--version").output() {
@@ -78,8 +84,12 @@ impl VllmEngine {
         let model = self.config.model_path.as_str();
 
         // Validar que model_path no contenga caracteres peligrosos para injection
-        if model.contains(';') || model.contains('|') || model.contains('&')
-            || model.contains('$') || model.contains('`') || model.contains('\n')
+        if model.contains(';')
+            || model.contains('|')
+            || model.contains('&')
+            || model.contains('$')
+            || model.contains('`')
+            || model.contains('\n')
         {
             return Err(crate::AlesysError::LLM(
                 "model_path contiene caracteres no validos".to_string(),
@@ -207,13 +217,12 @@ impl LLMEngine for VllmEngine {
             }))
             .send()
             .await
-            .map_err(|e| {
-                crate::AlesysError::LLM(format!("Error en request vLLM: {}", e))
-            })?;
+            .map_err(|e| crate::AlesysError::LLM(format!("Error en request vLLM: {}", e)))?;
 
-        let body: serde_json::Value = response.json().await.map_err(|e| {
-            crate::AlesysError::LLM(format!("Error parseando respuesta: {}", e))
-        })?;
+        let body: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| crate::AlesysError::LLM(format!("Error parseando respuesta: {}", e)))?;
 
         let content = body["choices"][0]["message"]["content"]
             .as_str()
@@ -226,8 +235,7 @@ impl LLMEngine for VllmEngine {
             model: model_path,
             usage: super::Usage {
                 prompt_tokens: usage["prompt_tokens"].as_u64().unwrap_or(0) as usize,
-                completion_tokens: usage["completion_tokens"].as_u64().unwrap_or(0)
-                    as usize,
+                completion_tokens: usage["completion_tokens"].as_u64().unwrap_or(0) as usize,
                 total_tokens: usage["total_tokens"].as_u64().unwrap_or(0) as usize,
             },
         })

@@ -6,11 +6,11 @@
 #[cfg(feature = "llama-cpp")]
 use llama_cpp::{standard_sampler::StandardSampler, LlamaModel, LlamaParams, SessionParams};
 
+use super::{ChatMessage, ChatResponse, LLMConfig, LLMEngine, StreamChunk, Usage};
+use crate::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::StreamExt;
-use super::{ChatMessage, ChatResponse, LLMConfig, LLMEngine, StreamChunk, Usage};
-use crate::Result;
 
 pub struct LlamaCppEngine {
     config: LLMConfig,
@@ -106,9 +106,9 @@ impl LLMEngine for LlamaCppEngine {
                     ..Default::default()
                 };
 
-                let mut session = model.create_session(session_params).map_err(|e| {
-                    crate::AlesysError::LLM(format!("Error creando sesión: {}", e))
-                })?;
+                let mut session = model
+                    .create_session(session_params)
+                    .map_err(|e| crate::AlesysError::LLM(format!("Error creando sesión: {}", e)))?;
 
                 session.advance_context(prompt).map_err(|e| {
                     crate::AlesysError::LLM(format!("Error en advance_context: {}", e))
@@ -175,36 +175,43 @@ impl LLMEngine for LlamaCppEngine {
                 let session = match model.create_session(session_params) {
                     Ok(s) => s,
                     Err(e) => {
-                        let _ = tx.blocking_send(Err(crate::AlesysError::LLM(
-                            format!("Error creando sesión: {}", e),
-                        )));
+                        let _ = tx.blocking_send(Err(crate::AlesysError::LLM(format!(
+                            "Error creando sesión: {}",
+                            e
+                        ))));
                         return;
                     }
                 };
 
                 let mut session = session;
                 if let Err(e) = session.advance_context(prompt) {
-                    let _ = tx.blocking_send(Err(crate::AlesysError::LLM(
-                        format!("Error en advance_context: {}", e),
-                    )));
+                    let _ = tx.blocking_send(Err(crate::AlesysError::LLM(format!(
+                        "Error en advance_context: {}",
+                        e
+                    ))));
                     return;
                 }
 
-                let handle = match session.start_completing_with(StandardSampler::default(), max_tokens) {
-                    Ok(h) => h,
-                    Err(e) => {
-                        let _ = tx.blocking_send(Err(crate::AlesysError::LLM(
-                            format!("Error en start_completing: {}", e),
-                        )));
-                        return;
-                    }
-                };
+                let handle =
+                    match session.start_completing_with(StandardSampler::default(), max_tokens) {
+                        Ok(h) => h,
+                        Err(e) => {
+                            let _ = tx.blocking_send(Err(crate::AlesysError::LLM(format!(
+                                "Error en start_completing: {}",
+                                e
+                            ))));
+                            return;
+                        }
+                    };
 
                 for token_str in handle.into_strings() {
-                    if tx.blocking_send(Ok(StreamChunk {
-                        delta: token_str,
-                        finish_reason: None,
-                    })).is_err() {
+                    if tx
+                        .blocking_send(Ok(StreamChunk {
+                            delta: token_str,
+                            finish_reason: None,
+                        }))
+                        .is_err()
+                    {
                         break;
                     }
                 }

@@ -7,10 +7,10 @@
 #[cfg(feature = "mistralrs-backend")]
 use mistralrs::{GgufModelBuilder, Model, TextMessageRole, TextMessages};
 
-use async_trait::async_trait;
-use futures::stream::BoxStream;
 use super::{ChatMessage, ChatResponse, LLMConfig, LLMEngine, StreamChunk, Usage};
 use crate::Result;
+use async_trait::async_trait;
+use futures::stream::BoxStream;
 
 pub struct MistralEngine {
     config: LLMConfig,

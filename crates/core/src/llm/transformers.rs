@@ -3,10 +3,10 @@
 //! Implementación de `LLMEngine` usando HuggingFace Transformers como subprocess Python.
 
 use super::config::PythonConfig;
-use async_trait::async_trait;
-use futures::stream::BoxStream;
 use super::{ChatMessage, ChatResponse, LLMConfig, LLMEngine, StreamChunk};
 use crate::Result;
+use async_trait::async_trait;
+use futures::stream::BoxStream;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::time::Duration;
@@ -64,8 +64,12 @@ impl TransformersEngine {
         let model = self.config.model_path.as_str();
 
         // Validar que model_path no contenga caracteres peligrosos para injection
-        if model.contains(';') || model.contains('|') || model.contains('&')
-            || model.contains('$') || model.contains('`') || model.contains('\n')
+        if model.contains(';')
+            || model.contains('|')
+            || model.contains('&')
+            || model.contains('$')
+            || model.contains('`')
+            || model.contains('\n')
         {
             return Err(crate::AlesysError::LLM(
                 "model_path contiene caracteres no validos".to_string(),
@@ -96,13 +100,10 @@ app.run(host='127.0.0.1', port={})"#,
 
         let config_json = serde_json::json!({
             "model": model,
-        }).to_string();
+        })
+        .to_string();
 
-        let mut args = vec![
-            "-c".to_string(),
-            server_script,
-            config_json,
-        ];
+        let mut args = vec!["-c".to_string(), server_script, config_json];
 
         if let Some(layers) = gpu_layers {
             args.insert(0, "--device".to_string());
@@ -192,9 +193,10 @@ impl LLMEngine for TransformersEngine {
                 crate::AlesysError::LLM(format!("Error en request Transformers: {}", e))
             })?;
 
-        let body: serde_json::Value = response.json().await.map_err(|e| {
-            crate::AlesysError::LLM(format!("Error parseando respuesta: {}", e))
-        })?;
+        let body: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| crate::AlesysError::LLM(format!("Error parseando respuesta: {}", e)))?;
 
         let content = body["choices"][0]["message"]["content"]
             .as_str()
@@ -207,8 +209,7 @@ impl LLMEngine for TransformersEngine {
             model: model_path,
             usage: super::Usage {
                 prompt_tokens: usage["prompt_tokens"].as_u64().unwrap_or(0) as usize,
-                completion_tokens: usage["completion_tokens"].as_u64().unwrap_or(0)
-                    as usize,
+                completion_tokens: usage["completion_tokens"].as_u64().unwrap_or(0) as usize,
                 total_tokens: usage["total_tokens"].as_u64().unwrap_or(0) as usize,
             },
         })

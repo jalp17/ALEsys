@@ -176,7 +176,11 @@ impl HttpLLMEngine {
 
         let model = std::env::var(format!("{}_MODEL", api_key_env.replace("API_KEY", "")))
             .unwrap_or_else(|_| {
-                if config.model_path.is_empty() { provider.default_model().to_string() } else { config.model_path.clone() }
+                if config.model_path.is_empty() {
+                    provider.default_model().to_string()
+                } else {
+                    config.model_path.clone()
+                }
             });
 
         let client = reqwest::Client::builder()
@@ -536,17 +540,16 @@ impl LLMEngine for HttpLLMEngine {
 
         tracing::debug!("HTTP LLM request: provider={}, url={}", self.provider, url);
 
-        let response = self
-            .build_request(&url, body)
-            .send()
-            .await
-            .map_err(|e| {
-                crate::AlesysError::LLM(format!("Error en request HTTP ({}): {}", self.provider, e))
-            })?;
+        let response = self.build_request(&url, body).send().await.map_err(|e| {
+            crate::AlesysError::LLM(format!("Error en request HTTP ({}): {}", self.provider, e))
+        })?;
 
         let status = response.status();
         let body: serde_json::Value = response.json().await.map_err(|e| {
-            crate::AlesysError::LLM(format!("Error parseando respuesta ({}): {}", self.provider, e))
+            crate::AlesysError::LLM(format!(
+                "Error parseando respuesta ({}): {}",
+                self.provider, e
+            ))
         })?;
 
         if !status.is_success() {
@@ -595,14 +598,20 @@ impl LLMEngine for HttpLLMEngine {
             Provider::Anthropic => {
                 let mut stream_body = body.clone();
                 stream_body["stream"] = serde_json::Value::Bool(true);
-                req = self.client.post(&url).json(&stream_body)
+                req = self
+                    .client
+                    .post(&url)
+                    .json(&stream_body)
                     .header("x-api-key", &self.api_key)
                     .header("anthropic-version", "2023-06-01");
             }
             Provider::Cohere => {
                 let mut stream_body = body.clone();
                 stream_body["stream"] = serde_json::Value::Bool(true);
-                req = self.client.post(&url).json(&stream_body)
+                req = self
+                    .client
+                    .post(&url)
+                    .json(&stream_body)
                     .header("Authorization", format!("Bearer {}", self.api_key));
             }
             Provider::Gemini => {
@@ -693,11 +702,13 @@ impl LLMEngine for HttpLLMEngine {
                 as BoxStream<'static, Result<StreamChunk>>)
         };
 
-        Box::pin(futures::stream::once(stream_fut).flat_map(|result| match result {
-            Ok(stream) => stream,
-            Err(e) => Box::pin(futures::stream::once(async move { Err(e) }))
-                as BoxStream<'static, Result<StreamChunk>>,
-        }))
+        Box::pin(
+            futures::stream::once(stream_fut).flat_map(|result| match result {
+                Ok(stream) => stream,
+                Err(e) => Box::pin(futures::stream::once(async move { Err(e) }))
+                    as BoxStream<'static, Result<StreamChunk>>,
+            }),
+        )
     }
 
     fn is_available(&self) -> bool {
@@ -751,10 +762,7 @@ fn parse_anthropic_sse_line(line: &str) -> Option<StreamChunk> {
 
     match json["type"].as_str()? {
         "content_block_delta" => {
-            let delta = json["delta"]["text"]
-                .as_str()
-                .unwrap_or("")
-                .to_string();
+            let delta = json["delta"]["text"].as_str().unwrap_or("").to_string();
             Some(StreamChunk {
                 delta,
                 finish_reason: None,
@@ -833,13 +841,19 @@ mod tests {
     #[test]
     fn test_provider_from_str() {
         assert_eq!("ollama".parse::<Provider>().unwrap(), Provider::Ollama);
-        assert_eq!("anthropic".parse::<Provider>().unwrap(), Provider::Anthropic);
+        assert_eq!(
+            "anthropic".parse::<Provider>().unwrap(),
+            Provider::Anthropic
+        );
         assert_eq!("claude".parse::<Provider>().unwrap(), Provider::Anthropic);
         assert_eq!("gemini".parse::<Provider>().unwrap(), Provider::Gemini);
         assert_eq!("google".parse::<Provider>().unwrap(), Provider::Gemini);
         assert_eq!("groq".parse::<Provider>().unwrap(), Provider::Groq);
         assert_eq!("hf".parse::<Provider>().unwrap(), Provider::HuggingFace);
-        assert_eq!("github".parse::<Provider>().unwrap(), Provider::GitHubModels);
+        assert_eq!(
+            "github".parse::<Provider>().unwrap(),
+            Provider::GitHubModels
+        );
         assert_eq!("nim".parse::<Provider>().unwrap(), Provider::Nvidia);
         assert!("unknown".parse::<Provider>().is_err());
     }
@@ -850,7 +864,10 @@ mod tests {
             Provider::Anthropic.default_base_url(),
             "https://api.anthropic.com"
         );
-        assert_eq!(Provider::Groq.default_base_url(), "https://api.groq.com/openai");
+        assert_eq!(
+            Provider::Groq.default_base_url(),
+            "https://api.groq.com/openai"
+        );
         assert_eq!(
             Provider::HuggingFace.default_base_url(),
             "https://api-inference.huggingface.co"
@@ -978,7 +995,10 @@ mod tests {
         ];
 
         let body = engine.serialize_request(&messages);
-        assert_eq!(body["systemInstruction"]["parts"][0]["text"], "You are helpful");
+        assert_eq!(
+            body["systemInstruction"]["parts"][0]["text"],
+            "You are helpful"
+        );
         assert_eq!(body["contents"][0]["role"], "user");
         assert_eq!(body["generationConfig"]["maxOutputTokens"], 2048);
     }

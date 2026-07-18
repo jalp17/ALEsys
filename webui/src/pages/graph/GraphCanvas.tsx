@@ -111,18 +111,19 @@ function buildElements(nodes: ApiNode[], edges: ApiEdge[]): GraphElement[] {
   return [...nodeElements, ...edgeElements];
 }
 
-function getMetricSize(node: cytoscape.NodeSingular, metric: string): number {
-  switch (metric) {
-    case 'pagerank':
-      return Math.max(8, (node.data('pagerank') ?? 0.01) * 200);
-    case 'betweenness':
-      return Math.max(8, (node.data('betweenness') ?? 0) * 300);
-    case 'degree':
-      return Math.max(8, (node.data('degree') ?? 1) * 4);
-    default:
-      return 20;
-  }
-}
+// TODO: Implementar metric-based node sizing
+// function getMetricSize(node: cytoscape.NodeSingular, metric: string): number {
+//   switch (metric) {
+//     case 'pagerank':
+//       return Math.max(8, (node.data('pagerank') ?? 0.01) * 200);
+//     case 'betweenness':
+//       return Math.max(8, (node.data('betweenness') ?? 0) * 300);
+//     case 'degree':
+//       return Math.max(8, (node.data('degree') ?? 1) * 4);
+//     default:
+//       return 20;
+//   }
+// }
 
 export function GraphCanvas({
   nodes,

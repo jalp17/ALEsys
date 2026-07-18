@@ -6,8 +6,8 @@
 //! - Label Propagation (comunidades)
 //! - Dijkstra (camino más corto)
 
-use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::algo::dijkstra;
+use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::EdgeRef;
 use petgraph::Direction;
 use std::collections::{HashMap, VecDeque};
@@ -148,9 +148,7 @@ pub fn pagerank(
 ///
 /// Mide cuántos caminos más cortos pasan por cada nodo.
 /// Nodos alto betweenness son "puentes" entre comunidades.
-pub fn betweenness_centrality(
-    graph: &DiGraph<DocumentNode, EdgeType>,
-) -> HashMap<i32, f64> {
+pub fn betweenness_centrality(graph: &DiGraph<DocumentNode, EdgeType>) -> HashMap<i32, f64> {
     let n = graph.node_count();
     if n == 0 {
         return HashMap::new();
@@ -194,7 +192,11 @@ pub fn betweenness_centrality(
 fn bfs_shortest_paths(
     graph: &DiGraph<DocumentNode, EdgeType>,
     source: NodeIndex,
-) -> (HashMap<NodeIndex, Vec<Vec<NodeIndex>>>, HashMap<NodeIndex, f64>, HashMap<NodeIndex, f64>) {
+) -> (
+    HashMap<NodeIndex, Vec<Vec<NodeIndex>>>,
+    HashMap<NodeIndex, f64>,
+    HashMap<NodeIndex, f64>,
+) {
     let mut paths: HashMap<NodeIndex, Vec<Vec<NodeIndex>>> = HashMap::new();
     let mut sigma: HashMap<NodeIndex, f64> = HashMap::new();
     let mut distance: HashMap<NodeIndex, f64> = HashMap::new();
@@ -282,10 +284,7 @@ fn count_paths_through_node(
     to: NodeIndex,
 ) -> f64 {
     if let Some(path_list) = paths.get(&to) {
-        path_list
-            .iter()
-            .filter(|path| path.contains(&from))
-            .count() as f64
+        path_list.iter().filter(|path| path.contains(&from)).count() as f64
     } else {
         0.0
     }
@@ -296,9 +295,7 @@ fn count_paths_through_node(
 // =============================================================================
 
 /// Degree centrality: in-degree, out-degree, total
-pub fn degree_centrality(
-    graph: &DiGraph<DocumentNode, EdgeType>,
-) -> HashMap<i32, DegreeResult> {
+pub fn degree_centrality(graph: &DiGraph<DocumentNode, EdgeType>) -> HashMap<i32, DegreeResult> {
     let mut result = HashMap::new();
 
     for node in graph.node_indices() {
@@ -355,9 +352,7 @@ pub fn label_propagation(
 
         // Shuffle determinístico (por reproducibilidad)
         for &node in &node_ids {
-            let neighbors: Vec<NodeIndex> = graph
-                .neighbors_undirected(node)
-                .collect();
+            let neighbors: Vec<NodeIndex> = graph.neighbors_undirected(node).collect();
 
             if neighbors.is_empty() {
                 continue;
@@ -389,10 +384,7 @@ pub fn label_propagation(
     let mut communities_map: HashMap<usize, Vec<i32>> = HashMap::new();
     for (node, label) in &labels {
         if let Some(doc) = graph.node_weight(*node) {
-            communities_map
-                .entry(*label)
-                .or_default()
-                .push(doc.id);
+            communities_map.entry(*label).or_default().push(doc.id);
         }
     }
 
@@ -562,7 +554,10 @@ fn reconstruct_path(
         let mut found = false;
         for edge in graph.edges_directed(current, Direction::Incoming) {
             let predecessor = edge.source();
-            let pred_dist = distances.get(&predecessor).copied().unwrap_or(f64::INFINITY);
+            let pred_dist = distances
+                .get(&predecessor)
+                .copied()
+                .unwrap_or(f64::INFINITY);
             let w = edge_weight(edge.weight());
             if (pred_dist + w - current_dist).abs() < 1e-10 {
                 current = predecessor;
@@ -587,9 +582,7 @@ fn reconstruct_path(
 }
 
 /// Analizar grafo completo (todos los algoritmos)
-pub fn analyze_graph(
-    graph: &DiGraph<DocumentNode, EdgeType>,
-) -> GraphAnalysis {
+pub fn analyze_graph(graph: &DiGraph<DocumentNode, EdgeType>) -> GraphAnalysis {
     let pagerank = pagerank(graph, 0.85, 100, 1e-6);
     let betweenness = betweenness_centrality(graph);
     let degree = degree_centrality(graph);
@@ -632,14 +625,38 @@ mod tests {
         });
 
         // n1 -> n2 -> n3 (lineal)
-        graph.add_edge(n1, n2, EdgeType::WikiLink { context: "link1".to_string() });
-        graph.add_edge(n2, n3, EdgeType::Backlink { context: "link2".to_string() });
+        graph.add_edge(
+            n1,
+            n2,
+            EdgeType::WikiLink {
+                context: "link1".to_string(),
+            },
+        );
+        graph.add_edge(
+            n2,
+            n3,
+            EdgeType::Backlink {
+                context: "link2".to_string(),
+            },
+        );
 
         // n3 -> n4 (branch)
-        graph.add_edge(n3, n4, EdgeType::Reference { context: "link3".to_string() });
+        graph.add_edge(
+            n3,
+            n4,
+            EdgeType::Reference {
+                context: "link3".to_string(),
+            },
+        );
 
         // n4 -> n2 (cycle)
-        graph.add_edge(n4, n2, EdgeType::WikiLink { context: "link4".to_string() });
+        graph.add_edge(
+            n4,
+            n2,
+            EdgeType::WikiLink {
+                context: "link4".to_string(),
+            },
+        );
 
         graph
     }
@@ -658,12 +675,19 @@ mod tests {
 
         // Suma debe ser ~1.0 (normalizado)
         let sum: f64 = result.values().sum();
-        assert!((sum - 1.0).abs() < 0.01, "PageRank sum should be ~1.0, got {}", sum);
+        assert!(
+            (sum - 1.0).abs() < 0.01,
+            "PageRank sum should be ~1.0, got {}",
+            sum
+        );
 
         // n2 tiene mayorPageRank (recibe de n1, n4)
         let score_2 = result.get(&2).unwrap();
         let score_1 = result.get(&1).unwrap();
-        assert!(score_2 > score_1, "Node 2 should have higher PageRank than Node 1");
+        assert!(
+            score_2 > score_1,
+            "Node 2 should have higher PageRank than Node 1"
+        );
     }
 
     #[test]
@@ -676,7 +700,10 @@ mod tests {
         // n2 y n3 deberían tener mayor betweenness (son puentes)
         let score_2 = result.get(&2).unwrap();
         let score_3 = result.get(&3).unwrap();
-        assert!(score_2 > &0.0 || score_3 > &0.0, "At least node 2 or 3 should have non-zero betweenness");
+        assert!(
+            score_2 > &0.0 || score_3 > &0.0,
+            "At least node 2 or 3 should have non-zero betweenness"
+        );
     }
 
     #[test]
@@ -795,7 +822,13 @@ mod tests {
         // After 100 iterations vs 10, scores should be similar (converged)
         for (node_id, score1) in &pr1 {
             let score2 = pr2.get(node_id).unwrap();
-            assert!((score1 - score2).abs() < 0.05, "PageRank should converge for node {}: {} vs {}", node_id, score1, score2);
+            assert!(
+                (score1 - score2).abs() < 0.05,
+                "PageRank should converge for node {}: {} vs {}",
+                node_id,
+                score1,
+                score2
+            );
         }
     }
 

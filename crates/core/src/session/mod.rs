@@ -171,7 +171,11 @@ impl SessionManager {
         .execute(&mut *tx)
         .await
         .map_err(|e| {
-            tracing::error!("DB error insertando mensaje en sesión {}: {}", session_id, e);
+            tracing::error!(
+                "DB error insertando mensaje en sesión {}: {}",
+                session_id,
+                e
+            );
             crate::AlesysError::Session(format!("Error guardando mensaje: {}", e))
         })?;
 
@@ -180,16 +184,28 @@ impl SessionManager {
             .execute(&mut *tx)
             .await
             .map_err(|e| {
-                tracing::error!("DB error actualizando last_activity sesión {}: {}", session_id, e);
+                tracing::error!(
+                    "DB error actualizando last_activity sesión {}: {}",
+                    session_id,
+                    e
+                );
                 crate::AlesysError::Session(format!("Error actualizando actividad: {}", e))
             })?;
 
         tx.commit().await.map_err(|e| {
-            tracing::error!("DB error commitiendo transacción sesión {}: {}", session_id, e);
+            tracing::error!(
+                "DB error commitiendo transacción sesión {}: {}",
+                session_id,
+                e
+            );
             crate::AlesysError::Session(format!("Error confirmando mensaje: {}", e))
         })?;
 
-        tracing::debug!("Mensaje guardado en sesión {} (role={})", session_id, message.role);
+        tracing::debug!(
+            "Mensaje guardado en sesión {} (role={})",
+            session_id,
+            message.role
+        );
         Ok(())
     }
 
@@ -263,7 +279,11 @@ impl SessionManager {
         .execute(&self.db)
         .await
         .map_err(|e| {
-            tracing::error!("DB error actualizando contexto sesión {}: {}", session_id, e);
+            tracing::error!(
+                "DB error actualizando contexto sesión {}: {}",
+                session_id,
+                e
+            );
             crate::AlesysError::Session(format!("Error actualizando contexto: {}", e))
         })?;
 

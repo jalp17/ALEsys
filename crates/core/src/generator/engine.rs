@@ -1,8 +1,8 @@
 //! Implementación del generador de código
 
 use super::{templates, GenerateRequest, GenerationResult};
-use crate::llm::{LLMBackend, LLMEngine};
 use crate::generator::validation::SyntaxValidator;
+use crate::llm::{LLMBackend, LLMEngine};
 use anyhow::Result;
 use std::sync::Arc;
 
@@ -37,7 +37,10 @@ impl CodeGenerator {
         let full_prompt = template.render(&request.prompt, request.context.as_ref());
 
         // 3. Generar código usando LLM compartido
-        let response = self.llm.generate_code(&full_prompt, &request.language).await?;
+        let response = self
+            .llm
+            .generate_code(&full_prompt, &request.language)
+            .await?;
 
         // 4. Validar sintaxis del código generado
         let validation_result = SyntaxValidator::validate(&response, &request.language);
@@ -126,11 +129,15 @@ impl CodeGenerator {
 
         let line_count = code.lines().count();
         if line_count > 100 {
-            suggestions.push(format!("Código extenso ({} líneas), considerar dividir", line_count));
+            suggestions.push(format!(
+                "Código extenso ({} líneas), considerar dividir",
+                line_count
+            ));
         }
 
         if code.contains("unwrap()") || code.contains(".unwrap") {
-            suggestions.push("Considerar manejar errores explícitamente en vez de unwrap()".to_string());
+            suggestions
+                .push("Considerar manejar errores explícitamente en vez de unwrap()".to_string());
         }
 
         let explanation = format!(

@@ -65,7 +65,8 @@ export function NodeDetailPanel({
 
   if (!node) return null;
 
-  const sourceNum = parseInt(node.id.replace('doc:', ''));
+  // TODO: Usar sourceNum para mostrar información de documento
+  // const sourceNum = parseInt(node.id.replace('doc:', ''));
   const prValue = nodeCentrality?.values.find((v) => v.node_id === node.id);
 
   return (

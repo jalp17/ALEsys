@@ -161,9 +161,9 @@ impl BackendManager {
 
         if !venv_dir.join("bin/python").exists() {
             tracing::info!("Creando virtualenv en {}", venv_dir.display());
-            let venv_str = venv_dir
-                .to_str()
-                .ok_or_else(|| crate::AlesysError::LLM("Ruta de venv contiene caracteres no UTF-8".to_string()))?;
+            let venv_str = venv_dir.to_str().ok_or_else(|| {
+                crate::AlesysError::LLM("Ruta de venv contiene caracteres no UTF-8".to_string())
+            })?;
             let status = tokio::process::Command::new(&python_path)
                 .args(["-m", "venv", venv_str])
                 .status()

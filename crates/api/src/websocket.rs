@@ -86,7 +86,9 @@ async fn handle_websocket_chat(socket: WebSocket, state: AppState) {
                     Ok(m) => m,
                     Err(e) => {
                         tracing::debug!("WS parse error: {}", e);
-                        if !send_ws_response(&mut sender, &ws_error("Formato de mensaje invalido")).await {
+                        if !send_ws_response(&mut sender, &ws_error("Formato de mensaje invalido"))
+                            .await
+                        {
                             break;
                         }
                         continue;
@@ -113,24 +115,34 @@ async fn handle_websocket_chat(socket: WebSocket, state: AppState) {
                             Ok(emb) => emb,
                             Err(e) => {
                                 tracing::error!("WS embedding error: {}", e);
-                                if !send_ws_response(&mut sender, &ws_error("Error generando embedding")).await {
+                                if !send_ws_response(
+                                    &mut sender,
+                                    &ws_error("Error generando embedding"),
+                                )
+                                .await
+                                {
                                     break;
                                 }
                                 continue;
                             }
                         };
 
-                        let search_results =
-                            match state.graphrag.hybrid_search(&query_embedding, 5, 1).await {
-                                Ok(results) => results,
-                                Err(e) => {
-                                    tracing::error!("WS search error: {}", e);
-                                    if !send_ws_response(&mut sender, &ws_error("Error en busqueda")).await {
-                                        break;
-                                    }
-                                    continue;
+                        let search_results = match state
+                            .graphrag
+                            .hybrid_search(&query_embedding, 5, 1)
+                            .await
+                        {
+                            Ok(results) => results,
+                            Err(e) => {
+                                tracing::error!("WS search error: {}", e);
+                                if !send_ws_response(&mut sender, &ws_error("Error en busqueda"))
+                                    .await
+                                {
+                                    break;
                                 }
-                            };
+                                continue;
+                            }
+                        };
 
                         let context =
                             alesys_core::graphrag::build_rag_context(&search_results, 2000);
@@ -170,7 +182,11 @@ async fn handle_websocket_chat(socket: WebSocket, state: AppState) {
                                 }
                                 Some(Err(e)) => {
                                     tracing::error!("WS LLM error: {}", e);
-                                    send_ws_response(&mut sender, &ws_error("Error generando respuesta")).await;
+                                    send_ws_response(
+                                        &mut sender,
+                                        &ws_error("Error generando respuesta"),
+                                    )
+                                    .await;
                                     break;
                                 }
                                 None => break,
