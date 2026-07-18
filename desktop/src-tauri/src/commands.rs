@@ -1,14 +1,9 @@
-use std::path::PathBuf;
-use tauri::{
-    command, AppHandle, Manager, Runtime, WebviewWindow,
-};
-use tauri_plugin_dialog::{DialogExt, FileDialogBuilder};
-use tauri_plugin_fs::{FsExt, read_dir};
+use tauri::{command, AppHandle};
+use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_updater::UpdaterExt;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FileItem {
@@ -37,46 +32,11 @@ pub struct ExecuteResult {
     pub exit_code: i32,
 }
 
-#[command]
-pub async fn open_file_dialog<R: Runtime>(
-    app: AppHandle<R>,
-    window: WebviewWindow<R>,
-    options: Option<FileDialogOptions>,
-) -> Result<Option<Vec<PathBuf>>, String> {
-    let mut dialog = app.dialog().file();
-    
-    if let Some(opts) = options {
-        if let Some(title) = opts.title {
-            dialog = dialog.set_title(title);
-        }
-        if let Some(dir) = opts.default_path {
-            dialog = dialog.set_directory(dir);
-        }
-        if let Some(filters) = opts.filters {
-            for filter in filters {
-                dialog = dialog.add_filter(filter.name, &filter.extensions);
-            }
-        }
-        if opts.multiple.unwrap_or(false) {
-            dialog = dialog.pick_files();
-        } else {
-            dialog = dialog.pick_file();
-        }
-    } else {
-        dialog = dialog.pick_file();
-    }
-
-    dialog
-        .blocking()
-        .map_err(|e| e.to_string())
-        .map(|paths| paths.map(|p| vec![p]))
-}
-
 #[derive(Deserialize, Debug)]
 pub struct FileDialogOptions {
     pub title: Option<String>,
-    pub default_path: Option<PathBuf>,
     pub filters: Option<Vec<FileFilter>>,
+    #[allow(dead_code)]
     pub multiple: Option<bool>,
 }
 
@@ -87,161 +47,159 @@ pub struct FileFilter {
 }
 
 #[command]
-pub async fn open_folder_dialog<R: Runtime>(
-    app: AppHandle<R>,
-    _window: WebviewWindow<R>,
+pub async fn open_file_dialog(
+    app: AppHandle,
     options: Option<FileDialogOptions>,
-) -> Result<Option<PathBuf>, String> {
+) -> Result<Option<Vec<String>>, String> {
     let mut dialog = app.dialog().file();
-    
-    if let Some(opts) = options {
-        if let Some(title) = opts.title {
-            dialog = dialog.set_title(title);
-        }
-        if let Some(dir) = opts.default_path {
-            dialog = dialog.set_directory(dir);
-        }
-    }
-    
-    dialog
-        .pick_folder()
-        .blocking()
-        .map_err(|e| e.to_string())
-}
 
-#[command]
-pub async fn save_file_dialog<R: Runtime>(
-    app: AppHandle<R>,
-    _window: WebviewWindow<R>,
-    options: Option<FileDialogOptions>,
-) -> Result<Option<PathBuf>, String> {
-    let mut dialog = app.dialog().file();
-    
     if let Some(opts) = options {
         if let Some(title) = opts.title {
             dialog = dialog.set_title(title);
-        }
-        if let Some(dir) = opts.default_path {
-            dialog = dialog.set_directory(dir);
         }
         if let Some(filters) = opts.filters {
             for filter in filters {
-                dialog = dialog.add_filter(filter.name, &filter.extensions);
+                dialog = dialog.add_filter(filter.name, &filter.extensions.iter().map(|s| s.as_str()).collect::<Vec<_>>());
+            }
+        }
+        if opts.multiple.unwrap_or(false) {
+            let result = dialog.blocking_pick_files();
+            return Ok(result.map(|v| v.into_iter().map(|p| p.to_string()).collect()));
+        }
+    }
+
+    let result = dialog.blocking_pick_file();
+    Ok(result.map(|p| vec![p.to_string()]))
+}
+
+#[command]
+pub async fn open_folder_dialog(
+    app: AppHandle,
+    options: Option<FileDialogOptions>,
+) -> Result<Option<String>, String> {
+    let mut dialog = app.dialog().file();
+
+    if let Some(opts) = options {
+        if let Some(title) = opts.title {
+            dialog = dialog.set_title(title);
+        }
+    }
+
+    let result = dialog.blocking_pick_folder();
+    Ok(result.map(|p| p.to_string()))
+}
+
+#[command]
+pub async fn save_file_dialog(
+    app: AppHandle,
+    options: Option<FileDialogOptions>,
+) -> Result<Option<String>, String> {
+    let mut dialog = app.dialog().file();
+
+    if let Some(opts) = options {
+        if let Some(title) = opts.title {
+            dialog = dialog.set_title(title);
+        }
+        if let Some(filters) = opts.filters {
+            for filter in filters {
+                dialog = dialog.add_filter(filter.name, &filter.extensions.iter().map(|s| s.as_str()).collect::<Vec<_>>());
             }
         }
     }
-    
-    dialog
-        .save_file()
-        .blocking()
+
+    let result = dialog.blocking_save_file();
+    Ok(result.map(|p| p.to_string()))
+}
+
+#[command]
+pub async fn read_file(path: String) -> Result<String, String> {
+    tokio::fs::read_to_string(&path)
+        .await
         .map_err(|e| e.to_string())
 }
 
 #[command]
-pub async fn read_file<R: Runtime>(
-    app: AppHandle<R>,
-    path: String,
-) -> Result<String, String> {
-    let fs = app.fs();
-    fs.read_to_string(&path).await.map_err(|e| e.to_string())
+pub async fn write_file(path: String, content: String) -> Result<(), String> {
+    tokio::fs::write(&path, content.as_bytes())
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[command]
-pub async fn write_file<R: Runtime>(
-    app: AppHandle<R>,
-    path: String,
-    content: String,
-) -> Result<(), String> {
-    let fs = app.fs();
-    fs.write(&path, content.as_bytes()).await.map_err(|e| e.to_string())
-}
+pub async fn list_directory(path: String) -> Result<Vec<FileItem>, String> {
+    let mut entries = tokio::fs::read_dir(&path)
+        .await
+        .map_err(|e| e.to_string())?;
 
-#[command]
-pub async fn list_directory<R: Runtime>(
-    app: AppHandle<R>,
-    path: String,
-) -> Result<Vec<FileItem>, String> {
-    let fs = app.fs();
-    let entries = fs.read_dir(&path).await.map_err(|e| e.to_string())?;
-    
     let mut items = Vec::new();
-    for entry in entries {
-        let metadata = entry.metadata().await;
-        let (size, modified) = if let Ok(m) = metadata {
-            (Some(m.len()), m.modified().ok().map(|t| {
-                chrono::DateTime::<chrono::Utc>::from(t).to_rfc3339()
-            }))
-        } else {
-            (None, None)
-        };
-        
+    while let Some(entry) = entries.next_entry().await.map_err(|e| e.to_string())? {
+        let metadata = entry.metadata().await.map_err(|e| e.to_string())?;
         items.push(FileItem {
             name: entry.file_name().to_string_lossy().to_string(),
             path: entry.path().to_string_lossy().to_string(),
-            is_dir: entry.file_type().await.map(|t| t.is_dir()).unwrap_or(false),
-            size,
-            modified,
+            is_dir: metadata.is_dir(),
+            size: Some(metadata.len()),
+            modified: metadata.modified().ok().map(|t| {
+                let dt: chrono::DateTime<chrono::Utc> = t.into();
+                dt.to_rfc3339()
+            }),
         });
     }
-    
+
     Ok(items)
 }
 
 #[command]
-pub async fn create_directory<R: Runtime>(
-    app: AppHandle<R>,
-    path: String,
-) -> Result<(), String> {
-    let fs = app.fs();
-    fs.create_dir_all(&path).await.map_err(|e| e.to_string())
+pub async fn create_directory(path: String) -> Result<(), String> {
+    tokio::fs::create_dir_all(&path)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[command]
-pub async fn delete_file<R: Runtime>(
-    app: AppHandle<R>,
-    path: String,
-) -> Result<(), String> {
-    let fs = app.fs();
-    let metadata = fs.metadata(&path).await.map_err(|e| e.to_string())?;
-    
+pub async fn delete_file(path: String) -> Result<(), String> {
+    let metadata = tokio::fs::metadata(&path)
+        .await
+        .map_err(|e| e.to_string())?;
+
     if metadata.is_dir() {
-        fs.remove_dir_all(&path).await.map_err(|e| e.to_string())
+        tokio::fs::remove_dir_all(&path)
+            .await
+            .map_err(|e| e.to_string())
     } else {
-        fs.remove_file(&path).await.map_err(|e| e.to_string())
+        tokio::fs::remove_file(&path)
+            .await
+            .map_err(|e| e.to_string())
     }
 }
 
 #[command]
-pub async fn copy_file<R: Runtime>(
-    app: AppHandle<R>,
-    from: String,
-    to: String,
-) -> Result<(), String> {
-    let fs = app.fs();
-    fs.copy(&from, &to).await.map_err(|e| e.to_string())
+pub async fn copy_file(from: String, to: String) -> Result<(), String> {
+    tokio::fs::copy(&from, &to)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 #[command]
-pub async fn move_file<R: Runtime>(
-    app: AppHandle<R>,
-    from: String,
-    to: String,
-) -> Result<(), String> {
-    let fs = app.fs();
-    fs.rename(&from, &to).await.map_err(|e| e.to_string())
+pub async fn move_file(from: String, to: String) -> Result<(), String> {
+    tokio::fs::rename(&from, &to)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[command]
-pub async fn get_system_info<R: Runtime>(
-    _app: AppHandle<R>,
-) -> Result<SystemInfo, String> {
+pub async fn get_system_info() -> Result<SystemInfo, String> {
     let sys = sysinfo::System::new_all();
-    
+
     Ok(SystemInfo {
         os: std::env::consts::OS.to_string(),
         arch: std::env::consts::ARCH.to_string(),
         version: std::env::consts::OS.to_string(),
-        hostname: hostname::get().unwrap_or_default().to_string_lossy().to_string(),
+        hostname: hostname::get()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string(),
         memory_total: sys.total_memory(),
         memory_available: sys.available_memory(),
         cpu_count: sys.cpus().len(),
@@ -249,8 +207,8 @@ pub async fn get_system_info<R: Runtime>(
 }
 
 #[command]
-pub async fn show_notification<R: Runtime>(
-    app: AppHandle<R>,
+pub async fn show_notification(
+    app: AppHandle,
     title: String,
     body: String,
 ) -> Result<(), String> {
@@ -263,18 +221,15 @@ pub async fn show_notification<R: Runtime>(
 }
 
 #[command]
-pub async fn execute_command<R: Runtime>(
-    _app: AppHandle<R>,
+pub async fn execute_command(
     command: String,
     args: Vec<String>,
 ) -> Result<ExecuteResult, String> {
-    use std::process::Command;
-    
-    let output = Command::new(&command)
+    let output = std::process::Command::new(&command)
         .args(&args)
         .output()
         .map_err(|e| e.to_string())?;
-    
+
     Ok(ExecuteResult {
         stdout: String::from_utf8_lossy(&output.stdout).to_string(),
         stderr: String::from_utf8_lossy(&output.stderr).to_string(),
@@ -283,37 +238,35 @@ pub async fn execute_command<R: Runtime>(
 }
 
 #[command]
-pub async fn get_clipboard_text<R: Runtime>(
-    app: AppHandle<R>,
-) -> Result<String, String> {
+pub async fn get_clipboard_text(app: AppHandle) -> Result<String, String> {
     app.clipboard()
         .read_text()
         .map_err(|e| e.to_string())
 }
 
 #[command]
-pub async fn set_clipboard_text<R: Runtime>(
-    app: AppHandle<R>,
-    text: String,
-) -> Result<(), String> {
+pub async fn set_clipboard_text(app: AppHandle, text: String) -> Result<(), String> {
     app.clipboard()
         .write_text(text)
         .map_err(|e| e.to_string())
 }
 
 #[command]
-pub async fn check_for_updates<R: Runtime>(
-    app: AppHandle<R>,
-) -> Result<Option<String>, String> {
-    let updater = app.updater();
+pub async fn check_for_updates(app: AppHandle) -> Result<Option<String>, String> {
+    let updater = app.updater().map_err(|e| e.to_string())?;
     let update = updater.check().await.map_err(|e| e.to_string())?;
     Ok(update.map(|u| u.version.to_string()))
 }
 
 #[command]
-pub async fn install_update<R: Runtime>(
-    app: AppHandle<R>,
-) -> Result<(), String> {
-    let updater = app.updater();
-    updater.install().await.map_err(|e| e.to_string())
+pub async fn install_update(app: AppHandle) -> Result<(), String> {
+    let updater = app.updater().map_err(|e| e.to_string())?;
+    let update = updater.check().await.map_err(|e| e.to_string())?;
+    if let Some(update) = update {
+        update
+            .download_and_install(|_, _| {}, || {})
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
