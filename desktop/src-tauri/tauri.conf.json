@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "identifier": "com.alesys.app",
   "build": {
-    "beforeDevCommand": "pnpm dev",
+    "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:5173",
-    "beforeBuildCommand": "pnpm build",
+    "beforeBuildCommand": "npm run build:desktop",
     "frontendDist": "../webui/dist"
   },
   "app": {
@@ -58,22 +58,23 @@
         "priority": "optional"
       },
       "rpm": {
-        "depends": ["webkit2gtk4.1", "libappindicator-gtk3", "librsvg2", "docker"],
-        "license": "AGPL-3.0-only"
+        "depends": ["webkit2gtk4.1", "libappindicator-gtk3", "librsvg2", "docker"]
       },
       "appimage": {
         "bundleMediaFramework": false
       }
     },
     "macOS": {
-      "minimumSystemVersion": "10.15"
+      "minimumSystemVersion": "10.15",
+      "dmg": {
+        "windowSize": { "width": 540, "height": 380 }
+      }
     },
-    "dmg": {
-      "windowSize": { "width": 540, "height": 380 }
-    },
-    "nsis": {
-      "installerIcon": "icons/icon.ico",
-      "headerImage": "icons/icon.ico"
+    "windows": {
+      "nsis": {
+        "installerIcon": "icons/icon.ico",
+        "headerImage": "icons/icon.ico"
+      }
     }
   },
   "plugins": {
