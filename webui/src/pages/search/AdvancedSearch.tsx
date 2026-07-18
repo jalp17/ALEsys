@@ -159,7 +159,7 @@ export function AdvancedSearch() {
     <div className="flex h-full">
       {/* Sidebar */}
       <SearchSidebar
-        filters={query.filters!}
+        filters={query.filters || { doc_types: [], areas: [], subareas: [] }}
         onFiltersChange={handleFiltersChange}
         isOpen={sidebarOpen}
         onToggle={() => setSidebarOpen(!sidebarOpen)}
