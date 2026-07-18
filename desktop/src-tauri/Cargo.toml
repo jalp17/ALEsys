@@ -1,0 +1,46 @@
+[package]
+name = "alesys-desktop"
+version = "0.1.0"
+edition = "2021"
+description = "ALEsys Desktop - GraphRAG-PG IDE"
+authors = ["Jesus <jesus.leonpor@gmail.com>"]
+license = "AGPL-3.0-only"
+repository = "https://github.com/jalp17/ALEsys"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# Tauri
+tauri = { version = "2", features = [
+    "tray-icon",
+    "image-png",
+] }
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-shell = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-clipboard-manager = "2"
+tauri-plugin-process = "2"
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-store = "2"
+tauri-plugin-opener = "2"
+
+# System info
+sysinfo = "0.30"
+hostname = "0.3"
+
+# Async runtime
+tokio = { version = "1", features = ["fs"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+
+# Local crates
+alesys-core = { path = "../../crates/core", features = ["sandbox", "editor"] }
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]
