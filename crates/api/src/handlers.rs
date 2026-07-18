@@ -2,6 +2,7 @@
 
 use crate::state::AppState;
 use alesys_core::graphrag::SearchResultSource;
+use alesys_core::graphrag::search::AdvancedSearchQuery;
 use alesys_core::llm::{ChatMessage, LLMEngine};
 use alesys_core::session::ChatMessage as SessionChatMessage;
 use axum::{
@@ -554,6 +555,55 @@ pub async fn export_graph_json(
                 code: "INTERNAL".into(),
             }
         })?;
+
+    Ok(Json(response))
+}
+
+/// Handler para POST /api/v1/search/advanced
+///
+/// Búsqueda híbrida avanzada con RRF, filtros múltiples, query expansion
+/// y highlighting de términos.
+pub async fn advanced_search_handler(
+    State(state): State<AppState>,
+    Json(payload): Json<AdvancedSearchQuery>,
+) -> Result<impl IntoResponse, ApiError> {
+    tracing::info!(
+        "Advanced search: '{}' (filters: types={}, areas={}, date={}-{})",
+        payload.query,
+        payload.filters.doc_types.len(),
+        payload.filters.areas.len(),
+        payload.filters.date_from.as_deref().unwrap_or("*"),
+        payload.filters.date_to.as_deref().unwrap_or("*"),
+    );
+
+    // Generate embedding if query is non-empty
+    let embedding = if !payload.query.is_empty() {
+        let emb = state.embedder.encode(&payload.query).map_err(|e| {
+            tracing::error!("Error generando embedding: {}", e);
+            ApiError {
+                error: "Error generando embedding".into(),
+                code: "INTERNAL".into(),
+            }
+        })?;
+        Some(emb)
+    } else {
+        None
+    };
+
+    let response = alesys_core::graphrag::search::advanced_search(
+        &state.db,
+        &payload,
+        embedding.as_deref(),
+        Some(&state.graphrag),
+    )
+    .await
+    .map_err(|e| {
+        tracing::error!("Error en advanced search: {}", e);
+        ApiError {
+            error: "Error en búsqueda avanzada".into(),
+            code: "INTERNAL".into(),
+        }
+    })?;
 
     Ok(Json(response))
 }

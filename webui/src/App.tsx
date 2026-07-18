@@ -8,6 +8,7 @@ import { Generate } from './pages/Generate';
 import { Sessions } from './pages/Sessions';
 import { Settings } from './pages/Settings';
 import { GraphViewer } from './pages/graph';
+import { AdvancedSearch } from './pages/search';
 
 const queryClient = new QueryClient();
 
@@ -25,6 +26,7 @@ function App() {
             <Route path="/sessions" element={<Sessions />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/graph" element={<GraphViewer />} />
+            <Route path="/search" element={<AdvancedSearch />} />
           </Routes>
         </Layout>
       </BrowserRouter>
