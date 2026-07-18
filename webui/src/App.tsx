@@ -9,6 +9,7 @@ import { Sessions } from './pages/Sessions';
 import { Settings } from './pages/Settings';
 import { GraphViewer } from './pages/graph';
 import { AdvancedSearch } from './pages/search';
+import { EditorPage } from './pages/editor';
 
 const queryClient = new QueryClient();
 
@@ -23,6 +24,7 @@ function App() {
             <Route path="/" element={<Chat />} />
             <Route path="/chat" element={<Chat />} />
             <Route path="/generate" element={<Generate />} />
+            <Route path="/editor" element={<EditorPage />} />
             <Route path="/sessions" element={<Sessions />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/graph" element={<GraphViewer />} />

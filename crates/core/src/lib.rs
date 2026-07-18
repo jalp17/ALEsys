@@ -8,13 +8,18 @@
 //!   - templates: PromptTemplate por lenguaje
 //!   - validation: SyntaxValidator post-generacion
 //! - session: Gestion de sesiones multi-usuario (Fase 3)
-//! - sandbox: Ejecucion de codigo en Docker (Fase 7)
+//! - sandbox: Ejecucion de codigo en Docker (Fase 7) - feature gated
 
 pub mod generator;
 pub mod graphrag;
 pub mod llm;
-pub mod sandbox;
 pub mod session; // Fase 3 - Gestion de sesiones multi-usuario
+
+#[cfg(feature = "sandbox")]
+pub mod sandbox;
+
+#[cfg(feature = "editor")]
+pub mod editor;
 
 pub use generator::{CodeGenerator, GenerateRequest, GenerationResult};
 pub use graphrag::GraphRAG;
