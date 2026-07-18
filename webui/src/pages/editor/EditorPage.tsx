@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { FileTree } from '../../components/editor/FileTree';
 import { MonacoEditor } from '../../components/editor/MonacoEditor';
+import { Terminal } from '../../components/editor/Terminal';
 import {
   readFile,
   writeFile,
@@ -255,7 +256,7 @@ export default function EditorPage() {
 
         {/* Output / Terminal */}
         {output && (
-          <div className="h-48 border-t border-gray-700 flex flex-col bg-dark-950">
+          <div className="h-52 border-t border-gray-700 flex flex-col">
             <div className="flex items-center justify-between px-3 py-1 bg-dark-800 border-b border-gray-700">
               <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
                 Output
@@ -279,13 +280,17 @@ export default function EditorPage() {
                 </button>
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto p-3 font-mono text-sm">
-              {output.stdout && (
-                <div className="text-gray-300 whitespace-pre-wrap">{output.stdout}</div>
-              )}
-              {output.stderr && (
-                <div className="text-red-400 whitespace-pre-wrap mt-1">{output.stderr}</div>
-              )}
+            <div className="flex-1 min-h-0">
+              <Terminal
+                output={
+                  output.stdout
+                    ? output.stderr
+                      ? `${output.stdout}\n\n${output.stderr}`
+                      : output.stdout
+                    : output.stderr || 'No output'
+                }
+                isRunning={false}
+              />
             </div>
           </div>
         )}
