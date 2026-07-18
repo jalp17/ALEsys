@@ -599,6 +599,101 @@ pub fn build_search_sql(query: &AdvancedSearchQuery) -> (String, Vec<String>) {
     (sql, bind_values)
 }
 
+/// Construye SQL de conteo para la misma query (sin LIMIT/OFFSET)
+pub fn build_search_sql_count(query: &AdvancedSearchQuery) -> (String, Vec<String>) {
+    let mut conditions: Vec<String> = Vec::new();
+    let mut bind_values: Vec<String> = Vec::new();
+    let mut param_idx = 1;
+
+    // Full-text search condition
+    if !query.query.is_empty() {
+        conditions.push(format!(
+            "LOWER(f.contenido) LIKE ${}",
+            param_idx
+        ));
+        bind_values.push(format!("%{}%", query.query.to_lowercase()));
+        param_idx += 1;
+    }
+
+    // Doc type filter
+    if !query.filters.doc_types.is_empty() {
+        let placeholders: Vec<String> = query
+            .filters
+            .doc_types
+            .iter()
+            .map(|_| {
+                let p = format!("${}", param_idx);
+                param_idx += 1;
+                p
+            })
+            .collect();
+        conditions.push(format!("d.tipo IN ({})", placeholders.join(", ")));
+        bind_values.extend(query.filters.doc_types.iter().cloned());
+    }
+
+    // Area filter
+    if !query.filters.areas.is_empty() {
+        let placeholders: Vec<String> = (0..query.filters.areas.len())
+            .map(|_| {
+                let p = format!("${}", param_idx);
+                param_idx += 1;
+                p
+            })
+            .collect();
+        conditions.push(format!("d.area_id IN ({})", placeholders.join(", ")));
+        bind_values.extend(query.filters.areas.iter().map(|a| a.to_string()));
+    }
+
+    // Subarea filter
+    if !query.filters.subareas.is_empty() {
+        let placeholders: Vec<String> = (0..query.filters.subareas.len())
+            .map(|_| {
+                let p = format!("${}", param_idx);
+                param_idx += 1;
+                p
+            })
+            .collect();
+        conditions.push(format!("d.subarea_id IN ({})", placeholders.join(", ")));
+        bind_values.extend(query.filters.subareas.iter().map(|s| s.to_string()));
+    }
+
+    // Date range filter
+    if let Some(ref date_from) = query.filters.date_from {
+        conditions.push(format!("d.creado_en >= ${}", param_idx));
+        bind_values.push(date_from.clone());
+        param_idx += 1;
+    }
+    if let Some(ref date_to) = query.filters.date_to {
+        conditions.push(format!("d.creado_en <= ${}", param_idx));
+        bind_values.push(date_to.clone());
+        param_idx += 1;
+    }
+
+    // Content pattern filter
+    if let Some(ref pattern) = query.filters.content_pattern {
+        conditions.push(format!("LOWER(d.ruta_relativa) LIKE ${}", param_idx));
+        bind_values.push(format!("%{}%", pattern.to_lowercase()));
+    }
+
+    let where_clause = if conditions.is_empty() {
+        String::new()
+    } else {
+        format!("WHERE {}", conditions.join(" AND "))
+    };
+
+    let sql = format!(
+        r#"
+        SELECT COUNT(*) as cnt
+        FROM fragmentos f
+        JOIN documentos d ON d.id = f.documento_id
+        {}
+        "#,
+        where_clause
+    );
+
+    (sql, bind_values)
+}
+
 // =============================================================================
 // Advanced Search Executor
 // =============================================================================
@@ -613,8 +708,8 @@ pub async fn advanced_search(
     let start = std::time::Instant::now();
     let mut expanded_terms: Vec<String> = Vec::new();
 
-    // 1. Query expansion
-    let search_terms = if query.expansion.enabled {
+    // 1. Query expansion (only if query is non-empty)
+    let search_terms = if query.expansion.enabled && !query.query.is_empty() {
         let mut terms = expand_query(db, &query.query, query.expansion.max_terms).await?;
         expanded_terms = terms.clone();
         let mut all_terms = vec![query.query.clone()];
@@ -624,8 +719,26 @@ pub async fn advanced_search(
         query.query.clone()
     };
 
-    // 2. SQL/Full-text search
+    // 2. SQL/Full-text search with count
     let (sql, bind_values) = build_search_sql(query);
+
+    // Execute count query first
+    let (count_sql, count_binds) = build_search_sql_count(query);
+    let total = {
+        let mut count_query = sqlx::query(&count_sql);
+        for val in &count_binds {
+            count_query = count_query.bind(val);
+        }
+        count_query
+            .fetch_one(db)
+            .await
+            .map(|row| {
+                let cnt: i64 = row.get("cnt");
+                cnt as usize
+            })
+            .unwrap_or(0)
+    };
+
     let mut sqlx_query = sqlx::query(&sql);
     for val in &bind_values {
         sqlx_query = sqlx_query.bind(val);
@@ -645,8 +758,9 @@ pub async fn advanced_search(
         .enumerate()
         .map(|(i, row)| {
             let frag_id: i32 = row.get("fragment_id");
-            // Relevance score: higher for earlier matches
-            let score = 1.0 / (1.0 + i as f32 * 0.1);
+            // Relevance score: higher for earlier matches, normalized 0..1
+            let total_rows = sql_rows.len().max(1);
+            let score = 1.0 - (i as f32 / total_rows as f32);
             (frag_id, score)
         })
         .collect();
@@ -715,7 +829,13 @@ pub async fn advanced_search(
 
             if !new_doc_ids.is_empty() {
                 let graph_rows = sqlx::query(
-                    "SELECT id FROM fragmentos WHERE documento_id = ANY($1) LIMIT 20",
+                    r#"
+                    SELECT f.id as frag_id, f.documento_id, f.contenido, d.ruta_relativa
+                    FROM fragmentos f
+                    JOIN documentos d ON d.id = f.documento_id
+                    WHERE f.documento_id = ANY($1)
+                    LIMIT 20
+                    "#,
                 )
                 .bind(&new_doc_ids)
                 .fetch_all(db)
@@ -726,14 +846,17 @@ pub async fn advanced_search(
                 })?;
 
                 for row in graph_rows {
-                    let frag_id: i32 = row.get("id");
+                    let frag_id: i32 = row.get("frag_id");
+                    let doc_id: i32 = row.get("documento_id");
+                    let content: String = row.get("contenido");
+                    let path: Option<String> = row.get("ruta_relativa");
                     results.push(crate::graphrag::SearchResult {
                         fragment_id: frag_id,
-                        document_id: 0,
-                        content: String::new(),
+                        document_id: doc_id,
+                        content,
                         similarity: 0.3,
                         source: crate::graphrag::SearchResultSource::Graph,
-                        doc_path: None,
+                        doc_path: path,
                     });
                 }
             }
@@ -811,7 +934,6 @@ pub async fn advanced_search(
         }
     }
 
-    let total = results.len();
     let took_ms = start.elapsed().as_millis() as u64;
 
     tracing::info!(

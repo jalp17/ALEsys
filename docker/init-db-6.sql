@@ -13,7 +13,7 @@ CREATE INDEX IF NOT EXISTS idx_documentos_fecha ON documentos(creado_en);
 
 -- Composite index for multi-filter queries
 CREATE INDEX IF NOT EXISTS idx_documentos_tipo_area ON documentos(tipo, area_id);
-CREATE INDEX IF NOT EXISTS idx_documentos_tipo_fecha ON documentos(tipo, CREATED_EN);
+CREATE INDEX IF NOT EXISTS idx_documentos_tipo_fecha ON documentos(tipo, creado_en);
 
 -- Fragment content index for full-text search (GIN index for LIKE queries)
 CREATE INDEX IF NOT EXISTS idx_fragmentos_contenido ON fragmentos USING gin(to_tsvector('spanish', contenido));
