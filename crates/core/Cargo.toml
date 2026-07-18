@@ -26,6 +26,10 @@ moka.workspace = true
 # Graph data structures
 petgraph = "0.8"
 
+# Phase 7: Sandbox & Editor
+bollard = { workspace = true, optional = true }
+similar = { workspace = true, optional = true }
+
 # LLM inference
 mistralrs = { workspace = true, optional = true }
 llama_cpp = { workspace = true, optional = true }
@@ -57,3 +61,5 @@ candle-backend = [
 vllm-backend = ["dep:reqwest"]
 transformers-backend = ["dep:reqwest"]
 http-backend = ["dep:reqwest"]
+sandbox = ["dep:bollard"]
+editor = ["dep:similar"]

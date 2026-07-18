@@ -45,6 +45,12 @@ use handlers::{
     get_session_history, get_shortest_path, graph_stats, health_handler, list_sessions,
     search_graph,
 };
+
+// Phase 7 handlers (feature gated)
+#[cfg(feature = "sandbox")]
+use handlers::execute_handler;
+#[cfg(feature = "editor")]
+use handlers::{list_files_handler, read_file_handler, write_file_handler, modify_file_handler};
 use state::AppState;
 use websocket::ws_chat_handler;
 
@@ -226,6 +232,17 @@ async fn main() -> Result<()> {
         .route("/graph/export", get(export_graph_json))
         .route("/search/advanced", post(advanced_search_handler))
         .route("/config", get(get_config));
+
+    // Phase 7 routes (feature gated)
+    #[cfg(feature = "sandbox")]
+    let api_v1 = api_v1.route("/execute", post(execute_handler));
+
+    #[cfg(feature = "editor")]
+    let api_v1 = api_v1
+        .route("/files", get(list_files_handler))
+        .route("/files/:path", get(read_file_handler))
+        .route("/files", post(write_file_handler))
+        .route("/modify", post(modify_file_handler));
 
     let app = Router::new()
         .nest("/api/v1", api_v1.clone())

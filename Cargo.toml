@@ -66,3 +66,7 @@ tokio-stream = "0.1"
 futures = "0.3"
 metrics = "0.22"
 metrics-exporter-prometheus = "0.15"
+
+# Phase 7: Sandbox & Editor
+bollard = "0.17"
+similar = "2.6"
