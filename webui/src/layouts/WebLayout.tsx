@@ -24,6 +24,9 @@ export function WebLayout({ children }: WebLayoutProps) {
           <Link to="/generate" className="text-gray-300 hover:text-primary-400 transition">
             Generar
           </Link>
+          <Link to="/editor" className="text-gray-300 hover:text-primary-400 transition">
+            Editor
+          </Link>
           <Link to="/sessions" className="text-gray-300 hover:text-primary-400 transition">
             Sesiones
           </Link>
