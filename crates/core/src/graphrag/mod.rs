@@ -5,6 +5,7 @@
 pub mod algorithms;
 pub mod api;
 pub mod query;
+pub mod search;
 
 use crate::Result;
 use moka::sync::Cache;
@@ -326,6 +327,11 @@ impl GraphRAG {
         });
         tracing::debug!("hybrid_search total: {} resultados", results.len());
         Ok(results)
+    }
+
+    /// Expande documentos usando el grafo (wrapper público para testing)
+    pub fn expand_with_graph_test(&self, doc_ids: &[i32], degrees: usize) -> Vec<i32> {
+        self.expand_with_graph(doc_ids, degrees)
     }
 
     fn expand_with_graph(&self, doc_ids: &[i32], degrees: usize) -> Vec<i32> {
