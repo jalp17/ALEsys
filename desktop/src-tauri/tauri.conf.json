@@ -1,0 +1,105 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "ALEsys",
+  "version": "0.1.0",
+  "identifier": "com.alesys.app",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../webui/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "ALEsys - GraphRAG-PG IDE",
+        "width": 1400,
+        "height": 900,
+        "minWidth": 1000,
+        "minHeight": 600,
+        "resizable": true,
+        "fullscreen": false,
+        "decorations": true,
+        "center": true,
+        "label": "main",
+        "url": "/",
+        "dragDropEnabled": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self' data: blob: 'unsafe-inline' 'unsafe-eval'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' http://localhost:3000 ws://localhost:3000;"
+    },
+    "trayIcon": {
+      "iconPath": "icons/32x32.png",
+      "iconAsTemplate": true,
+      "menuOnLeftClick": false
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "resources": [],
+    "externalBin": [],
+    "copyright": "Copyright © 2024 Jesus Leonpor",
+    "category": "DeveloperTool",
+    "shortDescription": "GraphRAG-PG IDE",
+    "longDescription": "ALEsys: GraphRAG-powered IDE with code generation, execution sandbox, and knowledge graph.",
+    "linux": {
+      "deb": {
+        "depends": ["libwebkit2gtk-4.1-0", "libayatana-appindicator3-1", "librsvg2-common", "docker.io"],
+        "section": "devel",
+        "priority": "optional"
+      },
+      "rpm": {
+        "depends": ["webkit2gtk4.1", "libappindicator-gtk3", "librsvg2", "docker"],
+        "license": "AGPL-3.0-only"
+      },
+      "appimage": {
+        "bundleMediaFramework": false
+      }
+    },
+    "macOS": {
+      "minimumSystemVersion": "10.15"
+    },
+    "dmg": {
+      "windowSize": { "width": 540, "height": 380 }
+    },
+    "nsis": {
+      "installerIcon": "icons/icon.ico",
+      "headerImage": "icons/icon.ico"
+    }
+  },
+  "plugins": {
+    "dialog": {
+      "all": true
+    },
+    "fs": {
+      "scope": ["**"]
+    },
+    "shell": {
+      "open": true,
+      "scope": [
+        { "name": "docker", "cmd": "docker", "args": true },
+        { "name": "python3", "cmd": "python3", "args": true },
+        { "name": "node", "cmd": "node", "args": true },
+        { "name": "rustc", "cmd": "rustc", "args": true },
+        { "name": "cargo", "cmd": "cargo", "args": true }
+      ]
+    },
+    "updater": {
+      "active": true,
+      "endpoints": ["https://github.com/jalp17/ALEsys/releases/latest/download/latest.json"],
+      "dialog": true
+    },
+    "store": {
+      "filename": "alesys-store.json"
+    }
+  }
+}
