@@ -242,11 +242,7 @@ impl ApiNode {
 
 impl ApiEdge {
     /// Crear desde EdgeType + IDs
-    pub fn from_edge(
-        origen_id: i32,
-        destino_id: i32,
-        edge_type: &super::EdgeType,
-    ) -> Self {
+    pub fn from_edge(origen_id: i32, destino_id: i32, edge_type: &super::EdgeType) -> Self {
         let (tipo_str, context, weight, color) = match edge_type {
             super::EdgeType::WikiLink { context } => (
                 "wiki_link".to_string(),
@@ -285,8 +281,8 @@ fn node_color(doc_type: &str, community: Option<usize>) -> String {
     // Si tiene comunidad, usar color de comunidad
     if let Some(comm_id) = community {
         let colors = [
-            "#E91E63", "#9C27B0", "#3F51B5", "#03A9F4", "#009688",
-            "#8BC34A", "#CDDC39", "#FFC107", "#FF5722", "#795548",
+            "#E91E63", "#9C27B0", "#3F51B5", "#03A9F4", "#009688", "#8BC34A", "#CDDC39", "#FFC107",
+            "#FF5722", "#795548",
         ];
         return colors[comm_id % colors.len()].to_string();
     }
@@ -303,11 +299,7 @@ fn node_color(doc_type: &str, community: Option<usize>) -> String {
 
 impl GraphStats {
     /// Calcular densidad del grafo
-    pub fn calculate(
-        total_nodes: usize,
-        total_edges: usize,
-        num_communities: usize,
-    ) -> Self {
+    pub fn calculate(total_nodes: usize, total_edges: usize, num_communities: usize) -> Self {
         let density = if total_nodes > 1 {
             2.0 * total_edges as f64 / (total_nodes as f64 * (total_nodes as f64 - 1.0))
         } else {
@@ -348,7 +340,9 @@ mod tests {
         let edge = ApiEdge::from_edge(
             1,
             2,
-            &super::super::EdgeType::WikiLink { context: "test".to_string() },
+            &super::super::EdgeType::WikiLink {
+                context: "test".to_string(),
+            },
         );
         let json = serde_json::to_string(&edge).unwrap();
         assert!(json.contains("\"source\":\"doc:1\""));

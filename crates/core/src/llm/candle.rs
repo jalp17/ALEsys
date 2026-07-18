@@ -4,10 +4,10 @@
 //! Soporta CUDA, Metal y CPU. Modelos desde HuggingFace Hub.
 
 use super::config::{GpuType, ModelArch, QuantType};
-use async_trait::async_trait;
-use futures::stream::BoxStream;
 use super::{ChatMessage, ChatResponse, LLMConfig, LLMEngine, StreamChunk};
 use crate::Result;
+use async_trait::async_trait;
+use futures::stream::BoxStream;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokenizers::Tokenizer;

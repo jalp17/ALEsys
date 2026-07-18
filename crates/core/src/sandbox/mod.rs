@@ -129,8 +129,8 @@ pub async fn execute(
     language: Language,
     config: &SandboxConfig,
 ) -> Result<ExecutionResult, SandboxError> {
-    let docker = Docker::connect_with_local_defaults()
-        .map_err(|e| SandboxError::Docker(e.to_string()))?;
+    let docker =
+        Docker::connect_with_local_defaults().map_err(|e| SandboxError::Docker(e.to_string()))?;
 
     // Test Docker connection
     docker
@@ -344,7 +344,10 @@ mod tests {
     fn test_language_from_str() {
         assert_eq!("python".parse::<Language>().unwrap(), Language::Python);
         assert_eq!("py".parse::<Language>().unwrap(), Language::Python);
-        assert_eq!("javascript".parse::<Language>().unwrap(), Language::JavaScript);
+        assert_eq!(
+            "javascript".parse::<Language>().unwrap(),
+            Language::JavaScript
+        );
         assert_eq!("js".parse::<Language>().unwrap(), Language::JavaScript);
         assert_eq!("rust".parse::<Language>().unwrap(), Language::Rust);
         assert_eq!("rs".parse::<Language>().unwrap(), Language::Rust);

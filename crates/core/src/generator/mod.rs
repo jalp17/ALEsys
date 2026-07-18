@@ -19,14 +19,14 @@ pub use validation::SyntaxValidator;
 pub struct GenerateRequest {
     /// Prompt natural del usuario
     pub prompt: String,
-    
+
     /// Lenguaje objetivo (python, javascript, rust, etc.)
     pub language: String,
-    
+
     /// Contexto opcional de archivos existentes
     #[serde(default)]
     pub context: Option<BuildContext>,
-    
+
     /// Número máximo de tokens a generar
     #[serde(default = "default_max_tokens")]
     pub max_tokens: usize,
@@ -65,11 +65,11 @@ impl GenerateRequest {
 pub struct BuildContext {
     /// Tipo de proyecto (library, application, etc.)
     pub project_type: Option<String>,
-    
+
     /// Lista de archivos existentes con su contenido
     #[serde(default)]
     pub existing_files: Vec<FileInfo>,
-    
+
     /// Dependencias del proyecto
     #[serde(default)]
     pub dependencies: Vec<String>,
@@ -112,7 +112,7 @@ impl Default for BuildContext {
 pub struct FileInfo {
     /// Nombre/ruta del archivo
     pub name: String,
-    
+
     /// Contenido del archivo
     pub content: String,
 }
@@ -122,16 +122,16 @@ pub struct FileInfo {
 pub struct GenerationResult {
     /// Nombre sugerido para el archivo
     pub file_name: String,
-    
+
     /// Código generado
     pub content: String,
-    
+
     /// Lenguaje del código
     pub language: String,
-    
+
     /// Explicación breve de lo generado
     pub explanation: String,
-    
+
     /// Sugerencias adicionales
     #[serde(default)]
     pub suggestions: Vec<String>,

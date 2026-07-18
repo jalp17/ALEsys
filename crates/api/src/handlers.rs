@@ -1,8 +1,8 @@
 //! Handlers de los endpoints HTTP
 
 use crate::state::AppState;
-use alesys_core::graphrag::SearchResultSource;
 use alesys_core::graphrag::search::AdvancedSearchQuery;
+use alesys_core::graphrag::SearchResultSource;
 use alesys_core::llm::{ChatMessage, LLMEngine};
 use alesys_core::session::ChatMessage as SessionChatMessage;
 use axum::{
@@ -66,7 +66,11 @@ pub async fn chat_handler(
     State(state): State<AppState>,
     Json(payload): Json<ChatRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
-    tracing::info!("Chat request: '{}' (session: {:?})", payload.query, payload.session_id);
+    tracing::info!(
+        "Chat request: '{}' (session: {:?})",
+        payload.query,
+        payload.session_id
+    );
 
     // 1. Cargar historial de sesion si existe
     let mut messages: Vec<ChatMessage> = Vec::new();
@@ -78,7 +82,10 @@ pub async fn chat_handler(
             .await
             .map_err(|e| {
                 tracing::error!("Error cargando historial sesion {}: {}", session_id, e);
-                ApiError { error: "Error interno cargando historial".into(), code: "INTERNAL".into() }
+                ApiError {
+                    error: "Error interno cargando historial".into(),
+                    code: "INTERNAL".into(),
+                }
             })?;
 
         for msg in history {
@@ -92,7 +99,10 @@ pub async fn chat_handler(
     // 2. Generar embedding del query
     let query_embedding = state.embedder.encode(&payload.query).map_err(|e| {
         tracing::error!("Error generando embedding: {}", e);
-        ApiError { error: "Error interno generando embedding".into(), code: "INTERNAL".into() }
+        ApiError {
+            error: "Error interno generando embedding".into(),
+            code: "INTERNAL".into(),
+        }
     })?;
 
     // 3. Busqueda hibrida (vector + grafo)
@@ -102,7 +112,10 @@ pub async fn chat_handler(
         .await
         .map_err(|e| {
             tracing::error!("Error en busqueda hibrida: {}", e);
-            ApiError { error: "Error interno en busqueda".into(), code: "INTERNAL".into() }
+            ApiError {
+                error: "Error interno en busqueda".into(),
+                code: "INTERNAL".into(),
+            }
         })?;
 
     // 4. Construir contexto RAG
@@ -125,7 +138,10 @@ pub async fn chat_handler(
     // 7. Llamar al LLM
     let llm_response = state.llm_queue.chat(&messages).await.map_err(|e| {
         tracing::error!("Error en LLM chat: {}", e);
-        ApiError { error: "Error generando respuesta".into(), code: "INTERNAL".into() }
+        ApiError {
+            error: "Error generando respuesta".into(),
+            code: "INTERNAL".into(),
+        }
     })?;
 
     // 8. Guardar mensajes en sesion si hay session_id
@@ -136,8 +152,16 @@ pub async fn chat_handler(
             timestamp: Utc::now(),
             sources: None,
         };
-        if let Err(e) = state.session_manager.add_message(session_id, &user_msg).await {
-            tracing::warn!("No se pudo guardar mensaje de usuario en sesion {}: {}", session_id, e);
+        if let Err(e) = state
+            .session_manager
+            .add_message(session_id, &user_msg)
+            .await
+        {
+            tracing::warn!(
+                "No se pudo guardar mensaje de usuario en sesion {}: {}",
+                session_id,
+                e
+            );
         }
 
         let source_paths: Vec<String> = search_results
@@ -159,7 +183,11 @@ pub async fn chat_handler(
             .add_message(session_id, &assistant_msg)
             .await
         {
-            tracing::warn!("No se pudo guardar mensaje de asistente en sesion {}: {}", session_id, e);
+            tracing::warn!(
+                "No se pudo guardar mensaje de asistente en sesion {}: {}",
+                session_id,
+                e
+            );
         }
     }
 
@@ -238,8 +266,9 @@ pub async fn generate_handler(
         payload.language
     );
 
-    let context = payload.context.map(|ctx| {
-        alesys_core::generator::BuildContext {
+    let context = payload
+        .context
+        .map(|ctx| alesys_core::generator::BuildContext {
             project_type: ctx.project_type,
             existing_files: ctx
                 .existing_files
@@ -250,8 +279,7 @@ pub async fn generate_handler(
                 })
                 .collect(),
             dependencies: ctx.dependencies,
-        }
-    });
+        });
 
     let gen_request = alesys_core::generator::GenerateRequest {
         prompt: payload.prompt,
@@ -264,7 +292,10 @@ pub async fn generate_handler(
 
     let result = generator.generate(gen_request).await.map_err(|e| {
         tracing::error!("Error generando codigo: {}", e);
-        ApiError { error: "Error generando codigo".into(), code: "INTERNAL".into() }
+        ApiError {
+            error: "Error generando codigo".into(),
+            code: "INTERNAL".into(),
+        }
     })?;
 
     let response = GenerateResponse {
@@ -297,16 +328,17 @@ pub struct SessionResponse {
 }
 
 /// Handler para GET /api/sessions
-pub async fn list_sessions(
-    State(state): State<AppState>,
-) -> Result<impl IntoResponse, ApiError> {
+pub async fn list_sessions(State(state): State<AppState>) -> Result<impl IntoResponse, ApiError> {
     let sessions = state
         .session_manager
         .get_active_sessions(0)
         .await
         .map_err(|e| {
             tracing::error!("Error listando sesiones: {}", e);
-            ApiError { error: "Error interno listando sesiones".into(), code: "INTERNAL".into() }
+            ApiError {
+                error: "Error interno listando sesiones".into(),
+                code: "INTERNAL".into(),
+            }
         })?;
 
     let responses: Vec<SessionResponse> = sessions
@@ -334,7 +366,10 @@ pub async fn create_session(
         .await
         .map_err(|e| {
             tracing::error!("Error creando sesion: {}", e);
-            ApiError { error: "Error interno creando sesion".into(), code: "INTERNAL".into() }
+            ApiError {
+                error: "Error interno creando sesion".into(),
+                code: "INTERNAL".into(),
+            }
         })?;
 
     tracing::info!("Sesion creada: {}", session_id);
@@ -356,7 +391,10 @@ pub async fn get_session(
         .await
         .map_err(|e| {
             tracing::error!("Error obteniendo sesion {}: {}", session_id, e);
-            ApiError { error: "Error interno obteniendo sesion".into(), code: "INTERNAL".into() }
+            ApiError {
+                error: "Error interno obteniendo sesion".into(),
+                code: "INTERNAL".into(),
+            }
         })?;
 
     match session {
@@ -367,7 +405,10 @@ pub async fn get_session(
             "last_activity": s.last_activity.to_rfc3339(),
             "is_active": s.is_active,
         }))),
-        None => Err(ApiError { error: "Sesion no encontrada".into(), code: "NOT_FOUND".into() }),
+        None => Err(ApiError {
+            error: "Sesion no encontrada".into(),
+            code: "NOT_FOUND".into(),
+        }),
     }
 }
 
@@ -382,7 +423,10 @@ pub async fn delete_session(
         .await
         .map_err(|e| {
             tracing::error!("Error cerrando sesion {}: {}", session_id, e);
-            ApiError { error: "Error interno cerrando sesion".into(), code: "INTERNAL".into() }
+            ApiError {
+                error: "Error interno cerrando sesion".into(),
+                code: "INTERNAL".into(),
+            }
         })?;
 
     tracing::info!("Sesion cerrada: {}", session_id);
@@ -403,7 +447,10 @@ pub async fn get_session_history(
         .await
         .map_err(|e| {
             tracing::error!("Error cargando historial sesion {}: {}", session_id, e);
-            ApiError { error: "Error interno cargando historial".into(), code: "INTERNAL".into() }
+            ApiError {
+                error: "Error interno cargando historial".into(),
+                code: "INTERNAL".into(),
+            }
         })?;
 
     let responses: Vec<serde_json::Value> = messages
@@ -454,17 +501,13 @@ pub async fn get_centrality(
     State(state): State<AppState>,
     axum::extract::Query(query): axum::extract::Query<alesys_core::graphrag::api::CentralityQuery>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let response = state
-        .graphrag
-        .get_centrality(&query)
-        .await
-        .map_err(|e| {
-            tracing::error!("Error calculando centralidad: {}", e);
-            ApiError {
-                error: "Error calculando centralidad".into(),
-                code: "INTERNAL".into(),
-            }
-        })?;
+    let response = state.graphrag.get_centrality(&query).await.map_err(|e| {
+        tracing::error!("Error calculando centralidad: {}", e);
+        ApiError {
+            error: "Error calculando centralidad".into(),
+            code: "INTERNAL".into(),
+        }
+    })?;
     Ok(Json(response))
 }
 
@@ -473,17 +516,13 @@ pub async fn get_communities(
     State(state): State<AppState>,
     axum::extract::Query(query): axum::extract::Query<alesys_core::graphrag::api::CommunitiesQuery>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let response = state
-        .graphrag
-        .get_communities(&query)
-        .await
-        .map_err(|e| {
-            tracing::error!("Error calculando comunidades: {}", e);
-            ApiError {
-                error: "Error calculando comunidades".into(),
-                code: "INTERNAL".into(),
-            }
-        })?;
+    let response = state.graphrag.get_communities(&query).await.map_err(|e| {
+        tracing::error!("Error calculando comunidades: {}", e);
+        ApiError {
+            error: "Error calculando comunidades".into(),
+            code: "INTERNAL".into(),
+        }
+    })?;
     Ok(Json(response))
 }
 
@@ -538,15 +577,18 @@ pub async fn export_graph_json(
 ) -> Result<impl IntoResponse, ApiError> {
     let response = state
         .graphrag
-        .get_graph_api(&alesys_core::graphrag::api::GraphQuery {
-            doc_type: None,
-            edge_type: None,
-            depth: None,
-            limit: Some(10000),
-            cursor: None,
-            center_node_id: None,
-            include_metrics: Some(true),
-        }, 0)
+        .get_graph_api(
+            &alesys_core::graphrag::api::GraphQuery {
+                doc_type: None,
+                edge_type: None,
+                depth: None,
+                limit: Some(10000),
+                cursor: None,
+                center_node_id: None,
+                include_metrics: Some(true),
+            },
+            0,
+        )
         .await
         .map_err(|e| {
             tracing::error!("Error exportando grafo: {}", e);
@@ -715,13 +757,16 @@ pub async fn execute_handler(
     };
 
     let sandbox = CodeSandbox::with_config(config);
-    let result = sandbox.execute(&payload.code, language).await.map_err(|e| {
-        tracing::error!("Error ejecutando codigo: {}", e);
-        ApiError {
-            error: format!("Execution failed: {}", e),
-            code: "INTERNAL".into(),
-        }
-    })?;
+    let result = sandbox
+        .execute(&payload.code, language)
+        .await
+        .map_err(|e| {
+            tracing::error!("Error ejecutando codigo: {}", e);
+            ApiError {
+                error: format!("Execution failed: {}", e),
+                code: "INTERNAL".into(),
+            }
+        })?;
 
     Ok(Json(ExecuteResponse {
         exit_code: result.exit_code,
@@ -805,10 +850,12 @@ pub async fn write_file_handler(
 
     let editor = FileEditor::new(state.project_dir.clone());
 
-    let result = editor.write_file(&payload.path, &payload.content).map_err(|e| ApiError {
-        error: format!("Error writing file: {}", e),
-        code: "INTERNAL".into(),
-    })?;
+    let result = editor
+        .write_file(&payload.path, &payload.content)
+        .map_err(|e| ApiError {
+            error: format!("Error writing file: {}", e),
+            code: "INTERNAL".into(),
+        })?;
 
     Ok(Json(result))
 }

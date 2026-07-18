@@ -151,7 +151,7 @@ mod tests {
     fn test_python_template() {
         let template = PromptTemplate::python();
         let prompt = template.render("Crear función factorial", None);
-        
+
         assert!(prompt.contains("Eres un experto en Python"));
         assert!(prompt.contains("Seguir PEP 8"));
         assert!(prompt.contains("Crear función factorial"));
@@ -161,7 +161,7 @@ mod tests {
     fn test_javascript_template() {
         let template = PromptTemplate::javascript();
         let prompt = template.render("Implementar clase User", None);
-        
+
         assert!(prompt.contains("Eres un experto en JavaScript"));
         assert!(prompt.contains("async/await"));
         assert!(prompt.contains("Implementar clase User"));
@@ -171,7 +171,7 @@ mod tests {
     fn test_rust_template() {
         let template = PromptTemplate::rust();
         let prompt = template.render("Escribir función main", None);
-        
+
         assert!(prompt.contains("Eres un experto en Rust"));
         assert!(prompt.contains("Result<T, E>"));
         assert!(prompt.contains("Escribir función main"));
@@ -185,7 +185,7 @@ mod tests {
             .add_dependency("requests");
 
         let prompt = template.render("Crear función principal", Some(&context));
-        
+
         assert!(prompt.contains("utils.py"));
         assert!(prompt.contains("def helper(): pass"));
         assert!(prompt.contains("requests"));

@@ -50,7 +50,7 @@ use handlers::{
 #[cfg(feature = "sandbox")]
 use handlers::execute_handler;
 #[cfg(feature = "editor")]
-use handlers::{list_files_handler, read_file_handler, write_file_handler, modify_file_handler};
+use handlers::{list_files_handler, modify_file_handler, read_file_handler, write_file_handler};
 use state::AppState;
 use websocket::ws_chat_handler;
 
@@ -122,11 +122,15 @@ async fn rate_limit_middleware(
         next.run(request).await
     } else {
         tracing::warn!("Rate limit exceeded for IP: {}", ip);
-        (StatusCode::TOO_MANY_REQUESTS, Json(serde_json::json!({
-            "error": "Rate limit exceeded",
-            "code": "RATE_LIMITED",
-            "retry_after": 60,
-        }))).into_response()
+        (
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(serde_json::json!({
+                "error": "Rate limit exceeded",
+                "code": "RATE_LIMITED",
+                "retry_after": 60,
+            })),
+        )
+            .into_response()
     }
 }
 
@@ -146,9 +150,7 @@ async fn main() -> Result<()> {
     let db_url_result = std::env::var("DATABASE_URL");
     let pg_result = std::env::var("PGHOST");
     if db_url_result.is_err() && pg_result.is_err() {
-        tracing::warn!(
-            "Neither DATABASE_URL nor PGHOST set — usando defaults de docker-compose"
-        );
+        tracing::warn!("Neither DATABASE_URL nor PGHOST set — usando defaults de docker-compose");
     }
 
     let database_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
@@ -175,7 +177,10 @@ async fn main() -> Result<()> {
         .await
         .expect("Failed to connect to database");
 
-    tracing::info!("Database pool configured (max={})", db_pool.options().get_max_connections());
+    tracing::info!(
+        "Database pool configured (max={})",
+        db_pool.options().get_max_connections()
+    );
 
     let llm_config = alesys_core::llm::LLMConfig::from_env();
 
@@ -211,7 +216,10 @@ async fn main() -> Result<()> {
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(100);
-    tracing::info!("Rate limit configured: {} req/min per IP", rate_limit_per_min);
+    tracing::info!(
+        "Rate limit configured: {} req/min per IP",
+        rate_limit_per_min
+    );
 
     let rate_limiter = Arc::new(RateLimiterState::new(rate_limit_per_min as usize));
 
@@ -265,7 +273,11 @@ async fn main() -> Result<()> {
     let addr = std::env::var("API_ADDR").unwrap_or_else(|_| "0.0.0.0:3000".to_string());
     let listener = tokio::net::TcpListener::bind(&addr).await?;
 
-    tracing::info!("ALEsys API listening on {} (timeout={}s)", addr, timeout_secs);
+    tracing::info!(
+        "ALEsys API listening on {} (timeout={}s)",
+        addr,
+        timeout_secs
+    );
 
     // Initialize Prometheus metrics
     let handle = metrics_exporter_prometheus::PrometheusBuilder::new()

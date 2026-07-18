@@ -82,7 +82,10 @@ impl FileEditor {
     /// Create a new FileEditor with the given root directory.
     pub fn new(root_dir: PathBuf) -> Self {
         let backup_dir = root_dir.join(".alesys_backups");
-        Self { root_dir, backup_dir }
+        Self {
+            root_dir,
+            backup_dir,
+        }
     }
 
     /// Read file contents.
@@ -95,7 +98,11 @@ impl FileEditor {
     }
 
     /// Write content to a file.
-    pub fn write_file(&self, path: &str, content: &str) -> Result<FileOperationResult, EditorError> {
+    pub fn write_file(
+        &self,
+        path: &str,
+        content: &str,
+    ) -> Result<FileOperationResult, EditorError> {
         let full_path = self.resolve_path(path)?;
 
         // Create parent directories if needed
@@ -221,8 +228,13 @@ impl FileEditor {
         let full_path = self.root_dir.join(path);
 
         // Security: ensure we don't escape root_dir
-        let canonical = full_path.canonicalize().unwrap_or_else(|_| full_path.clone());
-        let root_canonical = self.root_dir.canonicalize().unwrap_or_else(|_| self.root_dir.clone());
+        let canonical = full_path
+            .canonicalize()
+            .unwrap_or_else(|_| full_path.clone());
+        let root_canonical = self
+            .root_dir
+            .canonicalize()
+            .unwrap_or_else(|_| self.root_dir.clone());
 
         if !canonical.starts_with(&root_canonical) {
             return Err(EditorError::NotFound(

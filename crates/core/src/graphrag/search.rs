@@ -213,9 +213,9 @@ pub struct AdvancedSearchResponse {
 /// Basado en: "Reciprocal Rank Fusion outperforms Condorcet and individual
 /// Rank Learning Methods" (Cormack et al., 2009)
 pub fn rrf_fusion(
-    vector_results: &[(i32, f32)],     // (fragment_id, similarity)
-    graph_results: &[(i32, f32)],       // (fragment_id, score)
-    sql_results: &[(i32, f32)],         // (fragment_id, relevance)
+    vector_results: &[(i32, f32)], // (fragment_id, similarity)
+    graph_results: &[(i32, f32)],  // (fragment_id, score)
+    sql_results: &[(i32, f32)],    // (fragment_id, relevance)
     k: usize,
 ) -> Vec<(i32, f32, ScoreBreakdown)> {
     let mut scores: HashMap<i32, (f32, f32, f32, f32)> = HashMap::new();
@@ -405,11 +405,7 @@ fn find_word_boundary_end(content: &str, pos: usize) -> usize {
 ///
 /// Busca en fragmentos que contienen el término original y extrae
 /// palabras que co-ocurren frecuentemente.
-pub async fn expand_query(
-    db: &PgPool,
-    query: &str,
-    max_terms: usize,
-) -> Result<Vec<String>> {
+pub async fn expand_query(db: &PgPool, query: &str, max_terms: usize) -> Result<Vec<String>> {
     let terms: Vec<String> = query
         .split_whitespace()
         .filter(|t| t.len() > 3)
@@ -442,13 +438,10 @@ pub async fn expand_query(
         // Extraer palabras que co-ocurren
         let mut word_counts: HashMap<String, usize> = HashMap::new();
         let stop_words: std::collections::HashSet<&str> = [
-            "el", "la", "los", "las", "un", "una", "uno",
-            "de", "del", "al", "en", "con", "por", "para",
-            "que", "es", "se", "no", "su", "como", "más",
-            "pero", "este", "esta", "estos", "estas",
-            "y", "o", "a", "e", "i", "u",
-            "the", "a", "an", "and", "or", "but", "in", "on", "at", "to",
-            "for", "of", "with", "by", "from", "is", "are", "was", "were",
+            "el", "la", "los", "las", "un", "una", "uno", "de", "del", "al", "en", "con", "por",
+            "para", "que", "es", "se", "no", "su", "como", "más", "pero", "este", "esta", "estos",
+            "estas", "y", "o", "a", "e", "i", "u", "the", "a", "an", "and", "or", "but", "in",
+            "on", "at", "to", "for", "of", "with", "by", "from", "is", "are", "was", "were",
         ]
         .iter()
         .copied()
@@ -506,10 +499,7 @@ pub fn build_search_sql(query: &AdvancedSearchQuery) -> (String, Vec<String>) {
 
     // Full-text search condition
     if !query.query.is_empty() {
-        conditions.push(format!(
-            "LOWER(f.contenido) LIKE ${}",
-            param_idx
-        ));
+        conditions.push(format!("LOWER(f.contenido) LIKE ${}", param_idx));
         bind_values.push(format!("%{}%", query.query.to_lowercase()));
         param_idx += 1;
     }
@@ -607,10 +597,7 @@ pub fn build_search_sql_count(query: &AdvancedSearchQuery) -> (String, Vec<Strin
 
     // Full-text search condition
     if !query.query.is_empty() {
-        conditions.push(format!(
-            "LOWER(f.contenido) LIKE ${}",
-            param_idx
-        ));
+        conditions.push(format!("LOWER(f.contenido) LIKE ${}", param_idx));
         bind_values.push(format!("%{}%", query.query.to_lowercase()));
         param_idx += 1;
     }
@@ -743,15 +730,14 @@ pub async fn advanced_search(
     for val in &bind_values {
         sqlx_query = sqlx_query.bind(val);
     }
-    sqlx_query = sqlx_query.bind(query.limit as i64).bind(query.offset as i64);
+    sqlx_query = sqlx_query
+        .bind(query.limit as i64)
+        .bind(query.offset as i64);
 
-    let sql_rows = sqlx_query
-        .fetch_all(db)
-        .await
-        .map_err(|e| {
-            tracing::error!("DB error en advanced_search SQL: {}", e);
-            crate::AlesysError::Database(e)
-        })?;
+    let sql_rows = sqlx_query.fetch_all(db).await.map_err(|e| {
+        tracing::error!("DB error en advanced_search SQL: {}", e);
+        crate::AlesysError::Database(e)
+    })?;
 
     let sql_results: Vec<(i32, f32)> = sql_rows
         .iter()
@@ -809,9 +795,7 @@ pub async fn advanced_search(
     // 4. Graph expansion search
     let graph_results: Vec<(i32, f32)> = if let Some(gr) = graphrag {
         if let Some(emb) = embedding {
-            let mut results = gr
-                .vector_search(emb, query.vector.limit.min(5))
-                .await?;
+            let mut results = gr.vector_search(emb, query.vector.limit.min(5)).await?;
             let doc_ids: Vec<i32> = results
                 .iter()
                 .map(|r| r.document_id)
@@ -1048,7 +1032,12 @@ mod tests {
 
     #[test]
     fn test_highlight_terms_long_content() {
-        let content = format!("{}word{}{}", "b ".repeat(200), " test ".repeat(100), " end".repeat(200));
+        let content = format!(
+            "{}word{}{}",
+            "b ".repeat(200),
+            " test ".repeat(100),
+            " end".repeat(200)
+        );
         let result = highlight_terms(&content, "word", 150, 3);
         // Should truncate long content with fragments around match
         assert!(result.contains("<mark>word</mark>"));

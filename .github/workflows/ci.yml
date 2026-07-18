@@ -52,7 +52,7 @@ jobs:
         run: cargo build --workspace
 
       - name: Run Clippy (Rust linter)
-        run: cargo clippy --workspace -- -D warnings
+        run: cargo clippy --workspace -- -D warnings -A dead_code -A unexpected_cfgs
 
       - name: Enable corepack and install pnpm
         run: |

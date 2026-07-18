@@ -101,10 +101,7 @@ pub async fn load_nodes_paginated(
 }
 
 /// Cargar documentos con IDs específicos
-pub async fn load_nodes_by_ids(
-    db: &PgPool,
-    ids: &[i32],
-) -> Result<Vec<RawNode>> {
+pub async fn load_nodes_by_ids(db: &PgPool, ids: &[i32]) -> Result<Vec<RawNode>> {
     if ids.is_empty() {
         return Ok(Vec::new());
     }
@@ -234,31 +231,24 @@ pub async fn load_edges_for_nodes(
 }
 
 /// Cargar aristas de un nodo específico (para degree calculation)
-pub async fn load_edges_for_node(
-    db: &PgPool,
-    node_id: i32,
-) -> Result<(usize, usize)> {
-    let row_in = sqlx::query(
-        "SELECT COUNT(*) as cnt FROM enlaces WHERE destino_id = $1",
-    )
-    .bind(node_id)
-    .fetch_one(db)
-    .await
-    .map_err(|e| {
-        tracing::error!("DB error contando in-edges: {}", e);
-        crate::AlesysError::Database(e)
-    })?;
+pub async fn load_edges_for_node(db: &PgPool, node_id: i32) -> Result<(usize, usize)> {
+    let row_in = sqlx::query("SELECT COUNT(*) as cnt FROM enlaces WHERE destino_id = $1")
+        .bind(node_id)
+        .fetch_one(db)
+        .await
+        .map_err(|e| {
+            tracing::error!("DB error contando in-edges: {}", e);
+            crate::AlesysError::Database(e)
+        })?;
 
-    let row_out = sqlx::query(
-        "SELECT COUNT(*) as cnt FROM enlaces WHERE origen_id = $1",
-    )
-    .bind(node_id)
-    .fetch_one(db)
-    .await
-    .map_err(|e| {
-        tracing::error!("DB error contando out-edges: {}", e);
-        crate::AlesysError::Database(e)
-    })?;
+    let row_out = sqlx::query("SELECT COUNT(*) as cnt FROM enlaces WHERE origen_id = $1")
+        .bind(node_id)
+        .fetch_one(db)
+        .await
+        .map_err(|e| {
+            tracing::error!("DB error contando out-edges: {}", e);
+            crate::AlesysError::Database(e)
+        })?;
 
     let in_degree: i64 = row_in.get("cnt");
     let out_degree: i64 = row_out.get("cnt");
@@ -296,15 +286,13 @@ pub async fn count_edges(db: &PgPool) -> Result<usize> {
 
 /// Contar enlaces por tipo
 pub async fn count_edges_by_type(db: &PgPool) -> Result<std::collections::HashMap<String, usize>> {
-    let rows = sqlx::query(
-        "SELECT tipo_enlace, COUNT(*) as cnt FROM enlaces GROUP BY tipo_enlace",
-    )
-    .fetch_all(db)
-    .await
-    .map_err(|e| {
-        tracing::error!("DB error contando aristas por tipo: {}", e);
-        crate::AlesysError::Database(e)
-    })?;
+    let rows = sqlx::query("SELECT tipo_enlace, COUNT(*) as cnt FROM enlaces GROUP BY tipo_enlace")
+        .fetch_all(db)
+        .await
+        .map_err(|e| {
+            tracing::error!("DB error contando aristas por tipo: {}", e);
+            crate::AlesysError::Database(e)
+        })?;
 
     let mut counts = std::collections::HashMap::new();
     for row in rows {
@@ -321,11 +309,7 @@ pub async fn count_edges_by_type(db: &PgPool) -> Result<std::collections::HashMa
 // =============================================================================
 
 /// Verificar si un usuario tiene acceso a un documento
-pub async fn check_document_permission(
-    db: &PgPool,
-    user_id: i32,
-    doc_id: i32,
-) -> Result<bool> {
+pub async fn check_document_permission(db: &PgPool, user_id: i32, doc_id: i32) -> Result<bool> {
     // Admin (user_id = 0) tiene acceso a todo
     if user_id == 0 {
         return Ok(true);
@@ -351,10 +335,7 @@ pub async fn check_document_permission(
 }
 
 /// Obtener IDs de documentos accesibles para un usuario
-pub async fn get_accessible_doc_ids(
-    db: &PgPool,
-    user_id: i32,
-) -> Result<Vec<i32>> {
+pub async fn get_accessible_doc_ids(db: &PgPool, user_id: i32) -> Result<Vec<i32>> {
     // Admin (user_id = 0) ve todos
     if user_id == 0 {
         let rows = sqlx::query("SELECT id FROM documentos ORDER BY id")
@@ -367,26 +348,21 @@ pub async fn get_accessible_doc_ids(
         return Ok(rows.iter().map(|r| r.get("id")).collect());
     }
 
-    let rows = sqlx::query(
-        "SELECT doc_id FROM graph_permissions WHERE user_id = $1 ORDER BY doc_id",
-    )
-    .bind(user_id)
-    .fetch_all(db)
-    .await
-    .map_err(|e| {
-        tracing::error!("DB error obteniendo docs accesibles: {}", e);
-        crate::AlesysError::Database(e)
-    })?;
+    let rows =
+        sqlx::query("SELECT doc_id FROM graph_permissions WHERE user_id = $1 ORDER BY doc_id")
+            .bind(user_id)
+            .fetch_all(db)
+            .await
+            .map_err(|e| {
+                tracing::error!("DB error obteniendo docs accesibles: {}", e);
+                crate::AlesysError::Database(e)
+            })?;
 
     Ok(rows.iter().map(|r| r.get("doc_id")).collect())
 }
 
 /// Buscar documentos por nombre (para search en grafo)
-pub async fn search_nodes(
-    db: &PgPool,
-    query: &str,
-    limit: usize,
-) -> Result<Vec<RawNode>> {
+pub async fn search_nodes(db: &PgPool, query: &str, limit: usize) -> Result<Vec<RawNode>> {
     let pattern = format!("%{}%", query.to_lowercase());
     let rows = sqlx::query(
         "SELECT id, ruta_relativa, tipo

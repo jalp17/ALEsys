@@ -102,7 +102,11 @@ impl GraphRAG {
             .fetch_all(db)
             .await
             .map_err(|e| {
-                tracing::error!("DB error cargando documentos (batch desde id={}): {}", last_id, e);
+                tracing::error!(
+                    "DB error cargando documentos (batch desde id={}): {}",
+                    last_id,
+                    e
+                );
                 crate::AlesysError::Database(e)
             })?;
 
@@ -364,9 +368,7 @@ impl GraphRAG {
     }
 
     pub async fn search_by_path(&self, path_pattern: &str) -> Result<Vec<SearchResult>> {
-        let escaped = path_pattern
-            .replace('%', "\\%")
-            .replace('_', "\\_");
+        let escaped = path_pattern.replace('%', "\\%").replace('_', "\\_");
         let rows = sqlx::query(
             r#"
             SELECT f.id, f.documento_id, f.contenido, d.ruta_relativa
@@ -384,7 +386,11 @@ impl GraphRAG {
             crate::AlesysError::Database(e)
         })?;
 
-        tracing::debug!("search_by_path '{}': {} resultados", path_pattern, rows.len());
+        tracing::debug!(
+            "search_by_path '{}': {} resultados",
+            path_pattern,
+            rows.len()
+        );
         let results = rows
             .into_iter()
             .map(|row| SearchResult {
@@ -418,10 +424,7 @@ impl GraphRAG {
         user_id: i32,
     ) -> Result<api::GraphResponse> {
         let limit = query.limit.unwrap_or(500).min(1000);
-        let cursor = query
-            .cursor
-            .as_ref()
-            .and_then(|c| c.parse::<i32>().ok());
+        let cursor = query.cursor.as_ref().and_then(|c| c.parse::<i32>().ok());
 
         // 1. Verificar permisos
         let accessible_ids = query::get_accessible_doc_ids(&self.db, user_id).await?;
@@ -458,15 +461,7 @@ impl GraphRAG {
                     .filter(|e| e.origen_id == node_id || e.destino_id == node_id)
                     .count();
 
-                api::ApiNode::from_document(
-                    node_id,
-                    path,
-                    &n.tipo,
-                    degree,
-                    None,
-                    None,
-                    None,
-                )
+                api::ApiNode::from_document(node_id, path, &n.tipo, degree, None, None, None)
             })
             .collect();
 
@@ -485,7 +480,11 @@ impl GraphRAG {
                     },
                     _ => return None,
                 };
-                Some(api::ApiEdge::from_edge(e.origen_id, e.destino_id, &edge_type))
+                Some(api::ApiEdge::from_edge(
+                    e.origen_id,
+                    e.destino_id,
+                    &edge_type,
+                ))
             })
             .collect();
 
@@ -528,9 +527,9 @@ impl GraphRAG {
 
         let has_more = api_nodes.len() >= limit;
         let pagination = Some(api::PaginationInfo {
-            cursor: api_nodes.last().and_then(|n| {
-                n.id.strip_prefix("doc:").map(|s| s.to_string())
-            }),
+            cursor: api_nodes
+                .last()
+                .and_then(|n| n.id.strip_prefix("doc:").map(|s| s.to_string())),
             has_more,
             returned_nodes: api_nodes.len(),
             total_available: total_nodes_count,
@@ -563,10 +562,19 @@ impl GraphRAG {
                     })
                     .filter(|v| query.threshold.is_none_or(|t| v.score >= t))
                     .collect();
-                values.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+                values.sort_by(|a, b| {
+                    b.score
+                        .partial_cmp(&a.score)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
                 values.truncate(top_k);
                 let top_ids: Vec<String> = values.iter().map(|v| v.node_id.clone()).collect();
-                Ok(api::CentralityResponse { metric: "pagerank".to_string(), values, top_nodes: top_ids, threshold: query.threshold })
+                Ok(api::CentralityResponse {
+                    metric: "pagerank".to_string(),
+                    values,
+                    top_nodes: top_ids,
+                    threshold: query.threshold,
+                })
             }
             "betweenness" => {
                 let scores = algorithms::betweenness_centrality(&self.graph);
@@ -578,10 +586,19 @@ impl GraphRAG {
                     })
                     .filter(|v| query.threshold.is_none_or(|t| v.score >= t))
                     .collect();
-                values.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+                values.sort_by(|a, b| {
+                    b.score
+                        .partial_cmp(&a.score)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
                 values.truncate(top_k);
                 let top_ids: Vec<String> = values.iter().map(|v| v.node_id.clone()).collect();
-                Ok(api::CentralityResponse { metric: "betweenness".to_string(), values, top_nodes: top_ids, threshold: query.threshold })
+                Ok(api::CentralityResponse {
+                    metric: "betweenness".to_string(),
+                    values,
+                    top_nodes: top_ids,
+                    threshold: query.threshold,
+                })
             }
             "degree" => {
                 let scores = algorithms::degree_centrality(&self.graph);
@@ -593,12 +610,24 @@ impl GraphRAG {
                     })
                     .filter(|v| query.threshold.is_none_or(|t| v.score >= t))
                     .collect();
-                values.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+                values.sort_by(|a, b| {
+                    b.score
+                        .partial_cmp(&a.score)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
                 values.truncate(top_k);
                 let top_ids: Vec<String> = values.iter().map(|v| v.node_id.clone()).collect();
-                Ok(api::CentralityResponse { metric: "degree".to_string(), values, top_nodes: top_ids, threshold: query.threshold })
+                Ok(api::CentralityResponse {
+                    metric: "degree".to_string(),
+                    values,
+                    top_nodes: top_ids,
+                    threshold: query.threshold,
+                })
             }
-            _ => Err(crate::AlesysError::ApiError(format!("Métrica desconocida: {}", metric))),
+            _ => Err(crate::AlesysError::ApiError(format!(
+                "Métrica desconocida: {}",
+                metric
+            ))),
         }
     }
 
@@ -651,19 +680,12 @@ impl GraphRAG {
     }
 
     /// Encontrar camino más corto entre dos nodos
-    pub async fn get_shortest_path(
-        &self,
-        query: &api::PathQuery,
-    ) -> Result<api::PathResponse> {
+    pub async fn get_shortest_path(&self, query: &api::PathQuery) -> Result<api::PathResponse> {
         let result = algorithms::shortest_path(&self.graph, query.source_id, query.target_id);
         Ok(api::PathResponse {
             source: format!("doc:{}", query.source_id),
             target: format!("doc:{}", query.target_id),
-            path: result
-                .path
-                .iter()
-                .map(|id| format!("doc:{}", id))
-                .collect(),
+            path: result.path.iter().map(|id| format!("doc:{}", id)).collect(),
             distance: result.distance,
             found: result.found,
             path_length: result.path.len(),
@@ -671,11 +693,7 @@ impl GraphRAG {
     }
 
     /// Buscar documentos en el grafo
-    pub async fn search_graph(
-        &self,
-        query: &str,
-        limit: usize,
-    ) -> Result<Vec<api::ApiNode>> {
+    pub async fn search_graph(&self, query: &str, limit: usize) -> Result<Vec<api::ApiNode>> {
         let raw_nodes = query::search_nodes(&self.db, query, limit).await?;
         let node_ids: Vec<i32> = raw_nodes.iter().map(|n| n.id).collect();
         let raw_edges = query::load_edges_for_nodes(&self.db, &node_ids, None).await?;
@@ -688,7 +706,15 @@ impl GraphRAG {
                     .iter()
                     .filter(|e| e.origen_id == node_id || e.destino_id == node_id)
                     .count();
-                api::ApiNode::from_document(node_id, &n.ruta_relativa, &n.tipo, degree, None, None, None)
+                api::ApiNode::from_document(
+                    node_id,
+                    &n.ruta_relativa,
+                    &n.tipo,
+                    degree,
+                    None,
+                    None,
+                    None,
+                )
             })
             .collect();
 

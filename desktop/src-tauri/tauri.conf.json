@@ -4,10 +4,10 @@
   "version": "0.1.0",
   "identifier": "com.alesys.app",
   "build": {
-    "beforeDevCommand": "npm run dev",
+    "beforeDevCommand": "cd ../../webui && npm run dev",
     "devUrl": "http://localhost:5173",
-    "beforeBuildCommand": "npm run build:desktop",
-    "frontendDist": "../webui/dist"
+    "beforeBuildCommand": "cd ../../webui && pnpm run build:desktop",
+    "frontendDist": "../../webui/dist"
   },
   "app": {
     "windows": [
@@ -69,12 +69,6 @@
       "dmg": {
         "windowSize": { "width": 540, "height": 380 }
       }
-    },
-    "windows": {
-      "nsis": {
-        "installerIcon": "icons/icon.ico",
-        "headerImage": "icons/icon.ico"
-      }
     }
   },
   "plugins": {
@@ -95,9 +89,7 @@
       ]
     },
     "updater": {
-      "active": true,
-      "endpoints": ["https://github.com/jalp17/ALEsys/releases/latest/download/latest.json"],
-      "dialog": true
+      "active": false
     },
     "store": {
       "filename": "alesys-store.json"

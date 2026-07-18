@@ -15,6 +15,8 @@ pub mod config;
 
 #[cfg(feature = "candle-backend")]
 pub mod candle;
+#[cfg(feature = "http-backend")]
+pub mod http;
 #[cfg(feature = "llama-cpp")]
 pub mod llama_cpp;
 #[cfg(feature = "mistralrs-backend")]
@@ -23,8 +25,6 @@ pub mod mistral;
 pub mod transformers;
 #[cfg(feature = "vllm-backend")]
 pub mod vllm;
-#[cfg(feature = "http-backend")]
-pub mod http;
 
 pub use backend::LLMBackend;
 pub use backend_manager::BackendManager;
@@ -73,10 +73,8 @@ pub trait LLMEngine: Send + Sync {
     async fn chat(&self, messages: &[ChatMessage]) -> Result<ChatResponse>;
 
     /// Chat con streaming real de tokens (cada chunk se envía individualmente)
-    fn chat_stream<'a>(
-        &'a self,
-        messages: &'a [ChatMessage],
-    ) -> BoxStream<'a, Result<StreamChunk>>;
+    fn chat_stream<'a>(&'a self, messages: &'a [ChatMessage])
+        -> BoxStream<'a, Result<StreamChunk>>;
 
     /// Generación de código (default: chat con system prompt de programación)
     async fn generate_code(&self, prompt: &str, language: &str) -> Result<String> {

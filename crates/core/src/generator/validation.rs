@@ -54,7 +54,10 @@ impl SyntaxValidator {
         if errors.is_empty() {
             Ok(true)
         } else {
-            Err(anyhow::anyhow!("Errores de sintaxis:\n{}", errors.join("\n")))
+            Err(anyhow::anyhow!(
+                "Errores de sintaxis:\n{}",
+                errors.join("\n")
+            ))
         }
     }
 
@@ -79,7 +82,10 @@ impl SyntaxValidator {
         if errors.is_empty() {
             Ok(true)
         } else {
-            Err(anyhow::anyhow!("Errores de sintaxis:\n{}", errors.join("\n")))
+            Err(anyhow::anyhow!(
+                "Errores de sintaxis:\n{}",
+                errors.join("\n")
+            ))
         }
     }
 
@@ -101,7 +107,10 @@ impl SyntaxValidator {
         if errors.is_empty() {
             Ok(true)
         } else {
-            Err(anyhow::anyhow!("Errores de sintaxis:\n{}", errors.join("\n")))
+            Err(anyhow::anyhow!(
+                "Errores de sintaxis:\n{}",
+                errors.join("\n")
+            ))
         }
     }
 

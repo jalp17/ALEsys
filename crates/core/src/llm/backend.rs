@@ -8,9 +8,9 @@
 //! - transformers (Python subprocess) - Modelos HF
 //! - HTTP providers (Ollama, Anthropic, Gemini, Groq, etc.) - Cloud/remote
 
+use super::{ChatMessage, ChatResponse, LLMBackendType, LLMConfig, LLMEngine, Result, StreamChunk};
 use async_trait::async_trait;
 use futures::stream::BoxStream;
-use super::{ChatMessage, ChatResponse, LLMBackendType, LLMConfig, LLMEngine, Result, StreamChunk};
 
 #[cfg(feature = "llama-cpp")]
 use super::llama_cpp::LlamaCppEngine;
@@ -182,14 +182,17 @@ impl LLMBackend {
         tracing::info!(
             "Usando backend HTTP (cloud/remote) — provider={}, model={}",
             provider,
-            if config.model_path.is_empty() { provider.default_model() } else { &config.model_path },
+            if config.model_path.is_empty() {
+                provider.default_model()
+            } else {
+                &config.model_path
+            },
         );
         // HttpLLMEngine::new is async because it builds reqwest::Client
         // We block here since from_config is already async and client build is fast
         let engine = tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(async {
-                HttpLLMEngine::new(config, provider).await
-            })
+            tokio::runtime::Handle::current()
+                .block_on(async { HttpLLMEngine::new(config, provider).await })
         })?;
         Ok(Self::Http(Box::new(engine)))
     }
