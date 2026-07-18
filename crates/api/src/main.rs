@@ -40,8 +40,8 @@ pub(crate) const CHAT_SYSTEM_PROMPT: &str =
     "Eres un asistente de IA experto en programación y análisis de documentos. Responde de forma clara y concisa basándote en el contexto proporcionado.";
 
 use handlers::{
-    chat_handler, create_session, delete_session, export_graph_json, generate_handler,
-    get_centrality, get_communities, get_config, get_graph, get_session,
+    advanced_search_handler, chat_handler, create_session, delete_session, export_graph_json,
+    generate_handler, get_centrality, get_communities, get_config, get_graph, get_session,
     get_session_history, get_shortest_path, graph_stats, health_handler, list_sessions,
     search_graph,
 };
@@ -224,6 +224,7 @@ async fn main() -> Result<()> {
         .route("/graph/path", get(get_shortest_path))
         .route("/graph/search", get(search_graph))
         .route("/graph/export", get(export_graph_json))
+        .route("/search/advanced", post(advanced_search_handler))
         .route("/config", get(get_config));
 
     let app = Router::new()
