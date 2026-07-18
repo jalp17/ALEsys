@@ -151,16 +151,37 @@ export interface SavedSearch {
   created_at: string;
 }
 
+/**
+ * Validate a saved search object from localStorage
+ */
+function isValidSavedSearch(obj: unknown): obj is SavedSearch {
+  return (
+    typeof obj === 'object' &&
+    obj !== null &&
+    typeof (obj as SavedSearch).id === 'string' &&
+    typeof (obj as SavedSearch).name === 'string' &&
+    typeof (obj as SavedSearch).created_at === 'string' &&
+    typeof (obj as SavedSearch).query === 'object' &&
+    (obj as SavedSearch).query !== null
+  );
+}
+
 export function getSavedSearches(): SavedSearch[] {
   try {
     const stored = localStorage.getItem('alesys_saved_searches');
-    return stored ? JSON.parse(stored) : [];
+    if (!stored) return [];
+    const parsed = JSON.parse(stored);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(isValidSavedSearch);
   } catch {
     return [];
   }
 }
 
-export function saveSearch(name: string, query: AdvancedSearchQuery): SavedSearch {
+export function saveSearch(name: string, query: AdvancedSearchQuery): SavedSearch | null {
+  const trimmed = name.trim();
+  if (!trimmed) return null;
+
   const saved: SavedSearch = {
     id: crypto.randomUUID(),
     name,
@@ -201,6 +222,7 @@ export function queryToUrlParams(query: AdvancedSearchQuery): URLSearchParams {
   }
   if (query.filters?.doc_types?.length) params.set('dt', query.filters.doc_types.join(','));
   if (query.filters?.areas?.length) params.set('ar', query.filters.areas.join(','));
+  if (query.filters?.subareas?.length) params.set('sa', query.filters.subareas.join(','));
   if (query.filters?.date_from) params.set('df', query.filters.date_from);
   if (query.filters?.date_to) params.set('dt_to', query.filters.date_to);
   if (query.limit !== 20) params.set('lim', String(query.limit));
@@ -224,7 +246,9 @@ export function urlParamsToQuery(params: URLSearchParams): Partial<AdvancedSearc
   const dt = params.get('dt');
   if (dt) filters.doc_types = dt.split(',');
   const ar = params.get('ar');
-  if (ar) filters.areas = ar.split(',').map(Number).filter(Boolean);
+  if (ar) filters.areas = ar.split(',').map(Number).filter((n) => !isNaN(n) && n > 0);
+  const sa = params.get('sa');
+  if (sa) filters.subareas = sa.split(',').map(Number).filter((n) => !isNaN(n) && n > 0);
   const df = params.get('df');
   if (df) filters.date_from = df;
   const dtTo = params.get('dt_to');
