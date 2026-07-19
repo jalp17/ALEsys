@@ -56,8 +56,6 @@ impl LLMQueue {
     }
 }
 
-use std::path::PathBuf;
-
 #[derive(Clone)]
 pub struct AppState {
     #[allow(dead_code)]
@@ -68,8 +66,6 @@ pub struct AppState {
     pub llm_queue: LLMQueue,
     pub llm_config: LLMConfig,
     pub embedder: Arc<ONNXEmbedder>,
-    /// Root directory for file operations (Phase 7: editor)
-    pub project_dir: PathBuf,
 }
 
 impl AppState {
@@ -78,19 +74,9 @@ impl AppState {
         llm_config: LLMConfig,
         embedder_path: Option<&str>,
     ) -> anyhow::Result<Self> {
-        Self::with_project_dir(db, llm_config, embedder_path, PathBuf::from(".")).await
-    }
-
-    pub async fn with_project_dir(
-        db: PgPool,
-        llm_config: LLMConfig,
-        embedder_path: Option<&str>,
-        project_dir: PathBuf,
-    ) -> anyhow::Result<Self> {
         let graphrag = Arc::new(GraphRAG::new(db.clone()).await?);
         let session_manager = SessionManager::new(db.clone());
 
-        // Inicializar LLM engine (selecciona backend automáticamente)
         let llm_engine = match LLMBackend::from_config(llm_config.clone()).await {
             Ok(engine) => Arc::new(engine),
             Err(e) => {
@@ -99,7 +85,6 @@ impl AppState {
             }
         };
 
-        // Inicializar embedder
         let mut embedder = ONNXEmbedder::new();
         if let Some(path) = embedder_path {
             if let Err(e) = embedder.load(path) {
@@ -121,10 +106,8 @@ impl AppState {
             llm_queue,
             llm_config,
             embedder,
-            project_dir,
         };
 
-        // Log startup health status
         tracing::info!(
             "Estado inicial: LLM={} (backend={}), Embedder={}, DB=connected",
             state.llm_engine.is_available(),
