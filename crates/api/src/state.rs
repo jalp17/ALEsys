@@ -4,6 +4,7 @@ use alesys_core::llm::{
     ChatMessage, ChatResponse, LLMBackend, LLMConfig, LLMEngine, ONNXEmbedder, StreamChunk,
 };
 use alesys_core::{GraphRAG, SessionManager, AgentManager};
+use crate::auth::AuthState;
 use futures::stream::BoxStream;
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -67,6 +68,7 @@ pub struct AppState {
     pub llm_config: LLMConfig,
     pub embedder: Arc<ONNXEmbedder>,
     pub agent_manager: Arc<AgentManager>,
+    pub auth_state: Arc<AuthState>,
 }
 
 impl AppState {
@@ -108,6 +110,7 @@ impl AppState {
             llm_config,
             embedder,
             agent_manager: Arc::new(AgentManager::new()),
+            auth_state: Arc::new(AuthState::new()),
         };
 
         tracing::info!(

@@ -1,5 +1,6 @@
 //! Handlers de los endpoints HTTP
 
+use crate::auth::{self, Claims, JwtConfig, Role};
 use crate::state::AppState;
 use alesys_core::agent::protocol::AgentCommand;
 use alesys_core::graphrag::search::AdvancedSearchQuery;
@@ -851,5 +852,59 @@ pub async fn agent_list_dir(
         Ok(_) => Err(ApiError { error: "Unexpected response".into(), code: "UNEXPECTED".into() }),
         Err(e) => Err(ApiError { error: e, code: "AGENT_ERROR".into() }),
     }
+}
+
+// =============================================================================
+// Authentication
+// =============================================================================
+
+#[derive(Deserialize)]
+pub struct LoginRequest {
+    pub username: String,
+    pub password: String,
+}
+
+#[derive(Serialize)]
+pub struct LoginResponse {
+    pub token: String,
+    pub role: String,
+}
+
+/// POST /api/v1/auth/login
+pub async fn login(
+    State(state): State<AppState>,
+    Json(req): Json<LoginRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    // TODO: In production, validate against database with bcrypt
+    // For now, simple hardcoded validation for development
+    let (user_id, role) = match (req.username.as_str(), req.password.as_str()) {
+        ("admin", "alesys") => ("admin", Role::Admin),
+        ("user", "alesys") => ("user", Role::User),
+        _ => {
+            return Err(ApiError {
+                error: "Invalid credentials".into(),
+                code: "UNAUTHORIZED".into(),
+            });
+        }
+    };
+
+    let jwt_config = auth::JwtConfig::from_env();
+    let token = auth::create_token(user_id, role.clone(), &jwt_config)
+        .map_err(|e| ApiError { error: e.to_string(), code: "TOKEN_ERROR".into() })?;
+
+    Ok(Json(serde_json::json!({
+        "token": token,
+        "role": format!("{:?}", role).to_lowercase(),
+    })))
+}
+
+/// GET /api/v1/auth/me
+pub async fn get_current_user(
+    claims: Claims,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    Ok(Json(serde_json::json!({
+        "user_id": claims.sub,
+        "role": format!("{:?}", claims.role).to_lowercase(),
+    })))
 }
 
