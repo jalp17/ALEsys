@@ -418,25 +418,26 @@ pub async fn expand_query(db: &PgPool, query: &str, max_terms: usize) -> Result<
 
     let mut expanded: Vec<String> = Vec::new();
 
-    for term in &terms {
-        let rows = sqlx::query(
-            r#"
-            SELECT contenido
-            FROM fragmentos
-            WHERE LOWER(contenido) LIKE $1
-            LIMIT 20
-            "#,
-        )
-        .bind(format!("%{}%", term))
-        .fetch_all(db)
-        .await
-        .map_err(|e| {
+    // Batch query: fetch all fragments matching any term in a single query
+    if !terms.is_empty() {
+        let like_conditions: Vec<String> = terms
+            .iter()
+            .enumerate()
+            .map(|(i, _)| format!("LOWER(contenido) LIKE ${}", i + 1))
+            .collect();
+        let sql = format!(
+            "SELECT contenido FROM fragmentos WHERE {} LIMIT 200",
+            like_conditions.join(" OR ")
+        );
+        let mut query = sqlx::query(&sql);
+        for term in &terms {
+            query = query.bind(format!("%{}%", term));
+        }
+        let rows = query.fetch_all(db).await.map_err(|e| {
             tracing::error!("DB error en expand_query: {}", e);
             crate::AlesysError::Database(e)
         })?;
 
-        // Extraer palabras que co-ocurren
-        let mut word_counts: HashMap<String, usize> = HashMap::new();
         let stop_words: std::collections::HashSet<&str> = [
             "el", "la", "los", "las", "un", "una", "uno", "de", "del", "al", "en", "con", "por",
             "para", "que", "es", "se", "no", "su", "como", "más", "pero", "este", "esta", "estos",
@@ -447,17 +448,18 @@ pub async fn expand_query(db: &PgPool, query: &str, max_terms: usize) -> Result<
         .copied()
         .collect();
 
+        let mut word_counts: HashMap<String, usize> = HashMap::new();
         for row in &rows {
             let content: String = row.get("contenido");
             let words: Vec<&str> = content.split_whitespace().collect();
 
             for window in words.windows(5) {
-                if window.iter().any(|w| w.to_lowercase() == *term) {
-                    for &word in window {
+                let window_lower: Vec<String> = window.iter().map(|w| w.to_lowercase()).collect();
+                if window_lower.iter().any(|w| terms.contains(w)) {
+                    for word in window {
                         let w_lower = word.to_lowercase();
-                        // Filtrar stop words, el término original, y palabras muy cortas
                         if w_lower.len() > 3
-                            && w_lower != *term
+                            && !terms.contains(&w_lower)
                             && !stop_words.contains(w_lower.as_str())
                             && !expanded.contains(&w_lower)
                         {
