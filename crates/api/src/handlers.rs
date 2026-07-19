@@ -1701,3 +1701,70 @@ pub async fn analytics_reports(
     })))
 }
 
+pub async fn workflow_list(
+) -> Result<Json<serde_json::Value>, ApiError> {
+    Ok(Json(serde_json::json!({
+        "workflows": [],
+        "total": 0,
+    })))
+}
+
+pub async fn workflow_create(
+    Json(payload): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    use alesys_core::workflow::builder::WorkflowBuilder;
+
+    let id = payload.get("id").and_then(|v| v.as_str()).unwrap_or("wf-1");
+    let name = payload.get("name").and_then(|v| v.as_str()).unwrap_or("New Workflow");
+    let description = payload.get("description").and_then(|v| v.as_str()).unwrap_or("");
+
+    let workflow = WorkflowBuilder::new(id, name)
+        .description(description)
+        .build();
+
+    Ok(Json(serde_json::json!({
+        "id": workflow.id,
+        "name": workflow.name,
+        "description": workflow.description,
+        "steps": workflow.steps.len(),
+        "enabled": workflow.enabled,
+    })))
+}
+
+pub async fn workflow_run(
+    axum::extract::Path(id): axum::extract::Path<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    use alesys_core::workflow::engine::WorkflowEngine;
+    use alesys_core::workflow::builder::WorkflowBuilder;
+    use alesys_core::workflow::actions::{Action, ActionType};
+
+    let mut config = std::collections::HashMap::new();
+    config.insert("command".to_string(), "echo workflow-executed".to_string());
+    let action = Action {
+        id: "action-1".to_string(),
+        action_type: ActionType::RunCommand,
+        config,
+        timeout_ms: 5000,
+    };
+
+    let workflow = WorkflowBuilder::new(&id, "Executed Workflow")
+        .step("step-1", "Run Command", action)
+        .build();
+
+    let engine = WorkflowEngine::new();
+    let result = engine.execute(&workflow);
+
+    Ok(Json(serde_json::json!({
+        "workflow_id": result.workflow_id,
+        "success": result.success,
+        "logs": result.logs.iter().map(|l| serde_json::json!({
+            "step_id": l.step_id,
+            "step_name": l.step_name,
+            "success": l.success,
+            "output": l.output,
+            "duration_ms": l.duration_ms,
+        })).collect::<Vec<_>>(),
+        "total_duration_ms": result.total_duration_ms,
+    })))
+}
+

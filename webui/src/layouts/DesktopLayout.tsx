@@ -93,6 +93,7 @@ export function DesktopLayout({ children }: DesktopLayoutProps) {
           <MenuItemOption to="/kb-curation">KB Curation</MenuItemOption>
           <MenuItemOption to="/multi-agent">Multi-Agent</MenuItemOption>
           <MenuItemOption to="/analytics">Analytics</MenuItemOption>
+          <MenuItemOption to="/workflows">Workflows</MenuItemOption>
           <div className="border-t border-gray-700 my-1" />
           <MenuItemOption action="toggle_sidebar">Toggle Sidebar</MenuItemOption>
           <MenuItemOption action="toggle_terminal">Toggle Terminal</MenuItemOption>

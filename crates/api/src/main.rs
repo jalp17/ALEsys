@@ -56,6 +56,7 @@ use handlers::{
     kb_merge, kb_split, kb_archive, kb_duplicates, kb_quality,
     collab_status, collab_tasks, collab_create_task, collab_consensus,
     analytics_usage, analytics_performance, analytics_users, analytics_reports,
+    workflow_list, workflow_create, workflow_run,
 };
 use state::AppState;
 use websocket::ws_chat_handler;
@@ -311,7 +312,11 @@ async fn main() -> Result<()> {
         .route("/analytics/usage", get(analytics_usage))
         .route("/analytics/performance", get(analytics_performance))
         .route("/analytics/users", get(analytics_users))
-        .route("/analytics/reports", get(analytics_reports));
+        .route("/analytics/reports", get(analytics_reports))
+        // Workflow endpoints
+        .route("/workflows", get(workflow_list))
+        .route("/workflows", post(workflow_create))
+        .route("/workflows/:id/run", post(workflow_run));
 
     let app = Router::new()
         .nest("/api/v1", api_v1.clone())
