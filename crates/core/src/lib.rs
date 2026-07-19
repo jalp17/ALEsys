@@ -25,6 +25,7 @@ pub mod voice;
 pub mod multimodal;
 pub mod collaboration;
 pub mod pair_programmer;
+pub mod learning;
 
 pub use generator::{CodeGenerator, GenerateRequest, GenerationResult};
 pub use graphrag::GraphRAG;
