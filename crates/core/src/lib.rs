@@ -19,11 +19,13 @@ pub mod session;
 pub mod executor;
 pub mod fs_ops;
 pub mod automation;
+pub mod agent;
 
 pub use generator::{CodeGenerator, GenerateRequest, GenerationResult};
 pub use graphrag::GraphRAG;
 pub use llm::LLMEngine;
 pub use session::SessionManager;
+pub use agent::{AgentManager, AgentInfo, AgentStatus};
 
 /// Error types del core
 #[derive(Debug, thiserror::Error)]
