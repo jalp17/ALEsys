@@ -8,18 +8,17 @@
 //!   - templates: PromptTemplate por lenguaje
 //!   - validation: SyntaxValidator post-generacion
 //! - session: Gestion de sesiones multi-usuario (Fase 3)
-//! - sandbox: Ejecucion de codigo en Docker (Fase 7) - feature gated
+//! - executor: Ejecucion local de subprocesos con limites (Fase 7+)
+//! - fs_ops: Operaciones locales de archivos (Fase 7+)
+//! - automation: Automatizacion local (LaTeX, Markdown, red)
 
 pub mod generator;
 pub mod graphrag;
 pub mod llm;
-pub mod session; // Fase 3 - Gestion de sesiones multi-usuario
-
-#[cfg(feature = "sandbox")]
-pub mod sandbox;
-
-#[cfg(feature = "editor")]
-pub mod editor;
+pub mod session;
+pub mod executor;
+pub mod fs_ops;
+pub mod automation;
 
 pub use generator::{CodeGenerator, GenerateRequest, GenerationResult};
 pub use graphrag::GraphRAG;
@@ -43,9 +42,6 @@ pub enum AlesysError {
 
     #[error("IO error: {0}")]
     IO(#[from] std::io::Error),
-
-    #[error("Sandbox error: {0}")]
-    Sandbox(String),
 
     #[error("Internal error: {0}")]
     Internal(String),

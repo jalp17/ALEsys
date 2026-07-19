@@ -5,6 +5,10 @@ use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_updater::UpdaterExt;
 use serde::{Deserialize, Serialize};
 
+use alesys_core::executor::{self, ExecutorConfig};
+use alesys_core::fs_ops;
+use alesys_core::automation::system;
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FileItem {
     pub name: String,
@@ -18,7 +22,6 @@ pub struct FileItem {
 pub struct SystemInfo {
     pub os: String,
     pub arch: String,
-    pub version: String,
     pub hostname: String,
     pub memory_total: u64,
     pub memory_available: u64,
@@ -113,96 +116,56 @@ pub async fn save_file_dialog(
 
 #[command]
 pub async fn read_file(path: String) -> Result<String, String> {
-    tokio::fs::read_to_string(&path)
-        .await
-        .map_err(|e| e.to_string())
+    fs_ops::read_file(&path).await
 }
 
 #[command]
 pub async fn write_file(path: String, content: String) -> Result<(), String> {
-    tokio::fs::write(&path, content.as_bytes())
-        .await
-        .map_err(|e| e.to_string())
+    fs_ops::write_file(&path, &content).await
 }
 
 #[command]
 pub async fn list_directory(path: String) -> Result<Vec<FileItem>, String> {
-    let mut entries = tokio::fs::read_dir(&path)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    let mut items = Vec::new();
-    while let Some(entry) = entries.next_entry().await.map_err(|e| e.to_string())? {
-        let metadata = entry.metadata().await.map_err(|e| e.to_string())?;
-        items.push(FileItem {
-            name: entry.file_name().to_string_lossy().to_string(),
-            path: entry.path().to_string_lossy().to_string(),
-            is_dir: metadata.is_dir(),
-            size: Some(metadata.len()),
-            modified: metadata.modified().ok().map(|t| {
-                let dt: chrono::DateTime<chrono::Utc> = t.into();
-                dt.to_rfc3339()
-            }),
-        });
-    }
-
-    Ok(items)
+    let items = fs_ops::list_directory(&path).await?;
+    Ok(items.into_iter().map(|i| FileItem {
+        name: i.name,
+        path: i.path,
+        is_dir: i.is_dir,
+        size: Some(i.size),
+        modified: i.modified,
+    }).collect())
 }
 
 #[command]
 pub async fn create_directory(path: String) -> Result<(), String> {
-    tokio::fs::create_dir_all(&path)
-        .await
-        .map_err(|e| e.to_string())
+    fs_ops::create_directory(&path).await
 }
 
 #[command]
 pub async fn delete_file(path: String) -> Result<(), String> {
-    let metadata = tokio::fs::metadata(&path)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    if metadata.is_dir() {
-        tokio::fs::remove_dir_all(&path)
-            .await
-            .map_err(|e| e.to_string())
-    } else {
-        tokio::fs::remove_file(&path)
-            .await
-            .map_err(|e| e.to_string())
-    }
+    fs_ops::delete_file(&path).await
 }
 
 #[command]
 pub async fn copy_file(from: String, to: String) -> Result<(), String> {
-    tokio::fs::copy(&from, &to)
-        .await
-        .map_err(|e| e.to_string())?;
-    Ok(())
+    fs_ops::copy_file(&from, &to).await
 }
 
 #[command]
 pub async fn move_file(from: String, to: String) -> Result<(), String> {
-    tokio::fs::rename(&from, &to)
-        .await
-        .map_err(|e| e.to_string())
+    fs_ops::move_file(&from, &to).await
 }
 
 #[command]
 pub async fn get_system_info() -> Result<SystemInfo, String> {
-    let sys = sysinfo::System::new_all();
-
+    let info = system::get_system_info();
     Ok(SystemInfo {
-        os: std::env::consts::OS.to_string(),
-        arch: std::env::consts::ARCH.to_string(),
-        version: std::env::consts::OS.to_string(),
-        hostname: hostname::get()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .to_string(),
-        memory_total: sys.total_memory(),
-        memory_available: sys.available_memory(),
-        cpu_count: sys.cpus().len(),
+        os: info.os,
+        arch: info.arch,
+        hostname: info.hostname,
+        memory_total: info.memory_total,
+        memory_available: info.memory_available,
+        cpu_count: info.cpu_count,
     })
 }
 
@@ -225,15 +188,19 @@ pub async fn execute_command(
     command: String,
     args: Vec<String>,
 ) -> Result<ExecuteResult, String> {
-    let output = std::process::Command::new(&command)
-        .args(&args)
-        .output()
-        .map_err(|e| e.to_string())?;
+    let config = ExecutorConfig::default();
+    let result = executor::execute(
+        &command,
+        &args.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+        None,
+        &config,
+    )
+    .await?;
 
     Ok(ExecuteResult {
-        stdout: String::from_utf8_lossy(&output.stdout).to_string(),
-        stderr: String::from_utf8_lossy(&output.stderr).to_string(),
-        exit_code: output.status.code().unwrap_or(-1),
+        stdout: result.stdout,
+        stderr: result.stderr,
+        exit_code: result.exit_code,
     })
 }
 
