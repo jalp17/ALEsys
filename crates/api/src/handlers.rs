@@ -1221,3 +1221,49 @@ pub async fn debug_analyze(
     })))
 }
 
+pub async fn test_generate(
+    Json(payload): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    use alesys_core::test_generation::generator::{TestGenerator, FunctionInfo, ParameterInfo, ComplexityLevel};
+    use alesys_core::test_generation::suite::TestSuite;
+
+    let function_name = payload.get("function_name").and_then(|v| v.as_str()).unwrap_or("unknown");
+    let language = payload.get("language").and_then(|v| v.as_str()).unwrap_or("rust");
+
+    let params: Vec<ParameterInfo> = payload.get("parameters")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter().filter_map(|p| {
+                Some(ParameterInfo {
+                    name: p.get("name")?.as_str()?.to_string(),
+                    type_name: p.get("type")?.as_str()?.to_string(),
+                    is_optional: p.get("optional").and_then(|v| v.as_bool()).unwrap_or(false),
+                    default_value: p.get("default").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                })
+            }).collect()
+        })
+        .unwrap_or_default();
+
+    let function = FunctionInfo {
+        name: function_name.to_string(),
+        parameters: params,
+        return_type: payload.get("return_type").and_then(|v| v.as_str()).map(|s| s.to_string()),
+        is_async: payload.get("is_async").and_then(|v| v.as_bool()).unwrap_or(false),
+        complexity: ComplexityLevel::Moderate,
+        dependencies: vec![],
+    };
+
+    let generator = TestGenerator::new(language, "built-in");
+    let tests = generator.generate_for_function(&function);
+
+    let mut suite = TestSuite::new(&format!("{}_tests", function_name), language, "built-in");
+    suite.add_tests(tests);
+
+    Ok(Json(serde_json::json!({
+        "suite_name": suite.name,
+        "total_tests": suite.get_test_count(),
+        "test_code": suite.export_to_file(),
+        "summary": suite.get_summary(),
+    })))
+}
+
