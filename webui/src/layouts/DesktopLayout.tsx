@@ -86,6 +86,7 @@ export function DesktopLayout({ children }: DesktopLayoutProps) {
           <MenuItemOption to="/plugins">Plugins</MenuItemOption>
           <MenuItemOption to="/orchestrator">Orchestrator</MenuItemOption>
           <MenuItemOption to="/collaboration">Collaborate</MenuItemOption>
+          <MenuItemOption to="/learning">Learning</MenuItemOption>
           <div className="border-t border-gray-700 my-1" />
           <MenuItemOption action="toggle_sidebar">Toggle Sidebar</MenuItemOption>
           <MenuItemOption action="toggle_terminal">Toggle Terminal</MenuItemOption>

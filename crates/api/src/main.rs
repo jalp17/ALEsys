@@ -49,6 +49,7 @@ use handlers::{
     list_plugins, execute_plugin, enable_plugin, disable_plugin,
     marketplace_list, marketplace_install, marketplace_uninstall,
     pair_programmer_analyze, pair_programmer_refactor, pair_programmer_project,
+    learning_feedback, learning_insights,
 };
 use state::AppState;
 use websocket::ws_chat_handler;
@@ -278,7 +279,10 @@ async fn main() -> Result<()> {
         // Pair programmer endpoints
         .route("/pair-programmer/analyze", post(pair_programmer_analyze))
         .route("/pair-programmer/refactor", post(pair_programmer_refactor))
-        .route("/pair-programmer/project", get(pair_programmer_project));
+        .route("/pair-programmer/project", get(pair_programmer_project))
+        // Learning endpoints
+        .route("/learning/feedback", post(learning_feedback))
+        .route("/learning/insights", get(learning_insights));
 
     let app = Router::new()
         .nest("/api/v1", api_v1.clone())
