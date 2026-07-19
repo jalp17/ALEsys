@@ -32,6 +32,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 static METRICS_HANDLE: OnceLock<metrics_exporter_prometheus::PrometheusHandle> = OnceLock::new();
 
+mod auth;
 mod handlers;
 mod state;
 mod websocket;
@@ -44,6 +45,7 @@ use handlers::{
     generate_handler, get_centrality, get_communities, get_config, get_graph, get_session,
     get_session_history, get_shortest_path, graph_stats, health_handler, list_sessions,
     search_graph, list_agents, agent_stats, agent_execute, agent_read_file, agent_write_file, agent_list_dir,
+    login, get_current_user,
 };
 use state::AppState;
 use websocket::ws_chat_handler;
@@ -247,6 +249,8 @@ async fn main() -> Result<()> {
         .route("/graph/export", get(export_graph_json))
         .route("/search/advanced", post(advanced_search_handler))
         .route("/config", get(get_config))
+        .route("/auth/login", post(login))
+        .route("/auth/me", get(get_current_user))
         .route("/agents", get(list_agents))
         .route("/agents/stats", get(agent_stats))
         .route("/agents/:id/execute", post(agent_execute))
