@@ -15,6 +15,7 @@ import Plugins from './pages/Plugins';
 import OrchestratorDashboard from './pages/Orchestrator';
 import Collaboration from './pages/Collaboration';
 import LearningPage from './pages/Learning';
+import DebugPage from './pages/Debug';
 
 const queryClient = new QueryClient();
 
@@ -35,6 +36,7 @@ function App() {
             <Route path="/orchestrator" element={<OrchestratorDashboard />} />
             <Route path="/collaboration" element={<Collaboration />} />
             <Route path="/learning" element={<LearningPage />} />
+            <Route path="/debug" element={<DebugPage />} />
             <Route path="/sessions" element={<Sessions />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/graph" element={<GraphViewer />} />
