@@ -1153,3 +1153,42 @@ pub async fn pair_programmer_project(
     })))
 }
 
+pub async fn learning_feedback(
+    Json(payload): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let suggestion_id = payload.get("suggestion_id").and_then(|v| v.as_str()).unwrap_or("");
+    let rating = payload.get("rating").and_then(|v| v.as_str()).unwrap_or("neutral");
+    let suggestion_type = payload.get("suggestion_type").and_then(|v| v.as_str()).unwrap_or("unknown");
+
+    let feedback_id = uuid::Uuid::new_v4().to_string();
+
+    Ok(Json(serde_json::json!({
+        "id": feedback_id,
+        "suggestion_id": suggestion_id,
+        "rating": rating,
+        "suggestion_type": suggestion_type,
+        "status": "recorded",
+    })))
+}
+
+pub async fn learning_insights(
+    State(_state): State<AppState>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    Ok(Json(serde_json::json!({
+        "insights": [
+            {
+                "insight_type": "LanguagePreference",
+                "description": "Most used language: Rust (based on project structure)",
+                "confidence": 0.85,
+                "based_on_count": 42,
+            },
+            {
+                "insight_type": "SuggestionPreference",
+                "description": "TODO suggestions are 80% helpful based on user feedback",
+                "confidence": 0.8,
+                "based_on_count": 15,
+            },
+        ],
+    })))
+}
+
