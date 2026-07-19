@@ -1,6 +1,6 @@
 use super::protocol::{AgentCommand, AgentInfo, AgentResponse, AgentStatus};
 use std::collections::HashMap;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, oneshot, RwLock};
 use std::sync::Arc;
 
@@ -8,6 +8,12 @@ pub struct AgentManager {
     agents: Arc<RwLock<HashMap<String, AgentConnection>>>,
     user_agents: Arc<RwLock<HashMap<i32, String>>>,
     pending: Arc<RwLock<HashMap<String, oneshot::Sender<AgentResponse>>>>,
+    rate_limits: Arc<RwLock<HashMap<String, RateWindow>>>,
+}
+
+struct RateWindow {
+    count: usize,
+    window_start: Instant,
 }
 
 pub struct AgentConnection {
@@ -16,6 +22,8 @@ pub struct AgentConnection {
 }
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
+const RATE_LIMIT_WINDOW: Duration = Duration::from_secs(60);
+const RATE_LIMIT_MAX: usize = 100;
 
 impl AgentManager {
     pub fn new() -> Self {
@@ -23,6 +31,28 @@ impl AgentManager {
             agents: Arc::new(RwLock::new(HashMap::new())),
             user_agents: Arc::new(RwLock::new(HashMap::new())),
             pending: Arc::new(RwLock::new(HashMap::new())),
+            rate_limits: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    /// Check if an agent is within rate limits. Returns true if allowed.
+    async fn check_rate_limit(&self, agent_id: &str) -> bool {
+        let mut limits = self.rate_limits.write().await;
+        let now = Instant::now();
+        let entry = limits.entry(agent_id.to_string()).or_insert(RateWindow {
+            count: 0,
+            window_start: now,
+        });
+
+        if now.duration_since(entry.window_start) > RATE_LIMIT_WINDOW {
+            entry.count = 1;
+            entry.window_start = now;
+            true
+        } else if entry.count < RATE_LIMIT_MAX {
+            entry.count += 1;
+            true
+        } else {
+            false
         }
     }
 
@@ -43,6 +73,9 @@ impl AgentManager {
 
         let mut pending = self.pending.write().await;
         pending.retain(|id, _| !id.starts_with(agent_id));
+
+        let mut rate_limits = self.rate_limits.write().await;
+        rate_limits.remove(agent_id);
     }
 
     pub async fn assign_agent_to_user(&self, user_id: i32, agent_id: &str) -> bool {
@@ -88,6 +121,11 @@ impl AgentManager {
         command: AgentCommand,
         timeout: Option<Duration>,
     ) -> Result<AgentResponse, String> {
+        // Check rate limit before sending
+        if !self.check_rate_limit(agent_id).await {
+            return Err("Rate limit exceeded for agent".to_string());
+        }
+
         let sender = {
             let agents = self.agents.read().await;
             agents.get(agent_id)
