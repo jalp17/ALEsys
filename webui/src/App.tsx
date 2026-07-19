@@ -13,6 +13,7 @@ import { EditorPage } from './pages/editor';
 import { Agents } from './pages/Agents';
 import Plugins from './pages/Plugins';
 import OrchestratorDashboard from './pages/Orchestrator';
+import Collaboration from './pages/Collaboration';
 
 const queryClient = new QueryClient();
 
@@ -31,6 +32,7 @@ function App() {
             <Route path="/agents" element={<Agents />} />
             <Route path="/plugins" element={<Plugins />} />
             <Route path="/orchestrator" element={<OrchestratorDashboard />} />
+            <Route path="/collaboration" element={<Collaboration />} />
             <Route path="/sessions" element={<Sessions />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/graph" element={<GraphViewer />} />
