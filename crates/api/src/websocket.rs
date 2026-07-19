@@ -250,7 +250,6 @@ pub struct AgentRegisterMessage {
 #[derive(Deserialize)]
 pub struct AgentRegisterPayload {
     pub name: String,
-    #[allow(dead_code)]
     pub token: String,
 }
 
@@ -269,6 +268,9 @@ async fn handle_websocket_agent(socket: WebSocket, state: AppState) {
 
     let (tx, _rx) = tokio::sync::mpsc::channel::<Vec<u8>>(32);
 
+    // Validate agent token from env
+    let valid_token = std::env::var("AGENT_AUTH_TOKEN").unwrap_or_default();
+
     while let Some(msg) = receiver.next().await {
         match msg {
             Ok(axum::extract::ws::Message::Text(text)) => {
@@ -284,6 +286,22 @@ async fn handle_websocket_agent(socket: WebSocket, state: AppState) {
 
                 if ws_msg.msg_type == "register" {
                     if let Some(payload) = ws_msg.payload {
+                        // Validate token if AGENT_AUTH_TOKEN is set
+                        if !valid_token.is_empty() && payload.token != valid_token {
+                            tracing::warn!(
+                                "Agent registration rejected: invalid token from {}",
+                                agent_id
+                            );
+                            let err = serde_json::json!({
+                                "type": "error",
+                                "payload": { "message": "Invalid authentication token" }
+                            });
+                            let _ = sender
+                                .send(axum::extract::ws::Message::Text(err.to_string().into()))
+                                .await;
+                            break;
+                        }
+
                         let info = alesys_core::agent::AgentInfo {
                             id: agent_id.clone(),
                             name: payload.name,
