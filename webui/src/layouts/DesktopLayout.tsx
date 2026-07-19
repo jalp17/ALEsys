@@ -94,6 +94,7 @@ export function DesktopLayout({ children }: DesktopLayoutProps) {
           <MenuItemOption to="/multi-agent">Multi-Agent</MenuItemOption>
           <MenuItemOption to="/analytics">Analytics</MenuItemOption>
           <MenuItemOption to="/workflows">Workflows</MenuItemOption>
+          <MenuItemOption to="/advanced-search">Advanced Search</MenuItemOption>
           <div className="border-t border-gray-700 my-1" />
           <MenuItemOption action="toggle_sidebar">Toggle Sidebar</MenuItemOption>
           <MenuItemOption action="toggle_terminal">Toggle Terminal</MenuItemOption>

@@ -57,6 +57,7 @@ use handlers::{
     collab_status, collab_tasks, collab_create_task, collab_consensus,
     analytics_usage, analytics_performance, analytics_users, analytics_reports,
     workflow_list, workflow_create, workflow_run,
+    search_faceted, search_suggest,
 };
 use state::AppState;
 use websocket::ws_chat_handler;
@@ -316,7 +317,10 @@ async fn main() -> Result<()> {
         // Workflow endpoints
         .route("/workflows", get(workflow_list))
         .route("/workflows", post(workflow_create))
-        .route("/workflows/:id/run", post(workflow_run));
+        .route("/workflows/:id/run", post(workflow_run))
+        // Advanced search endpoints
+        .route("/search/faceted", post(search_faceted))
+        .route("/search/suggest", post(search_suggest));
 
     let app = Router::new()
         .nest("/api/v1", api_v1.clone())

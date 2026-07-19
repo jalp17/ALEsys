@@ -22,6 +22,7 @@ import KnowledgeCurationPage from './pages/KnowledgeCuration';
 import MultiAgentPage from './pages/MultiAgent';
 import AnalyticsPage from './pages/Analytics';
 import WorkflowsPage from './pages/Workflows';
+import AdvancedSearchPage from './pages/AdvancedSearch';
 
 const queryClient = new QueryClient();
 
@@ -49,6 +50,7 @@ function App() {
             <Route path="/multi-agent" element={<MultiAgentPage />} />
             <Route path="/analytics" element={<AnalyticsPage />} />
             <Route path="/workflows" element={<WorkflowsPage />} />
+            <Route path="/advanced-search" element={<AdvancedSearchPage />} />
             <Route path="/sessions" element={<Sessions />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/graph" element={<GraphViewer />} />
