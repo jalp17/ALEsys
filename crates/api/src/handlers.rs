@@ -1768,3 +1768,69 @@ pub async fn workflow_run(
     })))
 }
 
+pub async fn search_faceted(
+    Json(payload): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    use alesys_core::search_adv::query_builder::{QueryBuilder, SearchQuery};
+    use alesys_core::search_adv::query_builder::SearchItem;
+    use alesys_core::search_adv::facets::FacetedSearch;
+
+    let text = payload.get("text").and_then(|v| v.as_str()).unwrap_or("");
+    let page = payload.get("page").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+    let page_size = payload.get("page_size").and_then(|v| v.as_u64()).unwrap_or(20) as usize;
+    let facet_fields: Vec<String> = payload.get("facets")
+        .and_then(|v| v.as_array())
+        .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        .unwrap_or_default();
+
+    let query = SearchQuery {
+        text: text.to_string(),
+        page,
+        page_size,
+        ..Default::default()
+    };
+
+    let builder = QueryBuilder::new();
+    let docs: Vec<SearchItem> = vec![];
+    let result = builder.search(&query, &docs);
+
+    let search = FacetedSearch::new();
+    let items: Vec<std::collections::HashMap<String, String>> = vec![];
+    let facets = search.compute_facets(&items, &facet_fields);
+
+    Ok(Json(serde_json::json!({
+        "results": result.results.len(),
+        "total": result.total,
+        "page": result.page,
+        "query_time_ms": result.query_time_ms,
+        "facets": facets.iter().map(|f| serde_json::json!({
+            "field": f.field,
+            "values": f.values.iter().map(|v| serde_json::json!({
+                "value": v.value,
+                "count": v.count,
+            })).collect::<Vec<_>>(),
+        })).collect::<Vec<_>>(),
+    })))
+}
+
+pub async fn search_suggest(
+    Json(payload): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let query = payload.get("text").and_then(|v| v.as_str()).unwrap_or("");
+
+    let suggestions: Vec<String> = if query.len() >= 2 {
+        vec![
+            format!("{} tutorial", query),
+            format!("{} examples", query),
+            format!("{} documentation", query),
+        ]
+    } else {
+        vec![]
+    };
+
+    Ok(Json(serde_json::json!({
+        "query": query,
+        "suggestions": suggestions,
+    })))
+}
+
