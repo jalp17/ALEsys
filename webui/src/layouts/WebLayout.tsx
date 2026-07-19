@@ -55,6 +55,9 @@ export function WebLayout({ children }: WebLayoutProps) {
           <Link to="/kb-curation" className="text-gray-300 hover:text-primary-400 transition">
             KB Curation
           </Link>
+          <Link to="/multi-agent" className="text-gray-300 hover:text-primary-400 transition">
+            Agents
+          </Link>
           <Link to="/sessions" className="text-gray-300 hover:text-primary-400 transition">
             Sesiones
           </Link>

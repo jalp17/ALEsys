@@ -1525,3 +1525,108 @@ pub async fn kb_quality(
     })))
 }
 
+pub async fn collab_status(
+) -> Result<Json<serde_json::Value>, ApiError> {
+    use alesys_core::multi_agent::coordinator::AgentCoordinator;
+
+    let coord = AgentCoordinator::new();
+    let stats = coord.get_stats();
+
+    Ok(Json(serde_json::json!({
+        "total_agents": stats.total_agents,
+        "idle_agents": stats.idle_agents,
+        "busy_agents": stats.busy_agents,
+        "capabilities": stats.capabilities,
+    })))
+}
+
+pub async fn collab_tasks(
+) -> Result<Json<serde_json::Value>, ApiError> {
+    use alesys_core::multi_agent::task_board::TaskBoard;
+
+    let board = TaskBoard::new();
+    let stats = board.get_stats();
+
+    Ok(Json(serde_json::json!({
+        "total": stats.total,
+        "pending": stats.pending,
+        "in_progress": stats.in_progress,
+        "done": stats.done,
+        "failed": stats.failed,
+        "tasks": board.list_tasks().iter().map(|t| serde_json::json!({
+            "id": t.id,
+            "title": t.title,
+            "status": format!("{:?}", t.status),
+            "priority": format!("{:?}", t.priority),
+        })).collect::<Vec<_>>(),
+    })))
+}
+
+pub async fn collab_create_task(
+    Json(payload): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    use alesys_core::multi_agent::task_board::{TaskBoard, TaskPriority};
+
+    let id = payload.get("id").and_then(|v| v.as_str()).unwrap_or("task-1");
+    let title = payload.get("title").and_then(|v| v.as_str()).unwrap_or("New Task");
+    let description = payload.get("description").and_then(|v| v.as_str()).unwrap_or("");
+    let priority_str = payload.get("priority").and_then(|v| v.as_str()).unwrap_or("medium");
+
+    let priority = match priority_str {
+        "low" => TaskPriority::Low,
+        "high" => TaskPriority::High,
+        "critical" => TaskPriority::Critical,
+        _ => TaskPriority::Medium,
+    };
+
+    let mut board = TaskBoard::new();
+    let task = board.create_task(id, title, description, priority);
+
+    Ok(Json(serde_json::json!({
+        "id": task.id,
+        "title": task.title,
+        "status": format!("{:?}", task.status),
+        "priority": format!("{:?}", task.priority),
+    })))
+}
+
+pub async fn collab_consensus(
+    Json(payload): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    use alesys_core::multi_agent::consensus::{ConsensusEngine, AgentVote, Vote};
+
+    let proposal_id = payload.get("proposal_id").and_then(|v| v.as_str()).unwrap_or("proposal-1");
+    let empty_vec: Vec<serde_json::Value> = vec![];
+    let votes_input = payload.get("votes").and_then(|v| v.as_array()).unwrap_or(&empty_vec);
+    let threshold = payload.get("threshold").and_then(|v| v.as_f64()).unwrap_or(0.6);
+
+    let votes: Vec<AgentVote> = votes_input.iter().map(|v| {
+        let vote_str = v.get("vote").and_then(|val| val.as_str()).unwrap_or("abstain");
+        let vote = match vote_str {
+            "approve" => Vote::Approve,
+            "reject" => Vote::Reject,
+            _ => Vote::Abstain,
+        };
+        AgentVote {
+            agent_id: v.get("agent_id").and_then(|val| val.as_str()).unwrap_or("unknown").to_string(),
+            vote,
+            reasoning: v.get("reasoning").and_then(|val| val.as_str()).unwrap_or("").to_string(),
+            confidence: v.get("confidence").and_then(|val| val.as_f64()).unwrap_or(0.5),
+        }
+    }).collect();
+
+    let engine = ConsensusEngine::new(threshold);
+    let result = engine.evaluate(proposal_id, &votes);
+    let weighted = engine.calculate_weighted_score(&votes);
+
+    Ok(Json(serde_json::json!({
+        "proposal_id": result.proposal_id,
+        "passed": result.passed,
+        "approval_rate": result.approval_rate,
+        "consensus_reached": result.consensus_reached,
+        "final_decision": result.final_decision,
+        "weighted_score": weighted,
+        "votes_count": result.votes.len(),
+    })))
+}
+
