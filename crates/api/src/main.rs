@@ -53,6 +53,7 @@ use handlers::{
     debug_analyze,
     test_generate,
     refactoring_analyze, refactoring_preview,
+    kb_merge, kb_split, kb_archive, kb_duplicates, kb_quality,
 };
 use state::AppState;
 use websocket::ws_chat_handler;
@@ -292,7 +293,13 @@ async fn main() -> Result<()> {
         .route("/test-generate", post(test_generate))
         // Refactoring endpoints
         .route("/refactoring/analyze", post(refactoring_analyze))
-        .route("/refactoring/preview", post(refactoring_preview));
+        .route("/refactoring/preview", post(refactoring_preview))
+        // Knowledge curation endpoints
+        .route("/kb/merge", post(kb_merge))
+        .route("/kb/split", post(kb_split))
+        .route("/kb/archive", post(kb_archive))
+        .route("/kb/duplicates", post(kb_duplicates))
+        .route("/kb/quality", post(kb_quality));
 
     let app = Router::new()
         .nest("/api/v1", api_v1.clone())
