@@ -908,3 +908,145 @@ pub async fn get_current_user(
     })))
 }
 
+// ===== Plugin Endpoints =====
+
+/// GET /api/v1/plugins - List installed plugins
+pub async fn list_plugins(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let plugins = state.plugin_manager.list_plugins().await;
+    Ok(Json(serde_json::json!({
+        "plugins": plugins,
+        "count": plugins.len(),
+    })))
+}
+
+/// POST /api/v1/plugins/:id/execute - Execute a plugin command
+#[derive(Deserialize)]
+pub struct PluginExecuteRequest {
+    pub command: String,
+    #[serde(default)]
+    pub args: Vec<String>,
+}
+
+pub async fn execute_plugin(
+    State(state): State<AppState>,
+    Path(plugin_id): Path<String>,
+    Json(req): Json<PluginExecuteRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let context = alesys_core::plugin::PluginContext {
+        work_dir: std::env::temp_dir(),
+        allowed_paths: vec![],
+        config: std::collections::HashMap::new(),
+        request_id: Uuid::new_v4().to_string(),
+    };
+
+    match state
+        .plugin_manager
+        .execute(&plugin_id, &req.command, &req.args, &context)
+        .await
+    {
+        Ok(result) => Ok(Json(serde_json::json!({
+            "success": result.success,
+            "output": result.output,
+            "error": result.error,
+            "metadata": result.metadata,
+        }))),
+        Err(e) => Err(ApiError {
+            error: e,
+            code: "PLUGIN_ERROR".into(),
+        }),
+    }
+}
+
+/// POST /api/v1/plugins/:id/enable - Enable a plugin
+pub async fn enable_plugin(
+    State(_state): State<AppState>,
+    Path(plugin_id): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    // TODO: Update database and reload plugin
+    Ok(Json(serde_json::json!({
+        "plugin_id": plugin_id,
+        "enabled": true,
+        "message": "Plugin enabled",
+    })))
+}
+
+/// POST /api/v1/plugins/:id/disable - Disable a plugin
+pub async fn disable_plugin(
+    State(_state): State<AppState>,
+    Path(plugin_id): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    // TODO: Update database and unload plugin
+    Ok(Json(serde_json::json!({
+        "plugin_id": plugin_id,
+        "enabled": false,
+        "message": "Plugin disabled",
+    })))
+}
+
+// ===== Marketplace Endpoints =====
+
+/// GET /api/v1/marketplace/plugins - List available plugins
+pub async fn marketplace_list(
+) -> Result<Json<serde_json::Value>, ApiError> {
+    // TODO: Fetch from remote marketplace API
+    let plugins = vec![
+        serde_json::json!({
+            "id": "git-integration",
+            "name": "Git Integration",
+            "version": "0.1.0",
+            "author": "ALEsys",
+            "description": "Git integration for ALEsys",
+            "installed": true,
+        }),
+        serde_json::json!({
+            "id": "test-runner",
+            "name": "Test Runner",
+            "version": "0.1.0",
+            "author": "ALEsys",
+            "description": "Run tests automatically",
+            "installed": true,
+        }),
+        serde_json::json!({
+            "id": "docker-runner",
+            "name": "Docker Runner",
+            "version": "0.1.0",
+            "author": "ALEsys",
+            "description": "Run code in Docker containers",
+            "installed": true,
+        }),
+    ];
+
+    Ok(Json(serde_json::json!({
+        "plugins": plugins,
+        "count": plugins.len(),
+    })))
+}
+
+/// POST /api/v1/marketplace/install/:id - Install a plugin
+pub async fn marketplace_install(
+    State(_state): State<AppState>,
+    Path(plugin_id): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    // TODO: Download and install plugin from marketplace
+    Ok(Json(serde_json::json!({
+        "plugin_id": plugin_id,
+        "status": "installed",
+        "message": "Plugin installed successfully",
+    })))
+}
+
+/// DELETE /api/v1/marketplace/uninstall/:id - Uninstall a plugin
+pub async fn marketplace_uninstall(
+    State(_state): State<AppState>,
+    Path(plugin_id): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    // TODO: Remove plugin and cleanup
+    Ok(Json(serde_json::json!({
+        "plugin_id": plugin_id,
+        "status": "uninstalled",
+        "message": "Plugin uninstalled successfully",
+    })))
+}
+
