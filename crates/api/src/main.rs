@@ -148,19 +148,25 @@ async fn main() -> Result<()> {
         tracing::warn!("Neither DATABASE_URL nor PGHOST set — usando defaults de docker-compose");
     }
 
-    let database_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
-        let host = std::env::var("PGHOST").unwrap_or_else(|_| "localhost".to_string());
-        let port = std::env::var("PGPORT").unwrap_or_else(|_| "5433".to_string());
-        let user = std::env::var("PGUSER").unwrap_or_else(|_| "alesys".to_string());
-        let password = std::env::var("PGPASSWORD").unwrap_or_else(|_| "alesys".to_string());
-        let dbname = std::env::var("PGDATABASE").unwrap_or_else(|_| "alesys".to_string());
-        format!(
-            "postgres://{}:{}@{}:{}/{}",
-            user, password, host, port, dbname
-        )
-    });
+    let database_url = match std::env::var("DATABASE_URL") {
+        Ok(url) => url,
+        Err(_) => {
+            let host = std::env::var("PGHOST").unwrap_or_else(|_| "localhost".to_string());
+            let port = std::env::var("PGPORT").unwrap_or_else(|_| "5433".to_string());
+            let user = std::env::var("PGUSER").unwrap_or_else(|_| "alesys".to_string());
+            let password = std::env::var("PGPASSWORD").unwrap_or_else(|_| {
+                tracing::warn!("PGPASSWORD not set — using default for development only");
+                "alesys".to_string()
+            });
+            let dbname = std::env::var("PGDATABASE").unwrap_or_else(|_| "alesys".to_string());
+            format!(
+                "postgres://{}:{}@{}:{}/{}",
+                user, password, host, port, dbname
+            )
+        }
+    };
 
-    let db_pool = sqlx::postgres::PgPoolOptions::new()
+    let db_pool = match sqlx::postgres::PgPoolOptions::new()
         .max_connections(
             std::env::var("DB_MAX_CONNECTIONS")
                 .ok()
@@ -170,7 +176,13 @@ async fn main() -> Result<()> {
         .idle_timeout(std::time::Duration::from_secs(300))
         .connect(&database_url)
         .await
-        .expect("Failed to connect to database");
+    {
+        Ok(pool) => pool,
+        Err(e) => {
+            tracing::error!("Failed to connect to database: {}", e);
+            std::process::exit(1);
+        }
+    };
 
     tracing::info!(
         "Database pool configured (max={})",
@@ -270,11 +282,17 @@ async fn main() -> Result<()> {
     );
 
     // Initialize Prometheus metrics
-    let handle = metrics_exporter_prometheus::PrometheusBuilder::new()
+    match metrics_exporter_prometheus::PrometheusBuilder::new()
         .install_recorder()
-        .expect("Failed to install metrics recorder");
-    let _ = METRICS_HANDLE.set(handle);
-    tracing::info!("Prometheus metrics initialized");
+    {
+        Ok(handle) => {
+            let _ = METRICS_HANDLE.set(handle);
+            tracing::info!("Prometheus metrics initialized");
+        }
+        Err(e) => {
+            tracing::warn!("Failed to initialize metrics recorder: {}", e);
+        }
+    }
 
     let shutdown_signal = async {
         let _ = tokio::signal::ctrl_c().await;
