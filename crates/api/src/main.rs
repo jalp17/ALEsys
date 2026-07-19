@@ -54,6 +54,7 @@ use handlers::{
     test_generate,
     refactoring_analyze, refactoring_preview,
     kb_merge, kb_split, kb_archive, kb_duplicates, kb_quality,
+    collab_status, collab_tasks, collab_create_task, collab_consensus,
 };
 use state::AppState;
 use websocket::ws_chat_handler;
@@ -299,7 +300,12 @@ async fn main() -> Result<()> {
         .route("/kb/split", post(kb_split))
         .route("/kb/archive", post(kb_archive))
         .route("/kb/duplicates", post(kb_duplicates))
-        .route("/kb/quality", post(kb_quality));
+        .route("/kb/quality", post(kb_quality))
+        // Multi-agent collaboration endpoints
+        .route("/collab/status", get(collab_status))
+        .route("/collab/tasks", get(collab_tasks))
+        .route("/collab/tasks", post(collab_create_task))
+        .route("/collab/consensus", post(collab_consensus));
 
     let app = Router::new()
         .nest("/api/v1", api_v1.clone())
