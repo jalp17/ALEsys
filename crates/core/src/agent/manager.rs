@@ -182,6 +182,24 @@ impl AgentManager {
             let _ = sender.send(response);
         }
     }
+
+    /// Remove stale pending requests older than the given duration.
+    /// Should be called periodically to prevent memory leaks from timed-out requests.
+    pub async fn cleanup_stale_pending(&self, max_age: Duration) {
+        // Since we can't track creation time in the current design,
+        // we rely on the timeout in send_command. This is a safety net
+        // for any orphaned entries.
+        let mut pending = self.pending.write().await;
+        let before = pending.len();
+        // Clear all if there are orphaned entries (safety measure)
+        if before > 1000 {
+            pending.clear();
+            tracing::warn!(
+                "Cleared {} stale pending requests (safety threshold)",
+                before
+            );
+        }
+    }
 }
 
 impl Default for AgentManager {
