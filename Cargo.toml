@@ -3,6 +3,7 @@ members = [
     "crates/core",
     "crates/api",
     "crates/cli",
+    "crates/agent",
 ]
 exclude = [
     "desktop/src-tauri",  # Se builda separado

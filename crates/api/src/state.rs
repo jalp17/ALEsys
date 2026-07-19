@@ -3,7 +3,7 @@
 use alesys_core::llm::{
     ChatMessage, ChatResponse, LLMBackend, LLMConfig, LLMEngine, ONNXEmbedder, StreamChunk,
 };
-use alesys_core::{GraphRAG, SessionManager};
+use alesys_core::{GraphRAG, SessionManager, AgentManager};
 use futures::stream::BoxStream;
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -66,6 +66,7 @@ pub struct AppState {
     pub llm_queue: LLMQueue,
     pub llm_config: LLMConfig,
     pub embedder: Arc<ONNXEmbedder>,
+    pub agent_manager: Arc<AgentManager>,
 }
 
 impl AppState {
@@ -106,6 +107,7 @@ impl AppState {
             llm_queue,
             llm_config,
             embedder,
+            agent_manager: Arc::new(AgentManager::new()),
         };
 
         tracing::info!(

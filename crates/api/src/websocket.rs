@@ -1,6 +1,7 @@
 //! WebSocket handlers para streaming
 
 use crate::state::AppState;
+use alesys_core::agent::protocol::AgentResponse;
 use alesys_core::llm::ChatMessage;
 use axum::{
     extract::{
@@ -11,6 +12,7 @@ use axum::{
 };
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 #[derive(Deserialize)]
 pub struct WSMessage {
@@ -232,4 +234,96 @@ async fn handle_websocket_chat(socket: WebSocket, state: AppState) {
             _ => {}
         }
     }
+}
+
+// =============================================================================
+// Phase 9: Agent WebSocket Handler
+// =============================================================================
+
+#[derive(Deserialize)]
+pub struct AgentRegisterMessage {
+    #[serde(rename = "type")]
+    pub msg_type: String,
+    pub payload: Option<AgentRegisterPayload>,
+}
+
+#[derive(Deserialize)]
+pub struct AgentRegisterPayload {
+    pub name: String,
+    #[allow(dead_code)]
+    pub token: String,
+}
+
+pub async fn ws_agent_handler(
+    ws: WebSocketUpgrade,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    ws.on_upgrade(|socket| handle_websocket_agent(socket, state))
+}
+
+async fn handle_websocket_agent(socket: WebSocket, state: AppState) {
+    let (mut sender, mut receiver) = socket.split();
+    let agent_id = Uuid::new_v4().to_string();
+
+    tracing::info!("Agent WebSocket connected: {}", agent_id);
+
+    while let Some(msg) = receiver.next().await {
+        match msg {
+            Ok(axum::extract::ws::Message::Text(text)) => {
+                let ws_msg: AgentRegisterMessage = match serde_json::from_str(&text) {
+                    Ok(m) => m,
+                    Err(e) => {
+                        tracing::debug!("Agent WS parse error: {}", e);
+                        continue;
+                    }
+                };
+
+                if ws_msg.msg_type == "register" {
+                    if let Some(payload) = ws_msg.payload {
+                        let info = alesys_core::agent::AgentInfo {
+                            id: agent_id.clone(),
+                            name: payload.name,
+                            os: "unknown".to_string(),
+                            arch: "unknown".to_string(),
+                            status: alesys_core::agent::AgentStatus::Connected,
+                            connected_at: chrono::Utc::now(),
+                        };
+
+                        let (tx, mut rx) = tokio::sync::mpsc::channel(32);
+                        state.agent_manager.register_agent(info, tx).await;
+
+                        tracing::info!("Agent registered: {}", agent_id);
+
+                        // Send pong
+                        let pong = serde_json::json!({"type": "pong"});
+                        let _ = sender.send(axum::extract::ws::Message::Text(pong.to_string().into())).await;
+
+                        // Handle responses from agent
+                        while let Some(response) = rx.recv().await {
+                            let _ = sender.send(axum::extract::ws::Message::Binary(response.into())).await;
+                        }
+                    }
+                } else if ws_msg.msg_type == "execute" {
+                    // Handle agent response to execute command
+                    if let Ok(response) = serde_json::from_str::<AgentResponse>(&text) {
+                        tracing::debug!("Agent response: {:?}", response);
+                    }
+                }
+            }
+            Ok(axum::extract::ws::Message::Close(_)) => {
+                tracing::info!("Agent WS closed: {}", agent_id);
+                state.agent_manager.unregister_agent(&agent_id).await;
+                break;
+            }
+            Err(e) => {
+                tracing::error!("Agent WS error: {:?}", e);
+                state.agent_manager.unregister_agent(&agent_id).await;
+                break;
+            }
+            _ => {}
+        }
+    }
+
+    state.agent_manager.unregister_agent(&agent_id).await;
+    tracing::info!("Agent disconnected: {}", agent_id);
 }
