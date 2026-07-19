@@ -23,6 +23,7 @@ pub mod agent;
 pub mod plugin;
 pub mod voice;
 pub mod multimodal;
+pub mod collaboration;
 
 pub use generator::{CodeGenerator, GenerateRequest, GenerationResult};
 pub use graphrag::GraphRAG;
