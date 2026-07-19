@@ -1345,3 +1345,183 @@ pub async fn refactoring_preview(
     })))
 }
 
+pub async fn kb_merge(
+    Json(payload): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    use alesys_core::knowledge_curation::merger::{DocumentMerger, Document, MergeStrategy};
+
+    let empty_vec: Vec<serde_json::Value> = vec![];
+    let docs_input = payload.get("documents").and_then(|v| v.as_array()).unwrap_or(&empty_vec);
+    let strategy = payload.get("strategy").and_then(|v| v.as_str()).unwrap_or("smart");
+
+    let docs: Vec<Document> = docs_input.iter().enumerate().map(|(i, d)| {
+        Document {
+            id: d.get("id").and_then(|v| v.as_str()).unwrap_or(&format!("doc-{}", i)).to_string(),
+            title: d.get("title").and_then(|v| v.as_str()).unwrap_or("Untitled").to_string(),
+            content: d.get("content").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            tags: d.get("tags").and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect()).unwrap_or_default(),
+            metadata: std::collections::HashMap::new(),
+        }
+    }).collect();
+
+    let merge_strategy = match strategy {
+        "concatenate" => MergeStrategy::Concatenate,
+        "interleave" => MergeStrategy::Interleave,
+        "manual" => MergeStrategy::Manual,
+        _ => MergeStrategy::Smart,
+    };
+
+    let merger = DocumentMerger::new(merge_strategy);
+    let result = merger.merge(&docs);
+
+    Ok(Json(serde_json::json!({
+        "success": result.success,
+        "merged_content": result.merged_content,
+        "sources_count": result.sources_count,
+        "conflicts": result.conflicts,
+        "warnings": result.warnings,
+    })))
+}
+
+pub async fn kb_split(
+    Json(payload): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    use alesys_core::knowledge_curation::splitter::{DocumentSplitter, SplitStrategy};
+
+    let document_id = payload.get("document_id").and_then(|v| v.as_str()).unwrap_or("doc");
+    let content = payload.get("content").and_then(|v| v.as_str()).unwrap_or("");
+    let strategy = payload.get("strategy").and_then(|v| v.as_str()).unwrap_or("smart");
+
+    let split_strategy = match strategy {
+        "by-size" => {
+            let max = payload.get("max_chars").and_then(|v| v.as_u64()).unwrap_or(500) as usize;
+            SplitStrategy::BySize { max_chars: max }
+        }
+        "by-headers" => SplitStrategy::ByHeaders,
+        "by-paragraphs" => SplitStrategy::ByParagraphs,
+        "by-sentences" => {
+            let max = payload.get("max_sentences").and_then(|v| v.as_u64()).unwrap_or(5) as usize;
+            SplitStrategy::BySentences { max_sentences: max }
+        }
+        _ => SplitStrategy::Smart,
+    };
+
+    let splitter = DocumentSplitter::new(split_strategy);
+    let result = splitter.split(document_id, content);
+
+    Ok(Json(serde_json::json!({
+        "original_id": result.original_id,
+        "chunks_count": result.chunks.len(),
+        "chunks": result.chunks.iter().map(|c| serde_json::json!({
+            "id": c.id,
+            "content": c.content,
+            "index": c.index,
+            "start_offset": c.start_offset,
+            "end_offset": c.end_offset,
+        })).collect::<Vec<_>>(),
+        "strategy_used": result.strategy_used,
+    })))
+}
+
+pub async fn kb_archive(
+    Json(payload): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    use alesys_core::knowledge_curation::archiver::{DocumentArchiver, ArchiveReason};
+
+    let document_id = payload.get("document_id").and_then(|v| v.as_str()).unwrap_or("doc");
+    let title = payload.get("title").and_then(|v| v.as_str()).unwrap_or("Untitled");
+    let content = payload.get("content").and_then(|v| v.as_str()).unwrap_or("");
+    let reason = payload.get("reason").and_then(|v| v.as_str()).unwrap_or("outdated");
+
+    let archiver = DocumentArchiver::new("/tmp/alesys-archive");
+    let archive_reason = match reason {
+        "deprecated" => ArchiveReason::Deprecated,
+        "duplicate" => ArchiveReason::Duplicate,
+        "merged" => ArchiveReason::Merged,
+        "unused" => ArchiveReason::Unused,
+        r => ArchiveReason::Custom(r.to_string()),
+    };
+
+    let result = archiver.archive(document_id, title, content, &[], archive_reason);
+
+    Ok(Json(serde_json::json!({
+        "success": result.success,
+        "document_id": result.document_id,
+        "archive_path": result.archive_path,
+        "reason": result.reason,
+        "archived_at": result.archived_at,
+    })))
+}
+
+pub async fn kb_duplicates(
+    Json(payload): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    use alesys_core::knowledge_curation::dedup::{DuplicateDetector, SimilarityMethod};
+    use alesys_core::knowledge_curation::merger::Document;
+
+    let empty_vec: Vec<serde_json::Value> = vec![];
+    let docs_input = payload.get("documents").and_then(|v| v.as_array()).unwrap_or(&empty_vec);
+    let threshold = payload.get("threshold").and_then(|v| v.as_f64()).unwrap_or(0.7);
+    let method = payload.get("method").and_then(|v| v.as_str()).unwrap_or("fuzzy");
+
+    let docs: Vec<Document> = docs_input.iter().enumerate().map(|(i, d)| {
+        Document {
+            id: d.get("id").and_then(|v| v.as_str()).unwrap_or(&format!("doc-{}", i)).to_string(),
+            title: d.get("title").and_then(|v| v.as_str()).unwrap_or("Untitled").to_string(),
+            content: d.get("content").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+            tags: vec![],
+            metadata: std::collections::HashMap::new(),
+        }
+    }).collect();
+
+    let similarity_method = match method {
+        "exact" => SimilarityMethod::Exact,
+        "token" => SimilarityMethod::TokenOverlap,
+        "semantic" => SimilarityMethod::Semantic,
+        _ => SimilarityMethod::Fuzzy,
+    };
+
+    let detector = DuplicateDetector::new(threshold, similarity_method);
+    let report = detector.detect(&docs);
+
+    Ok(Json(serde_json::json!({
+        "total_checked": report.total_checked,
+        "duplicates_found": report.pairs.len(),
+        "method_used": report.method_used,
+        "pairs": report.pairs.iter().map(|p| serde_json::json!({
+            "doc_a_id": p.doc_a_id,
+            "doc_b_id": p.doc_b_id,
+            "similarity_score": p.similarity_score,
+            "method": p.method,
+        })).collect::<Vec<_>>(),
+    })))
+}
+
+pub async fn kb_quality(
+    Json(payload): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    use alesys_core::knowledge_curation::quality::QualityScorer;
+
+    let document_id = payload.get("document_id").and_then(|v| v.as_str()).unwrap_or("doc");
+    let content = payload.get("content").and_then(|v| v.as_str()).unwrap_or("");
+    let metadata: std::collections::HashMap<String, String> = payload.get("metadata")
+        .and_then(|v| serde_json::from_value(v.clone()).ok())
+        .unwrap_or_default();
+
+    let scorer = QualityScorer::new();
+    let report = scorer.score(document_id, content, &metadata);
+
+    Ok(Json(serde_json::json!({
+        "document_id": report.document_id,
+        "overall_score": report.overall_score,
+        "metrics": report.metrics.iter().map(|m| serde_json::json!({
+            "metric": m.metric,
+            "score": m.score,
+            "weight": m.weight,
+            "details": m.details,
+        })).collect::<Vec<_>>(),
+        "issues": report.issues.len(),
+        "recommendations": report.recommendations,
+    })))
+}
+

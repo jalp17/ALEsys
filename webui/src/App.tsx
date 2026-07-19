@@ -18,6 +18,7 @@ import LearningPage from './pages/Learning';
 import DebugPage from './pages/Debug';
 import TestGenerationPage from './pages/TestGeneration';
 import RefactoringPage from './pages/Refactoring';
+import KnowledgeCurationPage from './pages/KnowledgeCuration';
 
 const queryClient = new QueryClient();
 
@@ -41,6 +42,7 @@ function App() {
             <Route path="/debug" element={<DebugPage />} />
             <Route path="/test-generation" element={<TestGenerationPage />} />
             <Route path="/refactoring" element={<RefactoringPage />} />
+            <Route path="/kb-curation" element={<KnowledgeCurationPage />} />
             <Route path="/sessions" element={<Sessions />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/graph" element={<GraphViewer />} />
