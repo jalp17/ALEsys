@@ -21,6 +21,8 @@ pub mod fs_ops;
 pub mod automation;
 pub mod agent;
 pub mod plugin;
+pub mod voice;
+pub mod multimodal;
 
 pub use generator::{CodeGenerator, GenerateRequest, GenerationResult};
 pub use graphrag::GraphRAG;
