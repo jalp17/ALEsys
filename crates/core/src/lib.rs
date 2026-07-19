@@ -35,6 +35,7 @@ pub mod analytics;
 pub mod workflow;
 pub mod search_adv;
 pub mod performance;
+pub mod security;
 
 pub use generator::{CodeGenerator, GenerateRequest, GenerationResult};
 pub use graphrag::GraphRAG;
