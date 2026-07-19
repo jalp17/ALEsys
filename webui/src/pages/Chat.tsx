@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { API_BASE_URL } from '../utils/platform';
 import { useSessionStore } from '../store/session';
+import { VoiceRecorder, ImageDropZone } from '../components/VoiceComponents';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -309,6 +310,9 @@ export function Chat() {
 
       {/* Input form */}
       <form onSubmit={handleSubmit} className="flex gap-3">
+        <VoiceRecorder
+          onTranscription={(text) => setQuery((prev) => prev + text)}
+        />
         <div className="flex-1 relative">
           <input
             type="text"
