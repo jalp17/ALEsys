@@ -34,6 +34,9 @@ export function WebLayout({ children }: WebLayoutProps) {
           <Link to="/plugins" className="text-gray-300 hover:text-primary-400 transition">
             Plugins
           </Link>
+          <Link to="/orchestrator" className="text-gray-300 hover:text-primary-400 transition">
+            Orchestrator
+          </Link>
           <Link to="/sessions" className="text-gray-300 hover:text-primary-400 transition">
             Sesiones
           </Link>
