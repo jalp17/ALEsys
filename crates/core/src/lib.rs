@@ -27,6 +27,7 @@ pub mod collaboration;
 pub mod pair_programmer;
 pub mod learning;
 pub mod debug_assistant;
+pub mod test_generation;
 
 pub use generator::{CodeGenerator, GenerateRequest, GenerationResult};
 pub use graphrag::GraphRAG;
