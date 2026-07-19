@@ -3,7 +3,7 @@
 use alesys_core::llm::{
     ChatMessage, ChatResponse, LLMBackend, LLMConfig, LLMEngine, ONNXEmbedder, StreamChunk,
 };
-use alesys_core::{GraphRAG, SessionManager, AgentManager};
+use alesys_core::{GraphRAG, SessionManager, AgentManager, PluginManager};
 use crate::auth::AuthState;
 use futures::stream::BoxStream;
 use sqlx::PgPool;
@@ -69,6 +69,7 @@ pub struct AppState {
     pub embedder: Arc<ONNXEmbedder>,
     pub agent_manager: Arc<AgentManager>,
     pub auth_state: Arc<AuthState>,
+    pub plugin_manager: Arc<PluginManager>,
 }
 
 impl AppState {
@@ -101,6 +102,17 @@ impl AppState {
 
         let llm_queue = LLMQueue::new(llm_engine.clone(), 4);
 
+        // Initialize plugin manager
+        let plugin_dir = std::env::var("PLUGIN_DIR")
+            .unwrap_or_else(|_| {
+                let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
+                format!("{}/.alesys/plugins", home)
+            });
+        let plugin_manager = Arc::new(PluginManager::new(
+            std::path::PathBuf::from(plugin_dir),
+            &db,
+        ));
+
         let state = Self {
             db,
             graphrag,
@@ -111,6 +123,7 @@ impl AppState {
             embedder,
             agent_manager: Arc::new(AgentManager::new()),
             auth_state: Arc::new(AuthState::new()),
+            plugin_manager,
         };
 
         tracing::info!(
