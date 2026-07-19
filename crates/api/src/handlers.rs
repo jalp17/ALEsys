@@ -1050,3 +1050,106 @@ pub async fn marketplace_uninstall(
     })))
 }
 
+pub async fn pair_programmer_analyze(
+    State(_state): State<AppState>,
+    Json(payload): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let code = payload.get("code").and_then(|v| v.as_str()).unwrap_or("");
+    let file_path = payload.get("file_path").and_then(|v| v.as_str()).unwrap_or("unknown");
+
+    let mut suggestions = Vec::new();
+
+    if code.contains("TODO") {
+        suggestions.push(serde_json::json!({
+            "id": "todo-1",
+            "suggestion_type": "CodeSmell",
+            "file_path": file_path,
+            "line": code.lines().position(|l| l.contains("TODO")).map(|i| i + 1).unwrap_or(1),
+            "description": "Found TODO comment",
+            "severity": "Low",
+            "auto_fixable": false,
+        }));
+    }
+    if code.contains("unwrap()") {
+        suggestions.push(serde_json::json!({
+            "id": "unwrap-1",
+            "suggestion_type": "CodeSmell",
+            "file_path": file_path,
+            "line": code.lines().position(|l| l.contains("unwrap()")).map(|i| i + 1).unwrap_or(1),
+            "description": "Using unwrap() instead of proper error handling",
+            "severity": "Medium",
+            "auto_fixable": false,
+        }));
+    }
+    if code.contains("println!") {
+        suggestions.push(serde_json::json!({
+            "id": "println-1",
+            "suggestion_type": "CodeSmell",
+            "file_path": file_path,
+            "line": code.lines().position(|l| l.contains("println!")).map(|i| i + 1).unwrap_or(1),
+            "description": "Found println! - consider using logging instead",
+            "severity": "Low",
+            "auto_fixable": false,
+        }));
+    }
+
+    Ok(Json(serde_json::json!({
+        "suggestions": suggestions,
+        "total": suggestions.len(),
+    })))
+}
+
+pub async fn pair_programmer_refactor(
+    Json(payload): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let code = payload.get("code").and_then(|v| v.as_str()).unwrap_or("");
+    let refactor_type = payload.get("refactor_type").and_then(|v| v.as_str()).unwrap_or("remove_whitespace");
+
+    let refactored = match refactor_type {
+        "remove_whitespace" => {
+            let lines: Vec<&str> = code.lines().collect();
+            lines
+                .join("\n")
+                .split("\n")
+                .map(|l| l.trim_end())
+                .collect::<Vec<_>>()
+                .join("\n")
+        }
+        "sort_imports" => {
+            let mut lines: Vec<&str> = code.lines().collect();
+            let mut import_lines: Vec<&str> = Vec::new();
+            let mut other_lines: Vec<&str> = Vec::new();
+
+            for &line in &lines {
+                if line.trim_start().starts_with("use ") || line.trim_start().starts_with("import ") {
+                    import_lines.push(line);
+                } else {
+                    other_lines.push(line);
+                }
+            }
+
+            import_lines.sort();
+            lines = import_lines;
+            lines.extend(other_lines);
+            lines.join("\n")
+        }
+        _ => code.to_string(),
+    };
+
+    Ok(Json(serde_json::json!({
+        "code": refactored,
+        "refactor_type": refactor_type,
+    })))
+}
+
+pub async fn pair_programmer_project(
+    State(_state): State<AppState>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    Ok(Json(serde_json::json!({
+        "total_files": 0,
+        "total_lines": 0,
+        "file_types": {},
+        "message": "Project analysis not yet implemented",
+    })))
+}
+
