@@ -1,21 +1,20 @@
-#  ALEsys - GraphRAG-PG
+# 🚀🐱 ALEsys v2.0.0 - AI IDE Framework Completo
 
-**GraphRAG-PG: PostgreSQL Graph & Vector Ingestion Engine**
-
-Sistema de ingesta híbrida (vectorial + grafos de conocimiento) sobre PostgreSQL para indexar documentos Markdown y permitir búsquedas científicas complejas con LLM.
+**ALEsys** es un framework RAG + agente configurable con capacidades avanzadas de IA para desarrollo de software, investigación científica y gestión de conocimiento.
 
 ---
 
 ## 📋 Tabla de Contenidos
 
 - [Arquitectura](#arquitectura)
+- [Features por Fase](#features-por-fase)
 - [Setup Inicial](#setup-inicial)
-- [Uso](#uso)
+- [API Reference](#api-reference)
 - [Licencia](#licencia)
 
 ---
 
-## 🏗️ Arquitectura
+## 🏗️🐱 Arquitectura
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -36,7 +35,8 @@ Sistema de ingesta híbrida (vectorial + grafos de conocimiento) sobre PostgreSQ
 │  │           ALESYS CORE (Rust Backend)                     ││
 │  │  - API REST + WebSocket                                  ││
 │  │  - GraphRAG (PostgreSQL + pgvector)                      ││
-│  │  - LLM Engine (mistralrs + ort)                          ││
+│  │  - 27 Módulos Especializados                             ││
+│  │  - 335 Tests Unitarios                                   ││
 │  └──────────────────────────────────────────────────────────┘│
 │                          │                                    │
 │                          ▼                                    │
@@ -46,7 +46,7 @@ Sistema de ingesta híbrida (vectorial + grafos de conocimiento) sobre PostgreSQ
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### Stack Tecnológico
+### 🛠️🐱 Stack Tecnológico
 
 | Componente | Tecnología |
 |------------|------------|
@@ -58,7 +58,73 @@ Sistema de ingesta híbrida (vectorial + grafos de conocimiento) sobre PostgreSQ
 
 ---
 
-## 🛠️ Setup Inicial
+## 🎯🐱 Features por Fase
+
+### Fases Tempranas (0-14)
+- **Fase 0-5:** Core GraphRAG, LLM Engine, Sesiones, Generación de Código
+- **Fase 6-10:** Executor Local, FS Ops, Automation, Agent Manager, Plugins
+- **Fase 11-14:** Voice/Multimodal, Colaboración, Pair Programmer
+
+### Fases Avanzadas (15-27) ✅ COMPLETAS
+
+| Fase | Versión | Feature Principal | Estado |
+|------|---------|-------------------|--------|
+| 15 | v1.29.0 | AI Pair Programmer | ✅ |
+| 16 | v1.30.0 | Context-Aware Learning | ✅ |
+| 17 | v1.31.0 | Debug Assistant | ✅ |
+| 18 | v1.32.0 | Test Generation | ✅ |
+| 19 | v1.33.0 | Advanced Refactoring | ✅ |
+| 20 | v1.34.0 | Knowledge Base Curation | ✅ |
+| 21 | v1.35.0 | Multi-Agent Collaboration | ✅ |
+| 22 | v1.36.0 | Advanced Analytics | ✅ |
+| 23 | v1.37.0 | Workflow Automation | ✅ |
+| 24 | v1.38.0 | Advanced Search & Filters | ✅ |
+| 25 | v1.39.0 | Performance Optimization | ✅ |
+| 26 | v1.40.0 | Security Hardening | ✅ |
+| 27 | v1.41.0 | Production Deployment | ✅ |
+| 28 | v2.0.0 | Final Integration | ✅ |
+
+---
+
+## 📦🐱 Módulos del Core (27 total)
+
+### Core Base
+- `llm` - Motor multi-backend (llama.cpp, mistralrs, candle, vLLM)
+- `graphrag` - GraphRAG con pgvector + petgraph
+- `session` - Gestión de sesiones multi-usuario
+- `agent` - Agent manager y orchestrator
+- `plugin` - Sistema de plugins extensible
+
+### Desarrollo
+- `generator` - Generación de código con LLM
+- `executor` - Ejecución local con límites
+- `fs_ops` - Operaciones de archivos
+- `automation` - Automatización (LaTeX, Markdown, red)
+- `pair_programmer` - AI Pair Programmer
+- `debug_assistant` - Asistente de debugging
+- `test_generation` - Generación automática de tests
+- `advanced_refactoring` - Refactorización AST-based
+
+### Conocimiento
+- `voice` - Procesamiento de voz
+- `multimodal` - Entradas multimodales
+- `collaboration` - Colaboración en tiempo real
+- `learning` - Aprendizaje contextual
+- `knowledge_curation` - Curación de base de conocimiento
+- `multi_agent` - Colaboración multi-agente
+- `search_adv` - Búsqueda avanzada con filtros
+
+### Operaciones
+- `analytics` - Analíticas de uso y performance
+- `workflow` - Automatización de workflows
+- `performance` - Cache, pooling, batching, profiling
+- `security` - Rate limiting, validación, auditoría
+- `deployment` - Config, health checks, backups
+- `e2e` - Tests end-to-end y stress testing
+
+---
+
+## 🛠️🐱 Setup Inicial
 
 ### Prerrequisitos
 
@@ -98,78 +164,122 @@ cargo run --bin alesys-cli -- --help
 # Frontend Web
 open http://localhost:5173
 
-# API (después de iniciar el servidor)
-curl http://localhost:3000/health
-```
-
----
-
-## 💻 Uso
-
-### Estructura del Proyecto
-
-```
-ALEsys/
-├── crates/              # Backend Rust
-│   ├── core/           # Lógica de negocio
-│   ├── api/            # API REST + WebSocket
-│   └── cli/            # CLI standalone
-├── webui/              # Frontend compartido
-├── server/             # PHP backend (WebUI multi-usuario)
-├── desktop/            # Tauri wrapper
-└── docker/             # Docker configs
-```
-
-### Comandos Útiles
-
-```bash
-# Desarrollo (backend + frontend)
-pnpm dev
-
-# Solo backend Rust
-cargo run --bin alesys-api
-
-# Solo frontend
-cd webui && npm run dev
-
-# Build completo
-pnpm build
-
 # Tests
-pnpm test
-
-# Lint
-pnpm lint
+cargo test --workspace --no-default-features --features test
 ```
 
-### Producción con Docker
+---
+
+## 🔌🐱 API Reference
+
+### Endpoints Principales
+
+#### Chat & GraphRAG
+- `POST /api/v1/chat` - Chat con GraphRAG + sesiones
+- `GET /api/v1/sessions` - Listar sesiones activas
+- `POST /api/v1/sessions` - Crear sesión
+- `GET /ws/chat` - WebSocket para streaming
+
+#### Desarrollo
+- `POST /api/v1/generate` - Generar archivos
+- `POST /pair-programmer/analyze` - Analizar código
+- `POST /pair-programmer/refactor` - Refactorizar
+- `POST /debug/analyze` - Analizar errores
+- `POST /test-generate` - Generar tests
+- `POST /refactoring/analyze` - Analizar refactorización
+- `POST /refactoring/preview` - Preview de cambios
+
+#### Conocimiento
+- `POST /kb/merge` - Fusionar documentos
+- `POST /kb/split` - Dividir documentos
+- `POST /kb/archive` - Archivar documentos
+- `POST /kb/duplicates` - Detectar duplicados
+- `POST /kb/quality` - Evaluar calidad
+- `POST /search/advanced` - Búsqueda avanzada
+- `POST /search/faceted` - Búsqueda con facetas
+- `POST /search/suggest` - Autocompletado
+
+#### Multi-Agente
+- `GET /agents` - Listar agentes
+- `GET /agents/stats` - Estadísticas de agentes
+- `POST /agents/:id/execute` - Ejecutar agente
+- `GET /collab/status` - Estado de colaboración
+- `GET /collab/tasks` - Tasks de colaboración
+- `POST /collab/consensus` - Consenso entre agentes
+
+#### Operaciones
+- `GET /analytics/usage` - Métricas de uso
+- `GET /analytics/performance` - Performance
+- `GET /analytics/users` - Analíticas por usuario
+- `GET /analytics/reports` - Reportes
+- `GET /workflows` - Listar workflows
+- `POST /workflows` - Crear workflow
+- `POST /workflows/:id/run` - Ejecutar workflow
+
+#### Sistema
+- `GET /health` - Health check
+- `GET /metrics` - Métricas del sistema
+- `GET /plugins` - Listar plugins
+- `POST /plugins/:id/enable` - Habilitar plugin
+- `POST /plugins/:id/disable` - Deshabilitar plugin
+
+---
+
+## 🧪🐱 Testing
 
 ```bash
-# Build de imágenes
-docker compose -f docker/docker-compose.yml build
+# Todos los tests
+cargo test --workspace --no-default-features --features test
 
-# Levantar servicios
-docker compose -f docker/docker-compose.yml up -d
+# Tests con output detallado
+cargo test --workspace --no-default-features --features test -- --test-threads=1
 
-# Ver logs
-docker compose logs -f
+# Tests de un módulo específico
+cargo test -p alesys-core --lib -- module_name::tests
 ```
 
----
-
-## 📚 Documentación
-
-- [API Reference](docs/api.md)
-- [Tutorial](docs/tutorial.md)
-- [Instalación](docs/installation.md)
-- [Uso](docs/usage.md)
+**Total: 335 tests unitarios passing**
 
 ---
 
-## 📄 Licencia
+## 📊🐱 Métricas del Proyecto
 
-GNU Affero General Public License v3.0 - ver [LICENSE](LICENSE) para detalles.
+| Métrica | Valor |
+|---------|-------|
+| **Versión** | v2.0.0 |
+| **Módulos Core** | 27 |
+| **Endpoints API** | ~50 |
+| **Tests Unitarios** | 335 |
+| **Líneas de Código** | ~15,000+ |
+| **Fases Completadas** | 28 |
 
 ---
 
-**Tags:** #alesys #graphrag #rust #react #postgresql #pgvector #llm #rag
+## 📄🐱 Licencia
+
+GNU AGPL v3.0
+
+---
+
+## 📝🐱 CHANGELOG v2.0.0
+
+### Agregado
+- ✅ 13 fases completadas (15-27)
+- ✅ 27 módulos del core
+- ✅ 335 tests unitarios
+- ✅ Documentación completa de API
+- ✅ Tests end-to-end y stress testing
+
+### Mejorado
+- Performance con cache LRU + TTL
+- Security hardening (rate limiting, validación)
+- Health checks y backup manager
+- Búsqueda avanzada con facetas
+
+### Cambiado
+- Versión establecida a v2.0.0
+- Todos los módulos integrados y testeados
+
+---
+
+**Hecho con ❤️🐱 por el equipo ALEsys**
