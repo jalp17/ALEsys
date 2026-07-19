@@ -192,7 +192,9 @@ impl CandleEngine {
                 Ok(path) => {
                     tracing::info!("Descargado: {}", file);
                     if file == "config.json" {
-                        local_path = Some(path.parent().unwrap().to_path_buf());
+                        if let Some(parent) = path.parent() {
+                            local_path = Some(parent.to_path_buf());
+                        }
                     }
                 }
                 Err(e) => {
