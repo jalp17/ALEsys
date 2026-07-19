@@ -1192,3 +1192,32 @@ pub async fn learning_insights(
     })))
 }
 
+pub async fn debug_analyze(
+    Json(payload): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    use alesys_core::debug_assistant::log_parser::LogParser;
+    use alesys_core::debug_assistant::analyzer::DebugAnalyzer;
+    use alesys_core::debug_assistant::suggestion::SuggestionFormatter;
+
+    let logs_input = payload.get("logs").and_then(|v| v.as_str()).unwrap_or("");
+
+    let parser = LogParser::new();
+    let logs = parser.parse_logs(logs_input);
+
+    let analyzer = DebugAnalyzer::new();
+    let analysis = analyzer.analyze(&logs);
+
+    let formatter = SuggestionFormatter::new();
+    let report = formatter.format(&analysis);
+
+    Ok(Json(serde_json::json!({
+        "summary": report.analysis_summary,
+        "severity": report.severity,
+        "total_errors": report.total_errors,
+        "total_warnings": report.total_warnings,
+        "patterns_found": report.patterns_found,
+        "root_cause": report.root_cause,
+        "suggestions": report.suggestions,
+    })))
+}
+
