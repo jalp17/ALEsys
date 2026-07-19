@@ -1267,3 +1267,81 @@ pub async fn test_generate(
     })))
 }
 
+pub async fn refactoring_analyze(
+    Json(payload): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    use alesys_core::advanced_refactoring::analyzer::CodeAnalyzer;
+
+    let code = payload.get("code").and_then(|v| v.as_str()).unwrap_or("");
+    let language = payload.get("language").and_then(|v| v.as_str()).unwrap_or("rust");
+
+    let analyzer = CodeAnalyzer::new();
+    let blocks = analyzer.analyze_code(code, language);
+    let opportunities = analyzer.find_opportunities(&blocks);
+    let graph = analyzer.build_dependency_graph(&blocks);
+
+    Ok(Json(serde_json::json!({
+        "blocks": blocks.len(),
+        "opportunities": opportunities.iter().map(|o| serde_json::json!({
+            "type": format!("{:?}", o.opportunity_type),
+            "description": o.description,
+            "confidence": o.confidence,
+            "impact": format!("{:?}", o.estimated_impact),
+        })).collect::<Vec<_>>(),
+        "dependency_graph": {
+            "nodes": graph.nodes.len(),
+            "edges": graph.edges.len(),
+            "circular_deps": graph.circular_deps.len(),
+        },
+    })))
+}
+
+pub async fn refactoring_preview(
+    Json(payload): Json<serde_json::Value>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    use alesys_core::advanced_refactoring::analyzer::CodeAnalyzer;
+    use alesys_core::advanced_refactoring::transformer::Transformer;
+    use alesys_core::advanced_refactoring::preview::PreviewGenerator;
+    use alesys_core::advanced_refactoring::analyzer::{RefactoringOpportunity, OpportunityType, ImpactLevel};
+
+    let code = payload.get("code").and_then(|v| v.as_str()).unwrap_or("");
+    let language = payload.get("language").and_then(|v| v.as_str()).unwrap_or("rust");
+    let ref_type = payload.get("refactoring_type").and_then(|v| v.as_str()).unwrap_or("RemoveDeadCode");
+
+    let analyzer = CodeAnalyzer::new();
+    let blocks = analyzer.analyze_code(code, language);
+
+    let opportunity_type = match ref_type {
+        "ExtractFunction" => OpportunityType::ExtractFunction,
+        "RenameSymbol" => OpportunityType::RenameSymbol,
+        "InlineFunction" => OpportunityType::InlineFunction,
+        "SimplifyConditional" => OpportunityType::SimplifyConditional,
+        "RemoveDeadCode" => OpportunityType::RemoveDeadCode,
+        "DeduplicateCode" => OpportunityType::DeduplicateCode,
+        _ => OpportunityType::RemoveDeadCode,
+    };
+
+    let opportunity = RefactoringOpportunity {
+        opportunity_type,
+        description: format!("Apply {}", ref_type),
+        confidence: 0.8,
+        affected_blocks: blocks.iter().take(1).map(|b| b.id.clone()).collect(),
+        estimated_impact: ImpactLevel::Medium,
+    };
+
+    let transformer = Transformer::new();
+    let result = transformer.apply_refactoring(code, &opportunity, &blocks);
+
+    let preview_gen = PreviewGenerator::new();
+    let preview = preview_gen.generate_preview(&result);
+    let text_preview = preview_gen.format_diff_as_text(&preview);
+
+    Ok(Json(serde_json::json!({
+        "success": result.success,
+        "changes": result.changes.len(),
+        "preview": text_preview,
+        "can_apply": preview.can_apply,
+        "warnings": preview.warnings,
+    })))
+}
+
