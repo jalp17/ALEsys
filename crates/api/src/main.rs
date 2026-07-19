@@ -52,6 +52,7 @@ use handlers::{
     learning_feedback, learning_insights,
     debug_analyze,
     test_generate,
+    refactoring_analyze, refactoring_preview,
 };
 use state::AppState;
 use websocket::ws_chat_handler;
@@ -288,7 +289,10 @@ async fn main() -> Result<()> {
         // Debug assistant endpoints
         .route("/debug/analyze", post(debug_analyze))
         // Test generation endpoints
-        .route("/test-generate", post(test_generate));
+        .route("/test-generate", post(test_generate))
+        // Refactoring endpoints
+        .route("/refactoring/analyze", post(refactoring_analyze))
+        .route("/refactoring/preview", post(refactoring_preview));
 
     let app = Router::new()
         .nest("/api/v1", api_v1.clone())

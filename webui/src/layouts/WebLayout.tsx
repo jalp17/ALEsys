@@ -49,6 +49,9 @@ export function WebLayout({ children }: WebLayoutProps) {
           <Link to="/test-generation" className="text-gray-300 hover:text-primary-400 transition">
             Tests
           </Link>
+          <Link to="/refactoring" className="text-gray-300 hover:text-primary-400 transition">
+            Refactor
+          </Link>
           <Link to="/sessions" className="text-gray-300 hover:text-primary-400 transition">
             Sesiones
           </Link>
