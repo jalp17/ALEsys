@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { AgentStatusIndicator } from '../components/AgentStatusIndicator';
 
 interface WebLayoutProps {
   children: React.ReactNode;
@@ -27,6 +28,9 @@ export function WebLayout({ children }: WebLayoutProps) {
           <Link to="/editor" className="text-gray-300 hover:text-primary-400 transition">
             Editor
           </Link>
+          <Link to="/agents" className="text-gray-300 hover:text-primary-400 transition">
+            Agentes
+          </Link>
           <Link to="/sessions" className="text-gray-300 hover:text-primary-400 transition">
             Sesiones
           </Link>
@@ -42,6 +46,7 @@ export function WebLayout({ children }: WebLayoutProps) {
         </nav>
 
         <div className="flex items-center gap-4">
+          <AgentStatusIndicator />
           <span className="text-sm text-gray-400">Usuario</span>
           <button className="px-3 py-1.5 bg-red-600 rounded hover:bg-red-700 text-sm transition">
             Cerrar sesión

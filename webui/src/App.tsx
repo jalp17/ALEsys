@@ -10,6 +10,7 @@ import { Settings } from './pages/Settings';
 import { GraphViewer } from './pages/graph';
 import { AdvancedSearch } from './pages/search';
 import { EditorPage } from './pages/editor';
+import { Agents } from './pages/Agents';
 
 const queryClient = new QueryClient();
 
@@ -25,6 +26,7 @@ function App() {
             <Route path="/chat" element={<Chat />} />
             <Route path="/generate" element={<Generate />} />
             <Route path="/editor" element={<EditorPage />} />
+            <Route path="/agents" element={<Agents />} />
             <Route path="/sessions" element={<Sessions />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/graph" element={<GraphViewer />} />
