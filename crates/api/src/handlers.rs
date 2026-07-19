@@ -1630,3 +1630,74 @@ pub async fn collab_consensus(
     })))
 }
 
+pub async fn analytics_usage(
+) -> Result<Json<serde_json::Value>, ApiError> {
+    use alesys_core::analytics::usage_tracker::UsageTracker;
+
+    let tracker = UsageTracker::new();
+    let stats = tracker.get_stats();
+
+    Ok(Json(serde_json::json!({
+        "total_events": stats.total_events,
+        "unique_users": stats.unique_users,
+        "events_by_type": stats.events_by_type,
+        "events_by_user": stats.events_by_user,
+    })))
+}
+
+pub async fn analytics_performance(
+) -> Result<Json<serde_json::Value>, ApiError> {
+    use alesys_core::analytics::performance::PerformanceMonitor;
+
+    let monitor = PerformanceMonitor::new();
+    let report = monitor.generate_report();
+
+    Ok(Json(serde_json::json!({
+        "total_metrics": report.total_metrics,
+        "summaries": report.summaries.iter().map(|s| serde_json::json!({
+            "name": s.name,
+            "avg": s.avg,
+            "min": s.min,
+            "max": s.max,
+            "count": s.count,
+        })).collect::<Vec<_>>(),
+    })))
+}
+
+pub async fn analytics_users(
+) -> Result<Json<serde_json::Value>, ApiError> {
+    use alesys_core::analytics::user_behavior::BehaviorAnalyzer;
+
+    let analyzer = BehaviorAnalyzer::new();
+    let stats = analyzer.get_stats();
+
+    Ok(Json(serde_json::json!({
+        "total_actions": stats.total_actions,
+        "unique_users": stats.unique_users,
+        "unique_actions": stats.unique_actions,
+        "patterns": analyzer.detect_patterns().iter().map(|p| serde_json::json!({
+            "name": p.pattern_name,
+            "frequency": p.frequency,
+            "description": p.description,
+        })).collect::<Vec<_>>(),
+    })))
+}
+
+pub async fn analytics_reports(
+) -> Result<Json<serde_json::Value>, ApiError> {
+    use alesys_core::analytics::reports::ReportGenerator;
+
+    let gen = ReportGenerator::new();
+    let reports = gen.get_reports();
+
+    Ok(Json(serde_json::json!({
+        "total_reports": reports.len(),
+        "reports": reports.iter().map(|r| serde_json::json!({
+            "id": r.id,
+            "title": r.title,
+            "type": format!("{:?}", r.report_type),
+            "generated_at": r.generated_at,
+        })).collect::<Vec<_>>(),
+    })))
+}
+

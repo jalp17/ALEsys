@@ -20,6 +20,7 @@ import TestGenerationPage from './pages/TestGeneration';
 import RefactoringPage from './pages/Refactoring';
 import KnowledgeCurationPage from './pages/KnowledgeCuration';
 import MultiAgentPage from './pages/MultiAgent';
+import AnalyticsPage from './pages/Analytics';
 
 const queryClient = new QueryClient();
 
@@ -45,6 +46,7 @@ function App() {
             <Route path="/refactoring" element={<RefactoringPage />} />
             <Route path="/kb-curation" element={<KnowledgeCurationPage />} />
             <Route path="/multi-agent" element={<MultiAgentPage />} />
+            <Route path="/analytics" element={<AnalyticsPage />} />
             <Route path="/sessions" element={<Sessions />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/graph" element={<GraphViewer />} />

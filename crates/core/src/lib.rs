@@ -31,6 +31,7 @@ pub mod test_generation;
 pub mod advanced_refactoring;
 pub mod knowledge_curation;
 pub mod multi_agent;
+pub mod analytics;
 
 pub use generator::{CodeGenerator, GenerateRequest, GenerationResult};
 pub use graphrag::GraphRAG;
