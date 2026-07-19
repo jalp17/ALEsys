@@ -46,6 +46,8 @@ use handlers::{
     get_session_history, get_shortest_path, graph_stats, health_handler, list_sessions,
     search_graph, list_agents, agent_stats, agent_execute, agent_read_file, agent_write_file, agent_list_dir,
     login, get_current_user,
+    list_plugins, execute_plugin, enable_plugin, disable_plugin,
+    marketplace_list, marketplace_install, marketplace_uninstall,
 };
 use state::AppState;
 use websocket::ws_chat_handler;
@@ -262,7 +264,16 @@ async fn main() -> Result<()> {
         .route("/agents/stats", get(agent_stats))
         .route("/agents/:id/execute", post(agent_execute))
         .route("/agents/:id/files", get(agent_read_file).post(agent_write_file))
-        .route("/agents/:id/files/list", get(agent_list_dir));
+        .route("/agents/:id/files/list", get(agent_list_dir))
+        // Plugin endpoints
+        .route("/plugins", get(list_plugins))
+        .route("/plugins/:id/execute", post(execute_plugin))
+        .route("/plugins/:id/enable", post(enable_plugin))
+        .route("/plugins/:id/disable", post(disable_plugin))
+        // Marketplace endpoints
+        .route("/marketplace/plugins", get(marketplace_list))
+        .route("/marketplace/install/:id", post(marketplace_install))
+        .route("/marketplace/uninstall/:id", delete(marketplace_uninstall));
 
     let app = Router::new()
         .nest("/api/v1", api_v1.clone())
