@@ -1,6 +1,7 @@
 //! Handlers de los endpoints HTTP
 
 use crate::state::AppState;
+use alesys_core::agent::protocol::AgentCommand;
 use alesys_core::graphrag::search::AdvancedSearchQuery;
 use alesys_core::graphrag::SearchResultSource;
 use alesys_core::llm::{ChatMessage, LLMEngine};
@@ -12,6 +13,8 @@ use axum::{
 };
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
+use uuid::Uuid;
 
 /// Request para chat
 #[derive(Deserialize)]
@@ -751,5 +754,102 @@ pub async fn agent_stats(State(state): State<AppState>) -> impl IntoResponse {
         "total": total,
         "connected": connected,
     }))
+}
+
+/// POST /api/v1/agents/:id/execute - Execute command on agent
+pub async fn agent_execute(
+    State(state): State<AppState>,
+    Path(agent_id): Path<String>,
+    Json(req): Json<AgentExecuteRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let cmd = AgentCommand::Execute {
+        id: Uuid::new_v4().to_string(),
+        command: req.command,
+        args: req.args,
+        workdir: req.workdir,
+        timeout_ms: req.timeout_ms,
+    };
+
+    let timeout = Duration::from_millis(req.timeout_ms);
+    match state.agent_manager.send_command(&agent_id, cmd, Some(timeout)).await {
+        Ok(alesys_core::agent::protocol::AgentResponse::ExecuteResult { exit_code, stdout, stderr, .. }) => {
+            Ok(Json(serde_json::json!({
+                "exit_code": exit_code,
+                "stdout": stdout,
+                "stderr": stderr,
+            })))
+        }
+        Ok(_) => Err(ApiError { error: "Unexpected response".into(), code: "UNEXPECTED".into() }),
+        Err(e) => Err(ApiError { error: e, code: "AGENT_ERROR".into() }),
+    }
+}
+
+/// GET /api/v1/agents/:id/files?path=... - Read file from agent
+pub async fn agent_read_file(
+    State(state): State<AppState>,
+    Path(agent_id): Path<String>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let path = params.get("path").ok_or_else(|| ApiError { error: "Missing 'path' param".into(), code: "BAD_REQUEST".into() })?;
+
+    let cmd = AgentCommand::ReadFile {
+        id: Uuid::new_v4().to_string(),
+        path: path.clone(),
+    };
+
+    match state.agent_manager.send_command(&agent_id, cmd, None).await {
+        Ok(alesys_core::agent::protocol::AgentResponse::FileContent { content, .. }) => {
+            Ok(Json(serde_json::json!({ "content": content })))
+        }
+        Ok(_) => Err(ApiError { error: "Unexpected response".into(), code: "UNEXPECTED".into() }),
+        Err(e) => Err(ApiError { error: e, code: "AGENT_ERROR".into() }),
+    }
+}
+
+/// POST /api/v1/agents/:id/files - Write file on agent
+pub async fn agent_write_file(
+    State(state): State<AppState>,
+    Path(agent_id): Path<String>,
+    Json(req): Json<AgentWriteFileRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let cmd = AgentCommand::WriteFile {
+        id: Uuid::new_v4().to_string(),
+        path: req.path,
+        content: req.content,
+    };
+
+    match state.agent_manager.send_command(&agent_id, cmd, None).await {
+        Ok(alesys_core::agent::protocol::AgentResponse::ExecuteResult { exit_code, .. }) => {
+            if exit_code == 0 {
+                Ok(Json(serde_json::json!({ "success": true })))
+            } else {
+                Err(ApiError { error: "Write failed on agent".into(), code: "AGENT_WRITE_ERROR".into() })
+            }
+        }
+        Ok(_) => Err(ApiError { error: "Unexpected response".into(), code: "UNEXPECTED".into() }),
+        Err(e) => Err(ApiError { error: e, code: "AGENT_ERROR".into() }),
+    }
+}
+
+/// GET /api/v1/agents/:id/files/list?path=... - List directory on agent
+pub async fn agent_list_dir(
+    State(state): State<AppState>,
+    Path(agent_id): Path<String>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let path = params.get("path").cloned().unwrap_or_else(|| ".".to_string());
+
+    let cmd = AgentCommand::ListDirectory {
+        id: Uuid::new_v4().to_string(),
+        path,
+    };
+
+    match state.agent_manager.send_command(&agent_id, cmd, None).await {
+        Ok(alesys_core::agent::protocol::AgentResponse::DirectoryList { entries, .. }) => {
+            Ok(Json(serde_json::json!({ "entries": entries })))
+        }
+        Ok(_) => Err(ApiError { error: "Unexpected response".into(), code: "UNEXPECTED".into() }),
+        Err(e) => Err(ApiError { error: e, code: "AGENT_ERROR".into() }),
+    }
 }
 
