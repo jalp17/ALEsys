@@ -1,11 +1,13 @@
-use super::protocol::{AgentInfo, AgentStatus};
+use super::protocol::{AgentCommand, AgentInfo, AgentResponse, AgentStatus};
 use std::collections::HashMap;
-use tokio::sync::{mpsc, RwLock};
+use std::time::Duration;
+use tokio::sync::{mpsc, oneshot, RwLock};
 use std::sync::Arc;
 
 pub struct AgentManager {
     agents: Arc<RwLock<HashMap<String, AgentConnection>>>,
     user_agents: Arc<RwLock<HashMap<i32, String>>>,
+    pending: Arc<RwLock<HashMap<String, oneshot::Sender<AgentResponse>>>>,
 }
 
 pub struct AgentConnection {
@@ -13,11 +15,14 @@ pub struct AgentConnection {
     pub sender: mpsc::Sender<Vec<u8>>,
 }
 
+const DEFAULT_TIMEOUT: Duration = Duration::from_secs(30);
+
 impl AgentManager {
     pub fn new() -> Self {
         Self {
             agents: Arc::new(RwLock::new(HashMap::new())),
             user_agents: Arc::new(RwLock::new(HashMap::new())),
+            pending: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -35,6 +40,9 @@ impl AgentManager {
 
         let mut user_agents = self.user_agents.write().await;
         user_agents.retain(|_, id| id != agent_id);
+
+        let mut pending = self.pending.write().await;
+        pending.retain(|id, _| !id.starts_with(agent_id));
     }
 
     pub async fn assign_agent_to_user(&self, user_id: i32, agent_id: &str) -> bool {
@@ -72,6 +80,69 @@ impl AgentManager {
     pub async fn get_connected_count(&self) -> usize {
         let agents = self.agents.read().await;
         agents.values().filter(|c| c.info.status == AgentStatus::Connected).count()
+    }
+
+    pub async fn send_command(
+        &self,
+        agent_id: &str,
+        command: AgentCommand,
+        timeout: Option<Duration>,
+    ) -> Result<AgentResponse, String> {
+        let sender = {
+            let agents = self.agents.read().await;
+            agents.get(agent_id)
+                .ok_or_else(|| format!("Agent '{}' not found", agent_id))?
+                .sender.clone()
+        };
+
+        let msg_id = match &command {
+            AgentCommand::Execute { id, .. } => id.clone(),
+            AgentCommand::ReadFile { id, .. } => id.clone(),
+            AgentCommand::WriteFile { id, .. } => id.clone(),
+            AgentCommand::ListDirectory { id, .. } => id.clone(),
+            AgentCommand::Ping => "ping".to_string(),
+        };
+
+        let (tx, rx) = oneshot::channel();
+        {
+            let mut pending = self.pending.write().await;
+            pending.insert(msg_id.clone(), tx);
+        }
+
+        let data = serde_json::to_vec(&command)
+            .map_err(|e| format!("Serialize error: {}", e))?;
+        sender.send(data).await
+            .map_err(|e| format!("Send error: {}", e))?;
+
+        let timeout = timeout.unwrap_or(DEFAULT_TIMEOUT);
+        match tokio::time::timeout(timeout, rx).await {
+            Ok(Ok(response)) => Ok(response),
+            Ok(Err(_)) => {
+                let mut pending = self.pending.write().await;
+                pending.remove(&msg_id);
+                Err("Agent disconnected".to_string())
+            }
+            Err(_) => {
+                let mut pending = self.pending.write().await;
+                pending.remove(&msg_id);
+                Err(format!("Timeout after {:?}", timeout))
+            }
+        }
+    }
+
+    pub async fn handle_response(&self, response: AgentResponse) {
+        let id = match &response {
+            AgentResponse::ExecuteResult { id, .. } => id.clone(),
+            AgentResponse::FileContent { id, .. } => id.clone(),
+            AgentResponse::DirectoryList { id, .. } => id.clone(),
+            AgentResponse::Error { id, .. } => id.clone(),
+            AgentResponse::Pong => return,
+        };
+
+        let mut pending = self.pending.write().await;
+        if let Some(sender) = pending.remove(&id) {
+            let _ = sender.send(response);
+        }
     }
 }
 
@@ -137,5 +208,18 @@ mod tests {
         let assigned = manager.get_agent_for_user(1).await;
         assert!(assigned.is_some());
         assert_eq!(assigned.unwrap().id, "agent-1");
+    }
+
+    #[tokio::test]
+    async fn test_send_command_timeout() {
+        let manager = AgentManager::new();
+        let (tx, _rx) = mpsc::channel(10);
+
+        let agent = create_test_agent("agent-1");
+        manager.register_agent(agent, tx).await;
+
+        let cmd = AgentCommand::Ping;
+        let result = manager.send_command("agent-1", cmd, Some(Duration::from_millis(50))).await;
+        assert!(result.is_err());
     }
 }

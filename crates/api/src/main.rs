@@ -43,7 +43,7 @@ use handlers::{
     advanced_search_handler, chat_handler, create_session, delete_session, export_graph_json,
     generate_handler, get_centrality, get_communities, get_config, get_graph, get_session,
     get_session_history, get_shortest_path, graph_stats, health_handler, list_sessions,
-    search_graph, list_agents, agent_stats,
+    search_graph, list_agents, agent_stats, agent_execute, agent_read_file, agent_write_file, agent_list_dir,
 };
 use state::AppState;
 use websocket::ws_chat_handler;
@@ -236,7 +236,10 @@ async fn main() -> Result<()> {
         .route("/search/advanced", post(advanced_search_handler))
         .route("/config", get(get_config))
         .route("/agents", get(list_agents))
-        .route("/agents/stats", get(agent_stats));
+        .route("/agents/stats", get(agent_stats))
+        .route("/agents/:id/execute", post(agent_execute))
+        .route("/agents/:id/files", get(agent_read_file).post(agent_write_file))
+        .route("/agents/:id/files/list", get(agent_list_dir));
 
     let app = Router::new()
         .nest("/api/v1", api_v1.clone())

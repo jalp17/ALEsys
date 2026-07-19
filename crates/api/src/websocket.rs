@@ -267,13 +267,17 @@ async fn handle_websocket_agent(socket: WebSocket, state: AppState) {
 
     tracing::info!("Agent WebSocket connected: {}", agent_id);
 
+    let (tx, _rx) = tokio::sync::mpsc::channel::<Vec<u8>>(32);
+
     while let Some(msg) = receiver.next().await {
         match msg {
             Ok(axum::extract::ws::Message::Text(text)) => {
                 let ws_msg: AgentRegisterMessage = match serde_json::from_str(&text) {
                     Ok(m) => m,
-                    Err(e) => {
-                        tracing::debug!("Agent WS parse error: {}", e);
+                    Err(_) => {
+                        if let Ok(response) = serde_json::from_str::<AgentResponse>(&text) {
+                            state.agent_manager.handle_response(response).await;
+                        }
                         continue;
                     }
                 };
@@ -289,25 +293,17 @@ async fn handle_websocket_agent(socket: WebSocket, state: AppState) {
                             connected_at: chrono::Utc::now(),
                         };
 
-                        let (tx, mut rx) = tokio::sync::mpsc::channel(32);
-                        state.agent_manager.register_agent(info, tx).await;
-
+                        state.agent_manager.register_agent(info, tx.clone()).await;
                         tracing::info!("Agent registered: {}", agent_id);
 
-                        // Send pong
                         let pong = serde_json::json!({"type": "pong"});
                         let _ = sender.send(axum::extract::ws::Message::Text(pong.to_string().into())).await;
-
-                        // Handle responses from agent
-                        while let Some(response) = rx.recv().await {
-                            let _ = sender.send(axum::extract::ws::Message::Binary(response.into())).await;
-                        }
                     }
-                } else if ws_msg.msg_type == "execute" {
-                    // Handle agent response to execute command
-                    if let Ok(response) = serde_json::from_str::<AgentResponse>(&text) {
-                        tracing::debug!("Agent response: {:?}", response);
-                    }
+                }
+            }
+            Ok(axum::extract::ws::Message::Binary(data)) => {
+                if let Ok(response) = serde_json::from_slice::<AgentResponse>(&data) {
+                    state.agent_manager.handle_response(response).await;
                 }
             }
             Ok(axum::extract::ws::Message::Close(_)) => {
