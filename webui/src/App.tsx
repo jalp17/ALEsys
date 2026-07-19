@@ -16,6 +16,7 @@ import OrchestratorDashboard from './pages/Orchestrator';
 import Collaboration from './pages/Collaboration';
 import LearningPage from './pages/Learning';
 import DebugPage from './pages/Debug';
+import TestGenerationPage from './pages/TestGeneration';
 
 const queryClient = new QueryClient();
 
@@ -37,6 +38,7 @@ function App() {
             <Route path="/collaboration" element={<Collaboration />} />
             <Route path="/learning" element={<LearningPage />} />
             <Route path="/debug" element={<DebugPage />} />
+            <Route path="/test-generation" element={<TestGenerationPage />} />
             <Route path="/sessions" element={<Sessions />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/graph" element={<GraphViewer />} />
