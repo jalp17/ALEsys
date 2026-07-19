@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { FileTree } from '../../components/editor/FileTree';
 import { MonacoEditor } from '../../components/editor/MonacoEditor';
 import { Terminal } from '../../components/editor/Terminal';
+import { SuggestionsPanel, ProjectAnalyzer } from '../../components/PairProgrammerPanel';
 import {
   readFile,
   writeFile,
@@ -232,24 +233,41 @@ export default function EditorPage() {
         )}
 
         {/* Editor or empty state */}
-        <div className="flex-1 min-h-0">
-          {activeFile ? (
-            <MonacoEditor
-              value={activeFile.content}
-              language={activeFile.language}
-              onChange={handleContentChange}
-              onSave={handleSave}
-            />
-          ) : (
-            <div className="flex items-center justify-center h-full text-gray-500">
-              <div className="text-center">
-                <div className="text-4xl mb-4">📝</div>
-                <div className="text-lg">Select a file to edit</div>
-                <div className="text-sm mt-2">
-                  Or press <kbd className="px-2 py-0.5 bg-dark-700 rounded text-xs">Ctrl+N</kbd> to
-                  create a new file
+        <div className="flex-1 min-h-0 flex">
+          <div className="flex-1 min-h-0">
+            {activeFile ? (
+              <MonacoEditor
+                value={activeFile.content}
+                language={activeFile.language}
+                onChange={handleContentChange}
+                onSave={handleSave}
+              />
+            ) : (
+              <div className="flex items-center justify-center h-full text-gray-500">
+                <div className="text-center">
+                  <div className="text-4xl mb-4">📝</div>
+                  <div className="text-lg">Select a file to edit</div>
+                  <div className="text-sm mt-2">
+                    Or press <kbd className="px-2 py-0.5 bg-dark-700 rounded text-xs">Ctrl+N</kbd> to
+                    create a new file
+                  </div>
                 </div>
               </div>
+            )}
+          </div>
+          {activeFile && (
+            <div className="w-72 border-l border-gray-700 overflow-y-auto p-2">
+              <SuggestionsPanel
+                code={activeFile.content}
+                filePath={activeFile.path}
+                onApplyFix={(s) => {
+                  const newContent = activeFile.content.replace(
+                    `// TODO: ${s.description}`,
+                    ''
+                  );
+                  handleContentChange(newContent);
+                }}
+              />
             </div>
           )}
         </div>
