@@ -698,3 +698,58 @@ pub async fn get_config(State(state): State<AppState>) -> impl IntoResponse {
     }))
 }
 
+// =============================================================================
+// Phase 9: Agent Handlers
+// =============================================================================
+
+#[allow(dead_code)]
+fn default_timeout() -> u64 {
+    30_000
+}
+
+#[allow(dead_code)]
+/// Request para POST /api/v1/agents/:id/execute
+#[derive(Deserialize)]
+pub struct AgentExecuteRequest {
+    pub command: String,
+    pub args: Vec<String>,
+    #[serde(default)]
+    pub workdir: Option<String>,
+    #[serde(default = "default_timeout")]
+    pub timeout_ms: u64,
+}
+
+#[allow(dead_code)]
+/// Response de POST /api/v1/agents/:id/execute
+#[derive(Serialize)]
+pub struct AgentExecuteResponse {
+    pub exit_code: i32,
+    pub stdout: String,
+    pub stderr: String,
+    pub execution_time_ms: u64,
+}
+
+#[allow(dead_code)]
+/// Request para POST /api/v1/agents/:id/files
+#[derive(Deserialize)]
+pub struct AgentWriteFileRequest {
+    pub path: String,
+    pub content: String,
+}
+
+/// Handler para GET /api/v1/agents
+pub async fn list_agents(State(state): State<AppState>) -> Result<impl IntoResponse, ApiError> {
+    let agents = state.agent_manager.list_agents().await;
+    Ok(Json(serde_json::json!({ "agents": agents })))
+}
+
+/// Handler para GET /api/v1/agents/stats
+pub async fn agent_stats(State(state): State<AppState>) -> impl IntoResponse {
+    let total = state.agent_manager.get_agent_count().await;
+    let connected = state.agent_manager.get_connected_count().await;
+    Json(serde_json::json!({
+        "total": total,
+        "connected": connected,
+    }))
+}
+

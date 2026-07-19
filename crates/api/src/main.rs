@@ -43,10 +43,11 @@ use handlers::{
     advanced_search_handler, chat_handler, create_session, delete_session, export_graph_json,
     generate_handler, get_centrality, get_communities, get_config, get_graph, get_session,
     get_session_history, get_shortest_path, graph_stats, health_handler, list_sessions,
-    search_graph,
+    search_graph, list_agents, agent_stats,
 };
 use state::AppState;
 use websocket::ws_chat_handler;
+use websocket::ws_agent_handler;
 
 /// Metrics endpoint — Prometheus format
 async fn metrics_handler() -> impl IntoResponse {
@@ -233,12 +234,15 @@ async fn main() -> Result<()> {
         .route("/graph/search", get(search_graph))
         .route("/graph/export", get(export_graph_json))
         .route("/search/advanced", post(advanced_search_handler))
-        .route("/config", get(get_config));
+        .route("/config", get(get_config))
+        .route("/agents", get(list_agents))
+        .route("/agents/stats", get(agent_stats));
 
     let app = Router::new()
         .nest("/api/v1", api_v1.clone())
         .nest("/api", api_v1)
         .route("/ws/chat", get(ws_chat_handler))
+        .route("/ws/agent", get(ws_agent_handler))
         .route("/health", get(health_handler))
         .route("/metrics", get(metrics_handler))
         .with_state(state)
