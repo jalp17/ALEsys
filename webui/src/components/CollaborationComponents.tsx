@@ -58,14 +58,12 @@ interface CollaborativeEditorProps {
   documentId: string;
   initialContent: string;
   userId: string;
-  username: string;
 }
 
 export function CollaborativeEditor({
   documentId,
   initialContent,
   userId,
-  username,
 }: CollaborativeEditorProps) {
   const [content, setContent] = useState(initialContent);
   const [users, setUsers] = useState<UserPresence[]>([]);

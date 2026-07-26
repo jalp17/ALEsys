@@ -42,7 +42,7 @@ impl<K: Eq + std::hash::Hash + Clone, V: Clone> Cache<K, V> {
                 return None;
             }
             self.hits += 1;
-            let mut entry = self.entries.get_mut(key).unwrap();
+            let entry = self.entries.get_mut(key).unwrap();
             entry.access_count += 1;
             Some(entry.value.clone())
         } else {

@@ -12,6 +12,7 @@
 //! - fs_ops: Operaciones locales de archivos (Fase 7+)
 //! - automation: Automatizacion local (LaTeX, Markdown, red)
 
+pub mod ingestion;
 pub mod generator;
 pub mod graphrag;
 pub mod llm;
@@ -37,7 +38,9 @@ pub mod search_adv;
 pub mod performance;
 pub mod security;
 pub mod deployment;
+pub mod db;
 pub mod e2e;
+pub mod bibliography;
 
 pub use generator::{CodeGenerator, GenerateRequest, GenerationResult};
 pub use graphrag::GraphRAG;

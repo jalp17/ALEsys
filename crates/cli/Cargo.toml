@@ -17,16 +17,21 @@ thiserror.workspace = true
 anyhow.workspace = true
 tracing.workspace = true
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+sqlx.workspace = true
+chrono.workspace = true
 
 # Core
 alesys-core = { path = "../core", default-features = false }
 
 # CLI
 clap = { version = "4.5", features = ["derive"] }
-rich = "0.1"  # Para output con colores
+comfy-table = "7"
 
 # Environment
 dotenvy = "0.15"
+
+# File walking
+walkdir = "2"
 
 [features]
 default = ["alesys-core/llama-cpp"]

@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Claims {
-    pub sub: String,       // user_id
+    pub sub: String,
     pub role: Role,
     pub exp: usize,
     pub iat: usize,
@@ -24,6 +24,13 @@ pub enum Role {
     Agent,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum Permission {
+    IngestionRead,
+    IngestionWrite,
+}
+
 pub struct JwtConfig {
     pub secret: String,
     pub expiry_hours: u64,
@@ -33,7 +40,6 @@ impl JwtConfig {
     pub fn from_env() -> Self {
         Self {
             secret: std::env::var("JWT_SECRET").unwrap_or_else(|_| {
-                tracing::warn!("JWT_SECRET not set — using insecure default for development");
                 "alesys-dev-secret-change-in-production".to_string()
             }),
             expiry_hours: std::env::var("JWT_EXPIRY_HOURS")
@@ -126,5 +132,13 @@ impl AuthState {
         Self {
             jwt_config: JwtConfig::from_env(),
         }
+    }
+}
+
+pub fn has_permission(role: &Role, permission: Permission) -> bool {
+    match role {
+        Role::Admin => true,
+        Role::User => matches!(permission, Permission::IngestionRead | Permission::IngestionWrite),
+        Role::Agent => matches!(permission, Permission::IngestionRead),
     }
 }

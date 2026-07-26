@@ -1,4 +1,4 @@
-# 🚀🐱 ALEsys v2.0.0 - AI IDE Framework Completo
+# 🚀🐱 ALEsys v2.1.0 - AI IDE Framework
 
 **ALEsys** es un framework RAG + agente configurable con capacidades avanzadas de IA para desarrollo de software, investigación científica y gestión de conocimiento.
 
@@ -7,7 +7,7 @@
 ## 📋 Tabla de Contenidos
 
 - [Arquitectura](#arquitectura)
-- [Features por Fase](#features-por-fase)
+- [Ingesta de PDFs](#ingesta-de-pdfs)
 - [Setup Inicial](#setup-inicial)
 - [API Reference](#api-reference)
 - [Licencia](#licencia)
@@ -58,31 +58,6 @@
 
 ---
 
-## 🎯🐱 Features por Fase
-
-### Fases Tempranas (0-14)
-- **Fase 0-5:** Core GraphRAG, LLM Engine, Sesiones, Generación de Código
-- **Fase 6-10:** Executor Local, FS Ops, Automation, Agent Manager, Plugins
-- **Fase 11-14:** Voice/Multimodal, Colaboración, Pair Programmer
-
-### Fases Avanzadas (15-27) ✅ COMPLETAS
-
-| Fase | Versión | Feature Principal | Estado |
-|------|---------|-------------------|--------|
-| 15 | v1.29.0 | AI Pair Programmer | ✅ |
-| 16 | v1.30.0 | Context-Aware Learning | ✅ |
-| 17 | v1.31.0 | Debug Assistant | ✅ |
-| 18 | v1.32.0 | Test Generation | ✅ |
-| 19 | v1.33.0 | Advanced Refactoring | ✅ |
-| 20 | v1.34.0 | Knowledge Base Curation | ✅ |
-| 21 | v1.35.0 | Multi-Agent Collaboration | ✅ |
-| 22 | v1.36.0 | Advanced Analytics | ✅ |
-| 23 | v1.37.0 | Workflow Automation | ✅ |
-| 24 | v1.38.0 | Advanced Search & Filters | ✅ |
-| 25 | v1.39.0 | Performance Optimization | ✅ |
-| 26 | v1.40.0 | Security Hardening | ✅ |
-| 27 | v1.41.0 | Production Deployment | ✅ |
-| 28 | v2.0.0 | Final Integration | ✅ |
 
 ---
 
@@ -120,7 +95,10 @@
 - `performance` - Cache, pooling, batching, profiling
 - `security` - Rate limiting, validación, auditoría
 - `deployment` - Config, health checks, backups
-- `e2e` - Tests end-to-end y stress testing
+- `e2e` - Tests end-to-end, integración y benchmarks
+
+---
+
 
 ---
 
@@ -216,6 +194,14 @@ cargo test --workspace --no-default-features --features test
 - `POST /workflows` - Crear workflow
 - `POST /workflows/:id/run` - Ejecutar workflow
 
+#### Ingesta de PDFs (Fase 29)
+- `POST /api/v1/ingestion/pdf` - Ingesta individual con MinerU + PyMuPDF fallback
+- `POST /api/v1/ingestion/batch` - Ingesta por lotes
+- `GET /api/v1/ingestion/status/:id` - Estado de job
+- `WS /ws/ingestion/:id` - Progreso en tiempo real
+- `GET /api/v1/ingestion/config` - Configuración actual
+- `PUT /api/v1/ingestion/config` - Actualizar configuración
+
 #### Sistema
 - `GET /health` - Health check
 - `GET /metrics` - Métricas del sistema
@@ -225,20 +211,67 @@ cargo test --workspace --no-default-features --features test
 
 ---
 
-## 🧪🐱 Testing
+## 📄🐱 Ingesta de PDFs
 
+### Características
+- **MinerU + PyMuPDF fallback**: Extracción híbrida con OCR y detección de fórmulas
+- **Organizer**: Estructura limpia de salida (`auto/*` → `book_{id}/`)
+- **GraphRAG hook**: Indexación automática post-ingesta (chunking + embeddings batch 32)
+- **WebUI**: Drag-drop, progress bars en tiempo real, historial de jobs
+- **Auth**: JWT + RBAC (`ingestion:write`, `ingestion:read`)
+
+### Modos de Ingesta
+| Modo | Descripción | GPU |
+|-------------|---------------|-----|
+| `auto` | Selecciona automáticamente | Opcional |
+| `mineru` | Mejor calidad, fórmulas/tablas | Recomendada |
+| `pymupdf` | Rápido, sin GPU | No |
+
+### Setup
 ```bash
-# Todos los tests
-cargo test --workspace --no-default-features --features test
+# Instalar MinerU con GPU
+./scripts/setup-mineru.sh
 
-# Tests con output detallado
-cargo test --workspace --no-default-features --features test -- --test-threads=1
-
-# Tests de un módulo específico
-cargo test -p alesys-core --lib -- module_name::tests
+# Ejecutar benchmarks
+./scripts/benchmark-ingestion.sh
 ```
 
-**Total: 335 tests unitarios passing**
+### Documentación
+- [Pipeline de Ingesta](docs/INGESTION_PIPELINE.md)
+
+---
+
+## 🧪🐱 Testing
+
+### Metodología
+
+| Tipo | Herramienta | Cuándo |
+|------|-------------|--------|
+| Unitarios | \`cargo test -p alesys-core --lib\` | Cada cambio en lógica Rust |
+| Integración | \`cargo test -p alesys-api --test <suite>\` | Backend + PostgreSQL |
+| E2E | Python + Playwright | Pipeline completo (PDF → GraphRAG) |
+| Benchmarks | \`cargo bench\` | Regresión de performance |
+
+### Comandos
+
+```bash
+# Unit tests (core)
+cargo test -p alesys-core --lib
+
+# API tests
+cargo test -p alesys-api
+
+# E2E offline (sin backend)
+python3 tests/e2e/ingestion_test.py --offline
+
+# E2E live (con backend)
+python3 tests/e2e/ingestion_test.py
+
+# Benchmarks
+cargo bench -p alesys-core ingestion_bench
+```
+
+**Total: 351 tests unitarios · 7 escenarios E2E · Benchmarks de ingesta**
 
 ---
 
@@ -246,12 +279,12 @@ cargo test -p alesys-core --lib -- module_name::tests
 
 | Métrica | Valor |
 |---------|-------|
-| **Versión** | v2.0.0 |
+| **Versión** | v2.1.0 |
 | **Módulos Core** | 27 |
 | **Endpoints API** | ~50 |
-| **Tests Unitarios** | 335 |
+| **Tests Unitarios** | 351 |
 | **Líneas de Código** | ~15,000+ |
-| **Fases Completadas** | 28 |
+| **Fases Completadas** | 29 |
 
 ---
 
@@ -261,14 +294,17 @@ GNU AGPL v3.0
 
 ---
 
-## 📝🐱 CHANGELOG v2.0.0
+## 📝🐱 CHANGELOG v2.1.0
 
 ### Agregado
-- ✅ 13 fases completadas (15-27)
-- ✅ 27 módulos del core
-- ✅ 335 tests unitarios
-- ✅ Documentación completa de API
-- ✅ Tests end-to-end y stress testing
+- ✅ Fase 29: Pipeline de ingesta de PDFs (MinerU + PyMuPDF fallback)
+- ✅ 10 tickets TICKET-29.1 a 29.10 completados
+- ✅ GraphRAG ingestion hook con KnowledgeCuration splitter
+- ✅ API endpoints: `/ingestion/pdf`, `/ingestion/batch`, `/ingestion/status/:id`, `/ws/ingestion/:id`, `/ingestion/config`
+- ✅ WebUI: drag-drop, progress bars, historial de jobs
+- ✅ 351 tests unitarios passing (32 ingestion tests)
+- ✅ 7 escenarios E2E + benchmarks + CI workflow
+- ✅ Documentación Fase 29 y pipeline de ingesta
 
 ### Mejorado
 - Performance con cache LRU + TTL
@@ -277,8 +313,9 @@ GNU AGPL v3.0
 - Búsqueda avanzada con facetas
 
 ### Cambiado
-- Versión establecida a v2.0.0
-- Todos los módulos integrados y testeados
+- Metodología de tests: unit → integración → e2e → benchmarks
+- Flujo de tickets: issues por fase (`.github/FaseXX-ISSUES.md`)
+- Version establecida a v2.1.0
 
 ---
 

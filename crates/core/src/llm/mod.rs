@@ -27,6 +27,7 @@ pub mod transformers;
 pub mod vllm;
 
 pub use backend::LLMBackend;
+pub use backend::LLMState;
 pub use backend_manager::BackendManager;
 pub use config::{Entity, KnowledgeExtraction, LLMBackendType, LLMConfig, Relation};
 #[cfg(feature = "http-backend")]

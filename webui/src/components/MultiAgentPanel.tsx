@@ -21,6 +21,7 @@ interface ConsensusResult {
   consensus_reached: boolean;
   final_decision: string;
   weighted_score: number;
+  votes_count?: number;
 }
 
 const collabService = {
@@ -60,7 +61,23 @@ export function MultiAgentPanel() {
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskPriority, setNewTaskPriority] = useState('medium');
   const [consensusResult, setConsensusResult] = useState<ConsensusResult | null>(null);
+  const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(false);
+
+  const loadAgents = async () => {
+    try {
+      const res = await fetch('/api/v1/agents');
+      const data = await res.json();
+      setAgents(
+        (data.agents || []).map((a: any) => ({
+          id: a.id,
+          name: a.name,
+          status: a.status,
+          capabilities: [],
+        }))
+      );
+    } catch (e) { console.error(e); }
+  };
 
   useEffect(() => {
     loadData();
@@ -72,6 +89,7 @@ export function MultiAgentPanel() {
       setStatus(s);
       setTasks(t.tasks);
       setTaskStats({ total: t.total, done: t.done, in_progress: t.in_progress, pending: t.pending });
+      await loadAgents();
     } catch (err) { console.error(err); }
   };
 
@@ -125,6 +143,27 @@ export function MultiAgentPanel() {
             <div className="text-gray-400 text-sm">Busy</div>
           </div>
         </div>
+      </div>
+
+      <div className="border rounded-lg bg-dark-800 p-4">
+        <h3 className="font-semibold mb-3">Agents</h3>
+        {agents.length === 0 ? (
+          <p className="text-sm text-gray-400">No agents loaded.</p>
+        ) : (
+          <div className="space-y-2 max-h-48 overflow-y-auto">
+            {agents.map((agent) => (
+              <div key={agent.id} className="flex items-center justify-between p-2 rounded bg-dark-900 border border-gray-700 text-sm">
+                <span className="font-medium">{agent.name}</span>
+                <span className={`text-xs px-2 py-1 rounded ${
+                  agent.status === 'Connected' ? 'bg-green-900 text-green-300' :
+                  agent.status === 'Busy' ? 'bg-yellow-900 text-yellow-300' :
+                  agent.status === 'Idle' ? 'bg-blue-900 text-blue-300' :
+                  'bg-gray-700 text-gray-300'
+                }`}>{agent.status}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="border rounded-lg bg-dark-800 p-4">

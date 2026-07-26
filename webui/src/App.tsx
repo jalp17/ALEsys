@@ -23,6 +23,7 @@ import MultiAgentPage from './pages/MultiAgent';
 import AnalyticsPage from './pages/Analytics';
 import WorkflowsPage from './pages/Workflows';
 import AdvancedSearchPage from './pages/AdvancedSearch';
+import { IngestionPanel, BatchIngestion, IngestionHistory } from './pages/ingestion';
 
 const queryClient = new QueryClient();
 
@@ -55,6 +56,9 @@ function App() {
             <Route path="/settings" element={<Settings />} />
             <Route path="/graph" element={<GraphViewer />} />
             <Route path="/search" element={<AdvancedSearch />} />
+            <Route path="/ingestion" element={<IngestionPanel />} />
+            <Route path="/ingestion/batch" element={<BatchIngestion />} />
+            <Route path="/ingestion/history" element={<IngestionHistory />} />
           </Routes>
         </Layout>
       </BrowserRouter>

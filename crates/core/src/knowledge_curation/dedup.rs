@@ -134,8 +134,8 @@ impl DuplicateDetector {
         let mut overlapping_a = Vec::new();
         let mut overlapping_b = Vec::new();
 
-        for (i, line_a) in a_lines.iter().enumerate() {
-            for (j, line_b) in b_lines.iter().enumerate() {
+        for (_, line_a) in a_lines.iter().enumerate() {
+            for (_, line_b) in b_lines.iter().enumerate() {
                 if line_a.trim() == line_b.trim() && !line_a.trim().is_empty() {
                     overlapping_a.push(line_a.to_string());
                     overlapping_b.push(line_b.to_string());

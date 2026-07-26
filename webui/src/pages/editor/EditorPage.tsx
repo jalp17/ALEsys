@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { FileTree } from '../../components/editor/FileTree';
 import { MonacoEditor } from '../../components/editor/MonacoEditor';
 import { Terminal } from '../../components/editor/Terminal';
-import { SuggestionsPanel, ProjectAnalyzer } from '../../components/PairProgrammerPanel';
+import { SuggestionsPanel } from '../../components/PairProgrammerPanel';
 import {
   readFile,
   writeFile,

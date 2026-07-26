@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { API_BASE_URL } from '../utils/platform';
 import { useSessionStore } from '../store/session';
-import { VoiceRecorder, ImageDropZone } from '../components/VoiceComponents';
+import { VoiceRecorder } from '../components/VoiceComponents';
 
 interface Message {
   role: 'user' | 'assistant';

@@ -113,18 +113,32 @@ pnpm dev
 ```
 
 ## Tests
+### Metodología
+
+| Tipo | Comando | Cuándo |
+|------|---------|--------|
+| Unitarios | `cargo test -p alesys-core --lib` | Cada cambio en lógica |
+| Integración | `cargo test -p alesys-api --test <suite>` | Backend + DB |
+| E2E | `python3 tests/e2e/ingestion_test.py` | Pipeline completo |
+| Benchmarks | `cargo bench -p alesys-core` | Regresión performance |
 
 ### Correr Todos los Tests
 
 ```bash
-# Rust
-cargo test --workspace
+# Unit tests (core)
+cargo test -p alesys-core --lib
 
-# WebUI
-cd webui && pnpm test
+# API tests
+cargo test -p alesys-api
 
-# PHP
-cd server && composer test
+# E2E offline (sin backend)
+python3 tests/e2e/ingestion_test.py --offline
+
+# E2E live (con backend)
+python3 tests/e2e/ingestion_test.py
+
+# Benchmarks
+cargo bench -p alesys-core ingestion_bench
 ```
 
 ### Cobertura
@@ -137,12 +151,120 @@ cargo tarpaulin --workspace
 cd webui && pnpm test:coverage
 ```
 
+## Metodología de Tickets y Flujo de Trabajo
+
+### Formato de Tickets
+
+Cada fase utiliza archivos de issues en `.github/`:
+
+- **Formato:** `TICKET-{FASE}.{NUM}` (ej: `TICKET-29.1`, `TICKET-29.2`)
+- **Tracking:** `.github/FaseXX-ISSUES.md`
+- **Workflow:** feature branch → fase branch → main
+
+### Flujo por Fase
+
+1. **Planificar:** Crear `FaseXX-ISSUES.md` con 8-10 tickets
+2. **Implementar:** Branches `feature/{N}-{area}-{desc}`
+3. **Verificar:** Tests unitarios, integración, e2e, benchmarks
+4. **Cerrar:** Marcar tickets completados en `FaseXX-ISSUES.md`
+5. **Integrar:** Merge fase a `main` + tag semántico
+
+### Comandos Útiles
+
+```bash
+# Ver tickets de una fase
+cat .github/Fase29-ISSUES.md
+
+# Crear issue desde ticket
+gh issue create --title "TICKET-29.1: ..." --body-file .github/ISSUE_TEMPLATES/TICKET-29.1.md
+```
+
+### Referencias
+
+- [Estrategia de Ramas](BRANCH_STRATEGY.md)
+- [CHANGELOG.md](CHANGELOG.md)
+- [Issues Fase 29](.github/Fase29-ISSUES.md)
+
 ## Documentación
 
 - Mantén `README.md` actualizado
 - Documenta APIs públicas
 - Actualiza `AGENT.md` con progreso
 - Usa comentarios para código complejo
+
+## Ingesta de PDFs (Fase 29)
+### Desarrollo
+
+```bash
+# Tests unitarios del pipeline de ingesta
+cargo test -p alesys-core --lib ingestion::
+
+# Integración (API + DB)
+cargo test -p alesys-api --test ingestion_db_test
+
+# E2E tests (requiere servidor corriendo)
+python3 tests/e2e/ingestion_test.py
+
+# E2E offline (sin backend)
+python3 tests/e2e/ingestion_test.py --offline
+
+# Benchmarks
+cargo bench -p alesys-core ingestion_bench
+
+# Setup MinerU
+./scripts/setup-mineru.sh
+```
+
+### Tickets
+
+Ver `.github/Fase29-ISSUES.md` para los 10 tickets completados:
+- TICKET-29.1: Plugin Skeleton + Config
+- TICKET-29.2: MinerUWrapper
+- TICKET-29.3: PyMuPDFFallback
+- TICKET-29.4: Organizer
+- TICKET-29.5: PDFProcessor Orchestrator
+- TICKET-29.6: API Endpoints + WebSocket
+- TICKET-29.7: Frontend Ingestion Panel
+- TICKET-29.8: GraphRAG Integration Hook
+- TICKET-29.9: Tests E2E + Benchmarks
+- TICKET-29.10: Docs + Scripts
+
+### Estructura del código
+
+```
+crates/core/src/ingestion/
+├── mod.rs              # Module root, IngestionConfig
+├── models.rs           # IngestionJob, IngestionResult, Chapter
+├── plugin.rs           # IngestionPlugin system
+├── mineru_wrapper.rs   # MinerU GPU/CPU wrapper
+├── pymupdf_fallback.rs # PyMuPDF fallback extractor
+├── organizer.rs        # Output cleanup & structure
+├── pdf_processor.rs    # Orchestrator + GraphRAG hook
+├── progress.rs         # ProgressTracker wrapper
+└── tests/              # Unit tests
+
+crates/core/src/graphrag/
+├── ingestion_hook.rs   # Post-ingestion GraphRAG indexing
+
+crates/api/
+├── src/handlers_ingestion.rs  # REST + WS handlers
+├── src/state.rs               # Auto-run migrations
+└── tests/ingestion_db_test.rs # PostgreSQL integration
+
+tests/e2e/
+└── ingestion_test.py          # 7 escenarios E2E
+
+benches/
+└── ingestion_bench.rs         # Benchmarks
+```
+
+### Convenciones
+
+- Chunking: max 512 tokens, overlap 200 tokens
+- Embeddings: ONNX Runtime batch 32
+- Metadatos: topic, session_id, source_pdf, chapter_title
+- Auth: JWT + RBAC (`ingestion:write`, `ingestion:read`)
+- Tracking: DB-backed `ingestion_jobs` para persistencia
 
 ## Pull Requests
 
