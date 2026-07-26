@@ -30,101 +30,142 @@ use super::transformers::TransformersEngine;
 #[cfg(feature = "http-backend")]
 use super::http::HttpLLMEngine;
 
+/// Estado del backend LLM
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LLMState {
+    /// No cargado (modo search-only, 0 MB RAM)
+    Unloaded,
+    /// Cargado y listo para usar
+    Loaded,
+    /// Error al cargar
+    Error,
+}
+
 /// Backend unificado que delega a la implementación correcta
+/// Soporta carga lazy (no carga el modelo hasta que se llama a load())
 pub enum LLMBackend {
     #[cfg(feature = "llama-cpp")]
-    LlamaCpp(LlamaCppEngine),
+    LlamaCpp(Option<LlamaCppEngine>),
 
     #[cfg(feature = "mistralrs-backend")]
-    Mistralrs(MistralEngine),
+    Mistralrs(Option<MistralEngine>),
 
     #[cfg(feature = "candle-backend")]
-    Candle(CandleEngine),
+    Candle(Option<CandleEngine>),
 
     #[cfg(feature = "vllm-backend")]
-    Vllm(VllmEngine),
+    Vllm(Option<VllmEngine>),
 
     #[cfg(feature = "transformers-backend")]
-    Transformers(TransformersEngine),
+    Transformers(Option<TransformersEngine>),
 
     #[cfg(feature = "http-backend")]
-    Http(Box<HttpLLMEngine>),
+    Http(Option<Box<HttpLLMEngine>>),
 
     /// Backend sin LLM — permite modo solo búsqueda sin crash
     Noop,
 }
 
 impl LLMBackend {
-    /// Crea el backend según la configuración
-    pub async fn from_config(config: LLMConfig) -> Result<Self> {
+    /// Crea el backend pero NO lo carga - modo lazy
+    /// El modelo se cargará solo cuando se llame a `load()`
+    pub async fn from_config_lazy(config: LLMConfig) -> Result<Self> {
+        tracing::info!(
+            "Backend {} configurado (NO cargado) - usar endpoint /api/v1/llm/load para cargar",
+            config.backend
+        );
+
         match config.backend {
             #[cfg(feature = "llama-cpp")]
             LLMBackendType::LlamaCpp => {
                 tracing::info!(
-                    "Usando backend llama.cpp (Vulkan GPU) — 150+ arquitecturas, 23 quantizaciones"
+                    "llama.cpp configurado (Vulkan GPU) - modelo NO cargado aún"
                 );
-                let engine = LlamaCppEngine::new(config).await?;
-                Ok(Self::LlamaCpp(engine))
+                Ok(Self::LlamaCpp(None))
             }
 
             #[cfg(feature = "mistralrs-backend")]
             LLMBackendType::Mistralrs => {
                 tracing::warn!(
-                    "BACKEND MISTRALRS (CPU ONLY):\
-                     - Arquitecturas: Llama, Qwen2/3, Mistral, Phi2/3, Starcoder2, Bloom, Falcon, Mamba, Rwkv\
-                     - NO soportado: MoE (qwen3moe, deepseek, phimoe) — panic en indexed_moe_forward\
-                     - Quantizaciones: Q4_K_M, Q8_0, F16, F32 (NO IQ4_*, IQ2_*, etc.)\
-                     - Para GPU/Vulkan y 150+ arquitecturas: usar LLM_BACKEND=llama_cpp"
+                    "mistralrs configurado (CPU ONLY) - modelo NO cargado aún"
                 );
-                let mut engine = MistralEngine::new(config);
-                engine.load().await?;
-                Ok(Self::Mistralrs(engine))
+                Ok(Self::Mistralrs(None))
             }
 
             #[cfg(feature = "candle-backend")]
             LLMBackendType::Candle => {
-                tracing::info!("Usando backend candle (Rust nativo) — CUDA/Metal/CPU");
-                let engine = CandleEngine::new(config).await?;
-                Ok(Self::Candle(engine))
+                tracing::info!("candle configurado (Rust nativo) - modelo NO cargado aún");
+                Ok(Self::Candle(None))
             }
 
             #[cfg(feature = "vllm-backend")]
             LLMBackendType::Vllm => {
-                tracing::info!("Usando backend vLLM (Python subprocess) — GPU de alto rendimiento");
-                let engine = VllmEngine::new(config).await?;
-                Ok(Self::Vllm(engine))
+                tracing::info!("vLLM configurado (Python GPU) - modelo NO cargado aún");
+                Ok(Self::Vllm(None))
             }
 
             #[cfg(feature = "transformers-backend")]
             LLMBackendType::Transformers => {
-                tracing::info!("Usando backend Transformers (Python subprocess) — Modelos HF");
-                let engine = TransformersEngine::new(config).await?;
-                Ok(Self::Transformers(engine))
+                tracing::info!("Transformers configurado (Python) - modelo NO cargado aún");
+                Ok(Self::Transformers(None))
             }
 
             // --- HTTP providers ---
             #[cfg(feature = "http-backend")]
-            LLMBackendType::Ollama => Self::create_http(config, super::http::Provider::Ollama),
+            LLMBackendType::Ollama => {
+                tracing::info!("Ollama configurado (HTTP) - modelo NO cargado aún");
+                Ok(Self::Http(None))
+            }
             #[cfg(feature = "http-backend")]
-            LLMBackendType::OpenRouter => Self::create_http(config, super::http::Provider::OpenRouter),
+            LLMBackendType::OpenRouter => {
+                tracing::info!("OpenRouter configurado (HTTP) - modelo NO cargado aún");
+                Ok(Self::Http(None))
+            }
             #[cfg(feature = "http-backend")]
-            LLMBackendType::Anthropic => Self::create_http(config, super::http::Provider::Anthropic),
+            LLMBackendType::Anthropic => {
+                tracing::info!("Anthropic configurado (HTTP) - modelo NO cargado aún");
+                Ok(Self::Http(None))
+            }
             #[cfg(feature = "http-backend")]
-            LLMBackendType::Gemini => Self::create_http(config, super::http::Provider::Gemini),
+            LLMBackendType::Gemini => {
+                tracing::info!("Gemini configurado (HTTP) - modelo NO cargado aún");
+                Ok(Self::Http(None))
+            }
             #[cfg(feature = "http-backend")]
-            LLMBackendType::Perplexity => Self::create_http(config, super::http::Provider::Perplexity),
+            LLMBackendType::Perplexity => {
+                tracing::info!("Perplexity configurado (HTTP) - modelo NO cargado aún");
+                Ok(Self::Http(None))
+            }
             #[cfg(feature = "http-backend")]
-            LLMBackendType::Cerebras => Self::create_http(config, super::http::Provider::Cerebras),
+            LLMBackendType::Cerebras => {
+                tracing::info!("Cerebras configurado (HTTP) - modelo NO cargado aún");
+                Ok(Self::Http(None))
+            }
             #[cfg(feature = "http-backend")]
-            LLMBackendType::Cohere => Self::create_http(config, super::http::Provider::Cohere),
+            LLMBackendType::Cohere => {
+                tracing::info!("Cohere configurado (HTTP) - modelo NO cargado aún");
+                Ok(Self::Http(None))
+            }
             #[cfg(feature = "http-backend")]
-            LLMBackendType::Nvidia => Self::create_http(config, super::http::Provider::Nvidia),
+            LLMBackendType::Nvidia => {
+                tracing::info!("Nvidia configurado (HTTP) - modelo NO cargado aún");
+                Ok(Self::Http(None))
+            }
             #[cfg(feature = "http-backend")]
-            LLMBackendType::Groq => Self::create_http(config, super::http::Provider::Groq),
+            LLMBackendType::Groq => {
+                tracing::info!("Groq configurado (HTTP) - modelo NO cargado aún");
+                Ok(Self::Http(None))
+            }
             #[cfg(feature = "http-backend")]
-            LLMBackendType::HuggingFace => Self::create_http(config, super::http::Provider::HuggingFace),
+            LLMBackendType::HuggingFace => {
+                tracing::info!("HuggingFace configurado (HTTP) - modelo NO cargado aún");
+                Ok(Self::Http(None))
+            }
             #[cfg(feature = "http-backend")]
-            LLMBackendType::GitHubModels => Self::create_http(config, super::http::Provider::GitHubModels),
+            LLMBackendType::GitHubModels => {
+                tracing::info!("GitHubModels configurado (HTTP) - modelo NO cargado aún");
+                Ok(Self::Http(None))
+            }
 
             #[cfg(any(
                 feature = "llama-cpp",
@@ -134,8 +175,9 @@ impl LLMBackend {
                 feature = "transformers-backend"
             ))]
             LLMBackendType::Auto => {
-                tracing::info!("Auto-seleccionando backend...");
-                Self::auto_select(config).await
+                tracing::info!("Auto-selección configurada - modelo se cargará on-demand");
+                // Auto-select pero sin cargar
+                Self::auto_select(config.clone()).await
             }
 
             #[cfg(not(any(
@@ -146,7 +188,7 @@ impl LLMBackend {
                 feature = "transformers-backend"
             )))]
             LLMBackendType::Auto => Err(crate::AlesysError::LLM(
-                "Auto-selección requiere al menos un backend local (llama-cpp, mistralrs, candle, vllm, transformers)".to_string(),
+                "Auto-selección requiere al menos un backend local".to_string(),
             )),
 
             #[cfg(not(feature = "llama-cpp"))]
@@ -197,12 +239,212 @@ impl LLMBackend {
         Ok(Self::Http(Box::new(engine)))
     }
 
+    /// Carga el modelo LLM en memoria (on-demand)
+    /// Esto es lo que consume RAM (600 MB - 8 GB dependiendo del modelo)
+    pub async fn load(&mut self, config: &LLMConfig) -> Result<()> {
+        tracing::info!("Cargando modelo LLM en memoria...");
+
+        match self {
+            #[cfg(feature = "llama-cpp")]
+            Self::LlamaCpp(engine_opt) => {
+                if engine_opt.is_some() {
+                    tracing::info!("Modelo ya está cargado");
+                    return Ok(());
+                }
+                let engine = LlamaCppEngine::new(config.clone()).await?;
+                *engine_opt = Some(engine);
+                tracing::info!("✅ Modelo llama.cpp cargado exitosamente");
+            }
+
+            #[cfg(feature = "mistralrs-backend")]
+            Self::Mistralrs(engine_opt) => {
+                if engine_opt.is_some() {
+                    tracing::info!("Modelo ya está cargado");
+                    return Ok(());
+                }
+                let mut engine = MistralEngine::new(config.clone());
+                engine.load().await?;
+                *engine_opt = Some(engine);
+                tracing::info!("✅ Modelo mistralrs cargado exitosamente");
+            }
+
+            #[cfg(feature = "candle-backend")]
+            Self::Candle(engine_opt) => {
+                if engine_opt.is_some() {
+                    tracing::info!("Modelo ya está cargado");
+                    return Ok(());
+                }
+                let engine = CandleEngine::new(config.clone()).await?;
+                *engine_opt = Some(engine);
+                tracing::info!("✅ Modelo candle cargado exitosamente");
+            }
+
+            #[cfg(feature = "vllm-backend")]
+            Self::Vllm(engine_opt) => {
+                if engine_opt.is_some() {
+                    tracing::info!("Modelo ya está cargado");
+                    return Ok(());
+                }
+                let engine = VllmEngine::new(config.clone()).await?;
+                *engine_opt = Some(engine);
+                tracing::info!("✅ Modelo vLLM cargado exitosamente");
+            }
+
+            #[cfg(feature = "transformers-backend")]
+            Self::Transformers(engine_opt) => {
+                if engine_opt.is_some() {
+                    tracing::info!("Modelo ya está cargado");
+                    return Ok(());
+                }
+                let engine = TransformersEngine::new(config.clone()).await?;
+                *engine_opt = Some(engine);
+                tracing::info!("✅ Modelo Transformers cargado exitosamente");
+            }
+
+            #[cfg(feature = "http-backend")]
+            Self::Http(engine_opt) => {
+                if engine_opt.is_some() {
+                    tracing::info!("Backend HTTP ya está configurado");
+                    return Ok(());
+                }
+                // Para HTTP, necesitamos saber qué provider usar
+                // Asumimos Ollama como default si no está especificado
+                let engine = HttpLLMEngine::new(config.clone(), super::http::Provider::Ollama).await?;
+                *engine_opt = Some(Box::new(engine));
+                tracing::info!("✅ Backend HTTP configurado exitosamente");
+            }
+
+            Self::Noop => {
+                return Err(crate::AlesysError::LLM(
+                    "Backend Noop no puede cargar modelos".to_string()
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Descarga el modelo LLM de la memoria (libera RAM)
+    pub async fn unload(&mut self) -> Result<()> {
+        tracing::info!("Descargando modelo LLM de la memoria...");
+
+        match self {
+            #[cfg(feature = "llama-cpp")]
+            Self::LlamaCpp(engine_opt) => {
+                if engine_opt.is_some() {
+                    *engine_opt = None;
+                    tracing::info!("✅ Modelo llama.cpp descargado - RAM liberada");
+                } else {
+                    tracing::info!("Modelo ya estaba descargado");
+                }
+            }
+
+            #[cfg(feature = "mistralrs-backend")]
+            Self::Mistralrs(engine_opt) => {
+                if engine_opt.is_some() {
+                    *engine_opt = None;
+                    tracing::info!("✅ Modelo mistralrs descargado - RAM liberada");
+                } else {
+                    tracing::info!("Modelo ya estaba descargado");
+                }
+            }
+
+            #[cfg(feature = "candle-backend")]
+            Self::Candle(engine_opt) => {
+                if engine_opt.is_some() {
+                    *engine_opt = None;
+                    tracing::info!("✅ Modelo candle descargado - RAM liberada");
+                } else {
+                    tracing::info!("Modelo ya estaba descargado");
+                }
+            }
+
+            #[cfg(feature = "vllm-backend")]
+            Self::Vllm(engine_opt) => {
+                if engine_opt.is_some() {
+                    *engine_opt = None;
+                    tracing::info!("✅ Modelo vLLM descargado - RAM liberada");
+                } else {
+                    tracing::info!("Modelo ya estaba descargado");
+                }
+            }
+
+            #[cfg(feature = "transformers-backend")]
+            Self::Transformers(engine_opt) => {
+                if engine_opt.is_some() {
+                    *engine_opt = None;
+                    tracing::info!("✅ Modelo Transformers descargado - RAM liberada");
+                } else {
+                    tracing::info!("Modelo ya estaba descargado");
+                }
+            }
+
+            #[cfg(feature = "http-backend")]
+            Self::Http(engine_opt) => {
+                if engine_opt.is_some() {
+                    *engine_opt = None;
+                    tracing::info!("✅ Backend HTTP descargado");
+                } else {
+                    tracing::info!("Backend HTTP ya estaba descargado");
+                }
+            }
+
+            Self::Noop => {
+                tracing::info!("Backend Noop - no hay modelo que descargar");
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Verifica si el modelo está cargado en memoria
+    pub fn is_loaded(&self) -> bool {
+        match self {
+            #[cfg(feature = "llama-cpp")]
+            Self::LlamaCpp(engine_opt) => engine_opt.is_some(),
+
+            #[cfg(feature = "mistralrs-backend")]
+            Self::Mistralrs(engine_opt) => engine_opt.is_some(),
+
+            #[cfg(feature = "candle-backend")]
+            Self::Candle(engine_opt) => engine_opt.is_some(),
+
+            #[cfg(feature = "vllm-backend")]
+            Self::Vllm(engine_opt) => engine_opt.is_some(),
+
+            #[cfg(feature = "transformers-backend")]
+            Self::Transformers(engine_opt) => engine_opt.is_some(),
+
+            #[cfg(feature = "http-backend")]
+            Self::Http(engine_opt) => engine_opt.is_some(),
+
+            Self::Noop => false,
+        }
+    }
+
+    /// Obtiene el estado actual del backend
+    pub fn state(&self) -> LLMState {
+        if self.is_loaded() {
+            LLMState::Loaded
+        } else {
+            LLMState::Unloaded
+        }
+    }
+
+    /// Crea el backend y lo carga inmediatamente (comportamiento antiguo)
+    /// Usar solo para compatibilidad - preferir `from_config_lazy()` + `load()`
+    pub async fn from_config(config: LLMConfig) -> Result<Self> {
+        let mut backend = Self::from_config_lazy(config.clone()).await?;
+        backend.load(&config).await?;
+        Ok(backend)
+    }
+
     /// Crea un backend noop para modo solo búsqueda (sin LLM)
     pub fn noop() -> Self {
         Self::Noop
     }
 
-    /// Auto-selección inteligente de backend
+    /// Auto-selección inteligente de backend (lazy - no carga el modelo)
     /// Nota: HTTP providers no se auto-seleccionan (requieren API keys explícitas)
     #[cfg(any(
         feature = "llama-cpp",
@@ -211,64 +453,32 @@ impl LLMBackend {
         feature = "vllm-backend",
         feature = "transformers-backend"
     ))]
-    async fn auto_select(config: LLMConfig) -> Result<Self> {
-        // Detectar GPU disponible
-        let gpu = Self::detect_gpu().await;
-        tracing::info!("GPU detectada: {:?}", gpu);
+    async fn auto_select(_config: LLMConfig) -> Result<Self> {
+        // Auto-selección solo determina el TIPO de backend, NO carga el modelo
+        // El modelo se cargará cuando el usuario llame a load()
 
-        // Prioridad: llama.cpp > candle > vllm > transformers > mistralrs
-        // HTTP providers are not auto-selected (require explicit API keys)
         #[cfg(feature = "llama-cpp")]
         {
-            tracing::info!("Intentando llama.cpp (Vulkan GPU)...");
-            match LlamaCppEngine::new(config.clone()).await {
-                Ok(engine) => {
-                    tracing::info!("llama.cpp disponible");
-                    return Ok(Self::LlamaCpp(engine));
-                }
-                Err(e) => {
-                    tracing::warn!("llama.cpp no disponible: {}", e);
-                }
-            }
+            tracing::info!("Auto-select: llama_cpp será usado (Vulkan GPU) - modelo NO cargado aún");
+            return Ok(Self::LlamaCpp(None));
         }
 
         #[cfg(feature = "candle-backend")]
         {
-            tracing::info!("Intentando candle (Rust nativo)...");
-            match CandleEngine::new(config.clone()).await {
-                Ok(engine) => {
-                    tracing::info!("Candle disponible");
-                    return Ok(Self::Candle(engine));
-                }
-                Err(e) => {
-                    tracing::warn!("Candle no disponible: {}", e);
-                }
-            }
+            tracing::info!("Auto-select: candle será usado (Rust nativo) - modelo NO cargado aún");
+            return Ok(Self::Candle(None));
         }
 
         #[cfg(feature = "vllm-backend")]
-        if gpu == super::config::GpuType::Cuda {
-            tracing::info!("Intentando vLLM (Python GPU)...");
-            match VllmEngine::new(config.clone()).await {
-                Ok(engine) => {
-                    tracing::info!("vLLM disponible");
-                    return Ok(Self::Vllm(engine));
-                }
-                Err(e) => {
-                    tracing::warn!("vLLM no disponible: {}", e);
-                }
-            }
+        {
+            tracing::info!("Auto-select: vllm será usado (Python GPU) - modelo NO cargado aún");
+            return Ok(Self::Vllm(None));
         }
 
         #[cfg(feature = "mistralrs-backend")]
         {
-            tracing::info!("Intentando mistralrs (CPU fallback)...");
-            match MistralEngine::new(config.clone()) {
-                engine => {
-                    tracing::info!("Mistralrs disponible (CPU)");
-                    return Ok(Self::Mistralrs(engine));
-                }
-            }
+            tracing::info!("Auto-select: mistralrs será usado (CPU fallback) - modelo NO cargado aún");
+            return Ok(Self::Mistralrs(None));
         }
 
         Err(crate::AlesysError::LLM(
@@ -283,7 +493,7 @@ impl LLMBackend {
         feature = "vllm-backend",
         feature = "transformers-backend"
     )))]
-    #[allow(dead_code)] // Only reachable when no local backends + http-backend
+    #[allow(dead_code)]
     async fn auto_select(_config: LLMConfig) -> Result<Self> {
         Err(crate::AlesysError::LLM(
             "No LLM backend feature enabled. Habilitar al menos una: llama-cpp, mistralrs-backend, candle-backend, http-backend".to_string()
@@ -392,17 +602,29 @@ macro_rules! delegate_backend {
     ($self:expr, $method:ident($($arg:expr),*)) => {
         match $self {
             #[cfg(feature = "llama-cpp")]
-            Self::LlamaCpp(e) => e.$method($($arg),*).await,
+            Self::LlamaCpp(e) => e.as_ref()
+                .ok_or_else(|| crate::AlesysError::LLM("LLM no cargado".to_string()))?
+                .$method($($arg),*).await,
             #[cfg(feature = "mistralrs-backend")]
-            Self::Mistralrs(e) => e.$method($($arg),*).await,
+            Self::Mistralrs(e) => e.as_ref()
+                .ok_or_else(|| crate::AlesysError::LLM("LLM no cargado".to_string()))?
+                .$method($($arg),*).await,
             #[cfg(feature = "candle-backend")]
-            Self::Candle(e) => e.$method($($arg),*).await,
+            Self::Candle(e) => e.as_ref()
+                .ok_or_else(|| crate::AlesysError::LLM("LLM no cargado".to_string()))?
+                .$method($($arg),*).await,
             #[cfg(feature = "vllm-backend")]
-            Self::Vllm(e) => e.$method($($arg),*).await,
+            Self::Vllm(e) => e.as_ref()
+                .ok_or_else(|| crate::AlesysError::LLM("LLM no cargado".to_string()))?
+                .$method($($arg),*).await,
             #[cfg(feature = "transformers-backend")]
-            Self::Transformers(e) => e.$method($($arg),*).await,
+            Self::Transformers(e) => e.as_ref()
+                .ok_or_else(|| crate::AlesysError::LLM("LLM no cargado".to_string()))?
+                .$method($($arg),*).await,
             #[cfg(feature = "http-backend")]
-            Self::Http(e) => e.$method($($arg),*).await,
+            Self::Http(e) => e.as_ref()
+                .ok_or_else(|| crate::AlesysError::LLM("LLM no cargado".to_string()))?
+                .$method($($arg),*).await,
             Self::Noop => Err(crate::AlesysError::LLM(
                 "LLM no disponible — modo solo búsqueda".to_string(),
             )),
@@ -423,20 +645,21 @@ impl LLMEngine for LLMBackend {
     ) -> BoxStream<'a, Result<StreamChunk>> {
         match self {
             #[cfg(feature = "llama-cpp")]
-            Self::LlamaCpp(e) => e.chat_stream(messages),
+            Self::LlamaCpp(Some(e)) => e.chat_stream(messages),
             #[cfg(feature = "mistralrs-backend")]
-            Self::Mistralrs(e) => e.chat_stream(messages),
+            Self::Mistralrs(Some(e)) => e.chat_stream(messages),
             #[cfg(feature = "candle-backend")]
-            Self::Candle(e) => e.chat_stream(messages),
+            Self::Candle(Some(e)) => e.chat_stream(messages),
             #[cfg(feature = "vllm-backend")]
-            Self::Vllm(e) => e.chat_stream(messages),
+            Self::Vllm(Some(e)) => e.chat_stream(messages),
             #[cfg(feature = "transformers-backend")]
-            Self::Transformers(e) => e.chat_stream(messages),
+            Self::Transformers(Some(e)) => e.chat_stream(messages),
             #[cfg(feature = "http-backend")]
-            Self::Http(e) => e.chat_stream(messages),
-            Self::Noop => Box::pin(futures::stream::once(async {
+            Self::Http(Some(e)) => e.chat_stream(messages),
+            // Si el engine es None (unloaded) o Noop, retornar error stream
+            _ => Box::pin(futures::stream::once(async {
                 Err(crate::AlesysError::LLM(
-                    "LLM no disponible — modo solo búsqueda".to_string(),
+                    "LLM no cargado. Usar POST /api/v1/llm/load para cargar.".to_string(),
                 ))
             })),
         }
@@ -453,17 +676,23 @@ impl LLMEngine for LLMBackend {
     fn is_available(&self) -> bool {
         match self {
             #[cfg(feature = "llama-cpp")]
-            Self::LlamaCpp(e) => e.is_available(),
+            Self::LlamaCpp(engine_opt) => engine_opt.as_ref().map(|e| e.is_available()).unwrap_or(false),
+
             #[cfg(feature = "mistralrs-backend")]
-            Self::Mistralrs(e) => e.is_available(),
+            Self::Mistralrs(engine_opt) => engine_opt.as_ref().map(|e| e.is_available()).unwrap_or(false),
+
             #[cfg(feature = "candle-backend")]
-            Self::Candle(e) => e.is_available(),
+            Self::Candle(engine_opt) => engine_opt.as_ref().map(|e| e.is_available()).unwrap_or(false),
+
             #[cfg(feature = "vllm-backend")]
-            Self::Vllm(e) => e.is_available(),
+            Self::Vllm(engine_opt) => engine_opt.as_ref().map(|e| e.is_available()).unwrap_or(false),
+
             #[cfg(feature = "transformers-backend")]
-            Self::Transformers(e) => e.is_available(),
+            Self::Transformers(engine_opt) => engine_opt.as_ref().map(|e| e.is_available()).unwrap_or(false),
+
             #[cfg(feature = "http-backend")]
-            Self::Http(e) => e.is_available(),
+            Self::Http(engine_opt) => engine_opt.as_ref().map(|e| e.is_available()).unwrap_or(false),
+
             Self::Noop => false,
         }
     }
@@ -471,17 +700,23 @@ impl LLMEngine for LLMBackend {
     fn backend_name(&self) -> &str {
         match self {
             #[cfg(feature = "llama-cpp")]
-            Self::LlamaCpp(e) => e.backend_name(),
+            Self::LlamaCpp(_) => "llama_cpp",
+
             #[cfg(feature = "mistralrs-backend")]
-            Self::Mistralrs(e) => e.backend_name(),
+            Self::Mistralrs(_) => "mistralrs",
+
             #[cfg(feature = "candle-backend")]
-            Self::Candle(e) => e.backend_name(),
+            Self::Candle(_) => "candle",
+
             #[cfg(feature = "vllm-backend")]
-            Self::Vllm(e) => e.backend_name(),
+            Self::Vllm(_) => "vllm",
+
             #[cfg(feature = "transformers-backend")]
-            Self::Transformers(e) => e.backend_name(),
+            Self::Transformers(_) => "transformers",
+
             #[cfg(feature = "http-backend")]
-            Self::Http(e) => e.backend_name(),
+            Self::Http(_) => "http",
+
             Self::Noop => "noop",
         }
     }

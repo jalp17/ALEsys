@@ -46,7 +46,7 @@ impl DocumentArchiver {
         &self,
         document_id: &str,
         title: &str,
-        content: &str,
+        _content: &str,
         tags: &[String],
         reason: ArchiveReason,
     ) -> ArchiveResult {
@@ -80,7 +80,7 @@ impl DocumentArchiver {
         vec![]
     }
 
-    pub fn restore(&self, archive_id: &str) -> Option<ArchivedDocument> {
+    pub fn restore(&self, _archive_id: &str) -> Option<ArchivedDocument> {
         None
     }
 

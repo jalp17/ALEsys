@@ -5,7 +5,7 @@ use crate::state::AppState;
 use alesys_core::agent::protocol::AgentCommand;
 use alesys_core::graphrag::search::AdvancedSearchQuery;
 use alesys_core::graphrag::SearchResultSource;
-use alesys_core::llm::{ChatMessage, LLMEngine};
+use alesys_core::llm::{ChatMessage, LLMEngine, LLMState};
 use alesys_core::session::ChatMessage as SessionChatMessage;
 use axum::{
     extract::{Json, Path, State},
@@ -663,11 +663,13 @@ pub async fn health_handler(State(state): State<AppState>) -> impl IntoResponse 
 
     let status = if db_ok { "ok" } else { "degraded" };
 
+    let llm_loaded = state.llm_engine.read().await.is_loaded();
+
     Json(serde_json::json!({
         "status": status,
         "version": env!("CARGO_PKG_VERSION"),
         "db": if db_ok { "connected" } else { "disconnected" },
-        "llm": state.llm_engine.is_available(),
+        "llm_loaded": llm_loaded,
         "embedder": state.embedder.is_available(),
     }))
 }
@@ -678,6 +680,8 @@ pub async fn get_config(State(state): State<AppState>) -> impl IntoResponse {
         .fetch_optional(&state.db)
         .await
         .is_ok();
+
+    let llm_loaded = state.llm_engine.read().await.is_loaded();
 
     Json(serde_json::json!({
         "llm": {
@@ -694,7 +698,7 @@ pub async fn get_config(State(state): State<AppState>) -> impl IntoResponse {
             "loaded": state.embedder.is_available(),
         },
         "health": {
-            "llm_available": state.llm_engine.is_available(),
+            "llm_loaded": llm_loaded,
             "embedder_available": state.embedder.is_available(),
             "db_connected": db_ok,
             "version": env!("CARGO_PKG_VERSION"),
@@ -1834,3 +1838,201 @@ pub async fn search_suggest(
     })))
 }
 
+
+// ============================================================================
+// LLM MANAGEMENT ENDPOINTS
+// ============================================================================
+
+/// GET /api/v1/llm/status - Verificar estado del LLM
+pub async fn get_llm_status(
+    State(state): State<AppState>,
+) -> Result<Json<LLMStatusResponse>, StatusCode> {
+    let engine = state.llm_engine.read().await;
+    
+    let loaded = engine.is_loaded();
+    let backend = engine.backend_name().to_string();
+    let llm_state = engine.state();
+    
+    let state_str = match llm_state {
+        LLMState::Unloaded => "unloaded".to_string(),
+        LLMState::Loaded => "loaded".to_string(),
+        LLMState::Error => "error".to_string(),
+    };
+    
+    let message = if loaded {
+        format!("LLM cargado y listo (backend={})", backend)
+    } else {
+        format!("LLM no cargado (backend={}). Usar POST /api/v1/llm/load para cargar.", backend)
+    };
+
+    Ok(Json(LLMStatusResponse {
+        loaded,
+        backend,
+        state: state_str,
+        model_path: if state.llm_config.model_path.is_empty() {
+            None
+        } else {
+            Some(state.llm_config.model_path.clone())
+        },
+        message,
+    }))
+}
+
+/// POST /api/v1/llm/load - Cargar modelo LLM en memoria
+pub async fn load_llm(
+    State(state): State<AppState>,
+    Json(payload): Json<LoadLLMRequest>,
+) -> Result<Json<LoadLLMResponse>, (StatusCode, String)> {
+    let engine = state.llm_engine.read().await;
+    
+    // Verificar si ya está cargado
+    if engine.is_loaded() && !payload.force {
+        return Err((
+            StatusCode::CONFLICT,
+            "LLM ya está cargado. Usar force=true para recargar.".to_string()
+        ));
+    }
+    
+    drop(engine);
+    
+    // Intentar cargar el modelo
+    let config = state.llm_config.clone();
+    let backend_name = config.backend.to_string();
+    let model_path = config.model_path.clone();
+    
+    // Estimación de RAM basada en el modelo
+    let estimated_ram = estimate_model_ram(&model_path);
+    
+    tracing::info!("Cargando modelo LLM: backend={}, path={}", backend_name, model_path);
+    
+    match state.llm_queue.load(&config).await {
+        Ok(()) => {
+            tracing::info!("✅ Modelo LLM cargado exitosamente");
+            Ok(Json(LoadLLMResponse {
+                success: true,
+                backend: backend_name,
+                model_path,
+                estimated_ram_mb: estimated_ram,
+                message: "Modelo cargado exitosamente en memoria".to_string(),
+            }))
+        }
+        Err(e) => {
+            tracing::error!("Error cargando modelo LLM: {}", e);
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Error cargando modelo: {}", e)
+            ))
+        }
+    }
+}
+
+/// POST /api/v1/llm/unload - Descargar modelo LLM de memoria
+pub async fn unload_llm(
+    State(state): State<AppState>,
+) -> Result<Json<UnloadLLMResponse>, StatusCode> {
+    let engine = state.llm_engine.read().await;
+    
+    // Verificar si está cargado
+    if !engine.is_loaded() {
+        return Ok(Json(UnloadLLMResponse {
+            success: false,
+            message: "LLM ya está descargado".to_string(),
+            ram_freed_mb: None,
+        }));
+    }
+    
+    let backend_name = engine.backend_name().to_string();
+    let model_path = state.llm_config.model_path.clone();
+    let ram_freed = estimate_model_ram(&model_path);
+    
+    drop(engine);
+    
+    tracing::info!("Descargando modelo LLM: backend={}", backend_name);
+    
+    match state.llm_queue.unload().await {
+        Ok(()) => {
+            tracing::info!("✅ Modelo LLM descargado - {} MB liberados", ram_freed);
+            Ok(Json(UnloadLLMResponse {
+                success: true,
+                message: format!("Modelo descargado. {} MB de RAM liberados.", ram_freed),
+                ram_freed_mb: Some(ram_freed),
+            }))
+        }
+        Err(e) => {
+            tracing::error!("Error descargando modelo LLM: {}", e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
+/// Estima el consumo de RAM de un modelo basado en su nombre/path
+fn estimate_model_ram(model_path: &str) -> u64 {
+    if model_path.is_empty() {
+        return 1024; // Default 1 GB
+    }
+    
+    let filename = model_path.to_lowercase();
+    
+    // Modelos pequeños (< 1B params)
+    if filename.contains("tiny") || filename.contains("1b") || filename.contains("0.5b") {
+        600 // 600 MB
+    }
+    // Modelos medianos (1-3B params)
+    else if filename.contains("2b") || filename.contains("3b") || filename.contains("phi") {
+        2048 // 2 GB
+    }
+    // Modelos grandes (4-8B params)
+    else if filename.contains("4b") || filename.contains("5b") || filename.contains("6b") || filename.contains("7b") || filename.contains("8b") {
+        4096 // 4 GB
+    }
+    // Modelos muy grandes (13B+ params)
+    else if filename.contains("13b") || filename.contains("20b") || filename.contains("30b") {
+        8192 // 8 GB
+    }
+    // Modelos MoE
+    else if filename.contains("moe") || filename.contains("mixtral") {
+        if filename.contains("8x7b") || filename.contains("8x7") {
+            8192 // 8 GB para Mixtral 8x7B
+        } else if filename.contains("4x0.6b") || filename.contains("qwen3moe") {
+            1024 // 1 GB para Qwen3-MoE
+        } else {
+            4096 // Default MoE
+        }
+    }
+    // Default
+    else {
+        2048 // 2 GB default
+    }
+}
+
+// LLM Management Types
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LLMStatusResponse {
+    pub loaded: bool,
+    pub backend: String,
+    pub state: String,
+    pub model_path: Option<String>,
+    pub message: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct LoadLLMRequest {
+    #[serde(default)]
+    pub force: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LoadLLMResponse {
+    pub success: bool,
+    pub backend: String,
+    pub model_path: String,
+    pub estimated_ram_mb: u64,
+    pub message: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UnloadLLMResponse {
+    pub success: bool,
+    pub message: String,
+    pub ram_freed_mb: Option<u64>,
+}

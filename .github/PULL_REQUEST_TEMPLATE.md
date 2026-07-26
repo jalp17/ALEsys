@@ -26,8 +26,10 @@ Related to #789
 
 ## Testing
 
-- [ ] Tests unitarios añadidos/actualizados
-- [ ] Tests de integración pasando
+- [ ] Tests unitarios añadidos/actualizados (`cargo test -p alesys-core --lib`)
+- [ ] Tests de integración pasando (`cargo test -p alesys-api`)
+- [ ] E2E tests pasando (si aplica: `python3 tests/e2e/ingestion_test.py`)
+- [ ] Benchmarks sin regresión (si aplica: `cargo bench`)
 - [ ] Testing manual realizado
 
 ## Screenshots (si aplica)
@@ -57,6 +59,7 @@ Related to #789
 - [ ] Fase 6 - Búsqueda avanzada
 - [ ] Fase 7 - Sandbox de ejecución
 - [ ] Fase 8 - Tauri Desktop
+- [ ] Fase 29 - PDF Ingestion Pipeline
 - [ ] Otra: ________________
 
 ## Notas Adicionales

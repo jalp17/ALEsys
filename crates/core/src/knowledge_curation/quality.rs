@@ -54,7 +54,7 @@ impl QualityScorer {
 
     pub fn score(&self, document_id: &str, content: &str, metadata: &std::collections::HashMap<String, String>) -> QualityReport {
         let mut metrics = Vec::new();
-        let mut issues = Vec::new();
+        let issues = Vec::new();
 
         let completeness = self.score_completeness(content, metadata);
         metrics.push(completeness.clone());

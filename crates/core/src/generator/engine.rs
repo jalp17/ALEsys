@@ -5,18 +5,19 @@ use crate::generator::validation::SyntaxValidator;
 use crate::llm::{LLMBackend, LLMEngine};
 use anyhow::Result;
 use std::sync::Arc;
+use tokio::sync::RwLock;
 
 /// Generador principal de código
 ///
 /// Reutiliza un `LLMBackend` compartido (inyectado via `AppState`).
 /// No crea instancias propias del backend LLM.
 pub struct CodeGenerator {
-    llm: Arc<LLMBackend>,
+    llm: Arc<RwLock<LLMBackend>>,
 }
 
 impl CodeGenerator {
     /// Crea un generador reutilizando el backend LLM existente
-    pub fn new(llm: Arc<LLMBackend>) -> Self {
+    pub fn new(llm: Arc<RwLock<LLMBackend>>) -> Self {
         Self { llm }
     }
 
@@ -28,6 +29,16 @@ impl CodeGenerator {
             request.prompt.len()
         );
 
+        // Verificar que el LLM esté cargado
+        {
+            let engine = self.llm.read().await;
+            if !engine.is_loaded() {
+                return Err(anyhow::anyhow!(
+                    "LLM no cargado. Usar POST /api/v1/llm/load para cargar el modelo."
+                ));
+            }
+        }
+
         // 1. Seleccionar template según lenguaje
         let template = templates::get_template(&request.language)
             .unwrap_or(templates::PromptTemplate::generic());
@@ -37,10 +48,10 @@ impl CodeGenerator {
         let full_prompt = template.render(&request.prompt, request.context.as_ref());
 
         // 3. Generar código usando LLM compartido
-        let response = self
-            .llm
-            .generate_code(&full_prompt, &request.language)
-            .await?;
+        let response = {
+            let engine = self.llm.read().await;
+            engine.generate_code(&full_prompt, &request.language).await?
+        };
 
         // 4. Validar sintaxis del código generado
         let validation_result = SyntaxValidator::validate(&response, &request.language);

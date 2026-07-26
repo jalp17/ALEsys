@@ -4,6 +4,7 @@
 
 pub mod algorithms;
 pub mod api;
+pub mod ingestion_hook;
 pub mod query;
 pub mod search;
 

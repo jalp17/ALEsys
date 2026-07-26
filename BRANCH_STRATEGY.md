@@ -110,6 +110,16 @@ git tag -a v1.0.0 -m "Release v1.0.0: Fase 1 - Chat con GraphRAG"
 git push origin main --tags
 ```
 
+## Tickets por Fase
+
+Cada fase se rastrea en `.github/FaseXX-ISSUES.md`:
+
+- **Formato:** `TICKET-{FASE}.{NUM}` (ej: `TICKET-29.1`)
+- **Workflow:** Crear fase → feature branches → merge fase → main
+- **Cierre:** Todos los tickets marcados + merge a main + tag
+
+Ver `.github/Fase29-ISSUES.md` como ejemplo de metodología.
+
 ## Checklist por Feature
 
 ### Pre-merge (feature → phase)
@@ -119,6 +129,7 @@ git push origin main --tags
 - [ ] Tests de integración pasando
 - [ ] Documentación actualizada
 - [ ] AGENT.md actualizado con progreso
+- [ ] Tickets actualizados en FaseXX-ISSUES.md
 - [ ] Variables de entorno documentadas
 - [ ] Migraciones de DB (si aplica)
 

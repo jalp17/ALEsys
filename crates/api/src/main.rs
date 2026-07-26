@@ -20,7 +20,7 @@ use axum::{
     http::{Request, StatusCode},
     middleware::{self, Next},
     response::{IntoResponse, Response},
-    routing::{delete, get, post},
+    routing::{delete, get, post, put},
     Json, Router,
 };
 use std::collections::HashMap;
@@ -34,6 +34,8 @@ static METRICS_HANDLE: OnceLock<metrics_exporter_prometheus::PrometheusHandle> =
 
 mod auth;
 mod handlers;
+mod handlers_ingestion;
+mod handlers_bibliography;
 mod state;
 mod websocket;
 
@@ -58,10 +60,15 @@ use handlers::{
     analytics_usage, analytics_performance, analytics_users, analytics_reports,
     workflow_list, workflow_create, workflow_run,
     search_faceted, search_suggest,
+    get_llm_status, load_llm, unload_llm,
 };
+use handlers_ingestion::{ingest_pdf_handler, ingest_batch_handler, ingest_status_handler, get_ingestion_config_handler, put_ingestion_config_handler, ws_ingestion_handler};
+use handlers_bibliography::{store_citation_handler, list_citations_handler, format_citation_handler, deduplicate_citations_handler};
 use state::AppState;
 use websocket::ws_chat_handler;
 use websocket::ws_agent_handler;
+use crate::auth::{auth_middleware, AuthState};
+use crate::auth::Claims;
 
 /// Metrics endpoint — Prometheus format
 async fn metrics_handler() -> impl IntoResponse {
@@ -214,7 +221,9 @@ async fn main() -> Result<()> {
 
     let embedder_path = std::env::var("EMBEDDING_GGUF_PATH").ok();
 
-    let state = AppState::new(db_pool, llm_config, embedder_path.as_deref()).await?;
+    let ingestion_config = alesys_core::ingestion::IngestionConfig::from_env();
+
+    let state = AppState::new(db_pool, llm_config, embedder_path.as_deref(), ingestion_config).await?;
 
     let cors_origins: Vec<_> = std::env::var("CORS_ORIGINS")
         .unwrap_or_else(|_| "http://localhost:5173,http://localhost:8080".into())
@@ -275,6 +284,10 @@ async fn main() -> Result<()> {
         .route("/agents/:id/execute", post(agent_execute))
         .route("/agents/:id/files", get(agent_read_file).post(agent_write_file))
         .route("/agents/:id/files/list", get(agent_list_dir))
+        // LLM Management endpoints
+        .route("/llm/status", get(get_llm_status))
+        .route("/llm/load", post(load_llm))
+        .route("/llm/unload", post(unload_llm))
         // Plugin endpoints
         .route("/plugins", get(list_plugins))
         .route("/plugins/:id/execute", post(execute_plugin))
@@ -320,13 +333,46 @@ async fn main() -> Result<()> {
         .route("/workflows/:id/run", post(workflow_run))
         // Advanced search endpoints
         .route("/search/faceted", post(search_faceted))
-        .route("/search/suggest", post(search_suggest));
+        .route("/search/suggest", post(search_suggest))
+        // Ingestion endpoints (Phase 29) - auth protected
+        .route("/ingestion/pdf", post(ingest_pdf_handler)).route_layer(
+            middleware::from_fn_with_state(Arc::new(AuthState::new()), auth_middleware)
+        )
+        .route("/ingestion/batch", post(ingest_batch_handler)).route_layer(
+            middleware::from_fn_with_state(Arc::new(AuthState::new()), auth_middleware)
+        )
+        .route("/ingestion/colab/process", post(ingest_pdf_handler)).route_layer(
+            middleware::from_fn_with_state(Arc::new(AuthState::new()), auth_middleware)
+        )
+        .route("/ingestion/status/:id", get(ingest_status_handler)).route_layer(
+            middleware::from_fn_with_state(Arc::new(AuthState::new()), auth_middleware)
+        )
+        .route("/ingestion/config", get(get_ingestion_config_handler)).route_layer(
+            middleware::from_fn_with_state(Arc::new(AuthState::new()), auth_middleware)
+        )
+        .route("/ingestion/config", put(put_ingestion_config_handler)).route_layer(
+            middleware::from_fn_with_state(Arc::new(AuthState::new()), auth_middleware)
+        )
+        // Bibliography endpoints (Phase 30) - auth protected
+        .route("/bibliography/citations", post(store_citation_handler)).route_layer(
+            middleware::from_fn_with_state(Arc::new(AuthState::new()), auth_middleware)
+        )
+        .route("/bibliography/citations/:chapter_id", get(list_citations_handler)).route_layer(
+            middleware::from_fn_with_state(Arc::new(AuthState::new()), auth_middleware)
+        )
+        .route("/bibliography/format/:citation_id", post(format_citation_handler)).route_layer(
+            middleware::from_fn_with_state(Arc::new(AuthState::new()), auth_middleware)
+        )
+        .route("/bibliography/deduplicate", post(deduplicate_citations_handler)).route_layer(
+            middleware::from_fn_with_state(Arc::new(AuthState::new()), auth_middleware)
+        );
 
     let app = Router::new()
         .nest("/api/v1", api_v1.clone())
         .nest("/api", api_v1)
         .route("/ws/chat", get(ws_chat_handler))
         .route("/ws/agent", get(ws_agent_handler))
+        .route("/ws/ingestion/:job_id", get(ws_ingestion_handler))
         .route("/health", get(health_handler))
         .route("/metrics", get(metrics_handler))
         .with_state(state)

@@ -4,10 +4,9 @@ import { CollaborativeEditor } from '../components/CollaborationComponents';
 export default function Collaboration() {
   const [documentId, setDocumentId] = useState('');
   const [joined, setJoined] = useState(false);
-  const [username, setUsername] = useState('');
 
   const handleJoin = () => {
-    if (documentId.trim() && username.trim()) {
+    if (documentId.trim()) {
       setJoined(true);
     }
   };
@@ -17,16 +16,6 @@ export default function Collaboration() {
       <div className="max-w-md mx-auto mt-20 p-6">
         <h1 className="text-2xl font-bold mb-6">Real-Time Collaboration</h1>
         <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-1">Your Name</label>
-            <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="Enter your name"
-              className="w-full p-2 border rounded"
-            />
-          </div>
           <div>
             <label className="block text-sm font-medium mb-1">Document ID</label>
             <input
@@ -39,7 +28,7 @@ export default function Collaboration() {
           </div>
           <button
             onClick={handleJoin}
-            disabled={!documentId.trim() || !username.trim()}
+            disabled={!documentId.trim()}
             className="w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
           >
             Join Document
@@ -64,7 +53,6 @@ export default function Collaboration() {
         documentId={documentId}
         initialContent="# Collaborative Document\n\nStart typing here..."
         userId={`user-${Date.now()}`}
-        username={username}
       />
     </div>
   );
