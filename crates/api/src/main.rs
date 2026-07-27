@@ -36,6 +36,8 @@ mod auth;
 mod handlers;
 mod handlers_ingestion;
 mod handlers_bibliography;
+mod handlers_documents;
+mod handlers_research;
 mod state;
 mod websocket;
 
@@ -64,6 +66,13 @@ use handlers::{
 };
 use handlers_ingestion::{ingest_pdf_handler, ingest_batch_handler, ingest_status_handler, get_ingestion_config_handler, put_ingestion_config_handler, ws_ingestion_handler};
 use handlers_bibliography::{store_citation_handler, list_citations_handler, format_citation_handler, deduplicate_citations_handler};
+use handlers_documents::{list_ingestion_history_handler, get_document_fragments_handler};
+use handlers_research::{
+    list_projects_handler, create_project_handler, get_project_handler,
+    update_project_handler, delete_project_handler,
+    list_notes_handler, create_note_handler, update_note_handler, delete_note_handler,
+    get_synthesis_handler, update_synthesis_handler, export_synthesis_markdown_handler,
+};
 use state::AppState;
 use websocket::ws_chat_handler;
 use websocket::ws_agent_handler;
@@ -351,6 +360,32 @@ async fn main() -> Result<()> {
             middleware::from_fn_with_state(Arc::new(AuthState::new()), auth_middleware)
         )
         .route("/ingestion/config", put(put_ingestion_config_handler)).route_layer(
+            middleware::from_fn_with_state(Arc::new(AuthState::new()), auth_middleware)
+        )
+        .route("/ingestion/history", get(list_ingestion_history_handler)).route_layer(
+            middleware::from_fn_with_state(Arc::new(AuthState::new()), auth_middleware)
+        )
+        // Document endpoints (Fase 31 - Literature Explorer)
+        .route("/documents/:id/fragments", get(get_document_fragments_handler)).route_layer(
+            middleware::from_fn_with_state(Arc::new(AuthState::new()), auth_middleware)
+        )
+        // Research endpoints (Fase 31 - Research Module)
+        .route("/research/projects", get(list_projects_handler).post(create_project_handler)).route_layer(
+            middleware::from_fn_with_state(Arc::new(AuthState::new()), auth_middleware)
+        )
+        .route("/research/projects/:id", get(get_project_handler).put(update_project_handler).delete(delete_project_handler)).route_layer(
+            middleware::from_fn_with_state(Arc::new(AuthState::new()), auth_middleware)
+        )
+        .route("/research/notes", get(list_notes_handler).post(create_note_handler)).route_layer(
+            middleware::from_fn_with_state(Arc::new(AuthState::new()), auth_middleware)
+        )
+        .route("/research/notes/:id", put(update_note_handler).delete(delete_note_handler)).route_layer(
+            middleware::from_fn_with_state(Arc::new(AuthState::new()), auth_middleware)
+        )
+        .route("/research/synthesis/:project_id", get(get_synthesis_handler).put(update_synthesis_handler)).route_layer(
+            middleware::from_fn_with_state(Arc::new(AuthState::new()), auth_middleware)
+        )
+        .route("/research/export/:project_id/markdown", get(export_synthesis_markdown_handler)).route_layer(
             middleware::from_fn_with_state(Arc::new(AuthState::new()), auth_middleware)
         )
         // Bibliography endpoints (Phase 30) - auth protected

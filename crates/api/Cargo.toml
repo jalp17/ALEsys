@@ -20,6 +20,7 @@ tracing.workspace = true
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid.workspace = true
 chrono.workspace = true
+once_cell.workspace = true
 
 # Core
 alesys-core = { path = "../core", default-features = false }
