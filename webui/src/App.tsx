@@ -24,6 +24,7 @@ import AnalyticsPage from './pages/Analytics';
 import WorkflowsPage from './pages/Workflows';
 import AdvancedSearchPage from './pages/AdvancedSearch';
 import { IngestionPanel, BatchIngestion, IngestionHistory } from './pages/ingestion';
+import ResearchLayout from './layouts/ResearchLayout/ResearchLayout';
 
 const queryClient = new QueryClient();
 
@@ -59,6 +60,8 @@ function App() {
             <Route path="/ingestion" element={<IngestionPanel />} />
             <Route path="/ingestion/batch" element={<BatchIngestion />} />
             <Route path="/ingestion/history" element={<IngestionHistory />} />
+            <Route path="/research" element={<ResearchLayout />} />
+            <Route path="/research/:projectId" element={<ResearchLayout />} />
           </Routes>
         </Layout>
       </BrowserRouter>
