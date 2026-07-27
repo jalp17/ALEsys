@@ -9,15 +9,15 @@ const renderWithRouter = (ui: React.ReactElement) =>
 describe('PanelManager', () => {
   it('renders panel toggles', () => {
     renderWithRouter(<PanelManager />)
-    expect(screen.getByText('Literatura')).toBeInTheDocument()
-    expect(screen.getByText('Citas')).toBeInTheDocument()
-    expect(screen.getByText('Notas')).toBeInTheDocument()
-    expect(screen.getByText('Síntesis')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Literatura' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Citas' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Notas' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Síntesis' })).toBeInTheDocument()
   })
 
   it('toggles panel visibility', () => {
     renderWithRouter(<PanelManager />)
-    const literatureButton = screen.getByText('Literatura')
+    const literatureButton = screen.getByRole('button', { name: 'Literatura' })
     fireEvent.click(literatureButton)
     expect(screen.queryByText('Literature panel (placeholder)')).not.toBeInTheDocument()
   })
@@ -26,6 +26,6 @@ describe('PanelManager', () => {
     renderWithRouter(<PanelManager />)
     const fullscreenButtons = screen.getAllByText('⛶')
     fireEvent.click(fullscreenButtons[0])
-    expect(screen.getByText('Salir fullscreen')).toBeInTheDocument()
+    expect(screen.getByText((content) => content.includes('Salir fullscreen'))).toBeInTheDocument()
   })
 })

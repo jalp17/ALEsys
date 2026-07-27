@@ -14,6 +14,12 @@ Contexto: Integración del layout de investigación (`ResearchLayout`) con el pi
 
 ---
 
+## Cambios Recientes
+
+- **2026-07-27:** Upgrade de React 18.3.1 → 19.2.8 para resolver mismatch de versiones en vitest. Tests unitarios de `ResearchLayout` pasan (3/3).
+
+---
+
 ## Issues Template
 
 ### TICKET-31.1: ResearchLayout Skeleton + Layout Manager
