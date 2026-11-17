@@ -1,4 +1,4 @@
-# ALEsys v2.1.0 - AI IDE Framework 🐱
+# ALEsys v2.1.0 - AI IDE Framework
 
 ALEsys es un framework RAG + agente configurable con capacidades avanzadas de IA para desarrollo de software, investigación científica y gestión de conocimiento.
 
@@ -371,4 +371,4 @@ GNU AGPL v3.0
 
 ---
 
-Hecho con 🐱 por el equipo ALEsys
+Hecho por el equipo ALEsys

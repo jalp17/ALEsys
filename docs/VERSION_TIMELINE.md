@@ -61,8 +61,8 @@ Todas las versiones v1.x se liberaron entre el 14 y el 19 de julio de 2026 en un
 
 | Versión | Fecha | Cambios clave |
 |---------|-------|---------------|
-| **v2.0.0** | 2026-07-19 | Integración final y pulido. Incluye el gato 🐱 en el branding. |
-| **v2.3.0** | 2026-11-17 | Ingesta Markdown async con job tracking y cancel, Módulo I+D científico (Sprints 1-4), rediseño del frontend (WorkspaceLayout, Command Palette, AppShell), documentación limpia, clasificación de PDFs, múltiples correcciones (UTF-8 slicing, fragmentos vector(1024), frontmatter NOT NULL, postcss.config.js). |
+| **v2.0.0** | 2026-07-19 | Integracion final y pulido. Incluye el branding del gato. |
+| **v2.1.0** | 2026-11-17 | Ingesta Markdown async con job tracking y cancel, Modulo I+D cientifico (Sprints 1-4), redisenio del frontend (WorkspaceLayout, Command Palette, AppShell), documentacion limpia, clasificacion de PDFs, multiples correcciones (UTF-8 slicing, fragmentos vector(1024), frontmatter NOT NULL, postcss.config.js). |
 
 ---
 
@@ -87,7 +87,7 @@ Todas las versiones v1.x se liberaron entre el 14 y el 19 de julio de 2026 en un
 - Tailwind CSS compilado correctamente (postcss.config.js)
 
 ### Documentación
-- README limpiado (sin emojis, un solo gato 🐱, sección de screenshots)
+- README limpiado (sin emojis, sección de screenshots)
 - docs/INGESTION_PIPELINE.md y docs/LAZY_LLM_LOAD.md limpiados
 - docs/screenshots/ para capturas de la interfaz
 
