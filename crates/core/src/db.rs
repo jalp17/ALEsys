@@ -51,10 +51,22 @@ pub async fn create_db_pool() -> crate::Result<PgPool> {
 
 /// Execute raw SQL against the database.
 pub async fn execute_sql(pool: &PgPool, sql: &str) -> crate::Result<()> {
-    // Split by semicolons and execute each statement
-    for statement in sql.split(';') {
+    // Remove line comments, then split by semicolons
+    let cleaned: String = sql
+        .lines()
+        .map(|l| {
+            if let Some(idx) = l.find("--") {
+                &l[..idx]
+            } else {
+                l
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    for statement in cleaned.split(';') {
         let trimmed = statement.trim();
-        if trimmed.is_empty() || trimmed.starts_with("--") {
+        if trimmed.is_empty() {
             continue;
         }
         sqlx::query(trimmed)

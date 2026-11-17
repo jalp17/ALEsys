@@ -236,7 +236,7 @@ impl LLMBackend {
             tokio::runtime::Handle::current()
                 .block_on(async { HttpLLMEngine::new(config, provider).await })
         })?;
-        Ok(Self::Http(Box::new(engine)))
+        Ok(Self::Http(Some(Box::new(engine))))
     }
 
     /// Carga el modelo LLM en memoria (on-demand)
@@ -307,9 +307,10 @@ impl LLMBackend {
                     tracing::info!("Backend HTTP ya está configurado");
                     return Ok(());
                 }
-                // Para HTTP, necesitamos saber qué provider usar
-                // Asumimos Ollama como default si no está especificado
-                let engine = HttpLLMEngine::new(config.clone(), super::http::Provider::Ollama).await?;
+                // Determinar provider desde config
+                let provider = config.backend.to_http_provider()
+                    .unwrap_or(super::http::Provider::Ollama);
+                let engine = HttpLLMEngine::new(config.clone(), provider).await?;
                 *engine_opt = Some(Box::new(engine));
                 tracing::info!("✅ Backend HTTP configurado exitosamente");
             }

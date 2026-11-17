@@ -52,6 +52,8 @@ pub struct ChatResponse {
     pub sources: Vec<Source>,
     pub query: String,
     pub session_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub verification: Option<serde_json::Value>,
 }
 
 #[derive(Serialize)]
@@ -100,30 +102,30 @@ pub async fn chat_handler(
         }
     }
 
-    // 2. Generar embedding del query
-    let query_embedding = state.embedder.encode(&payload.query).map_err(|e| {
-        tracing::error!("Error generando embedding: {}", e);
-        ApiError {
-            error: "Error interno generando embedding".into(),
-            code: "INTERNAL".into(),
-        }
-    })?;
-
-    // 3. Busqueda hibrida (vector + grafo)
-    let search_results = state
-        .graphrag
-        .hybrid_search(&query_embedding, 5, 1)
-        .await
-        .map_err(|e| {
-            tracing::error!("Error en busqueda hibrida: {}", e);
-            ApiError {
-                error: "Error interno en busqueda".into(),
-                code: "INTERNAL".into(),
+    // 2. Generar embedding del query (si embedder disponible)
+    let (search_results, context) = if state.embedder.is_available() {
+        match state.embedder.encode(&payload.query) {
+            Ok(query_embedding) => {
+                match state.graphrag.hybrid_search(&query_embedding, 5, 1).await {
+                    Ok(sr) => {
+                        let ctx = alesys_core::graphrag::build_rag_context(&sr, 2000);
+                        (sr, ctx)
+                    }
+                    Err(e) => {
+                        tracing::warn!("Busqueda hibrida fallo: {}, continuando sin contexto", e);
+                        (Vec::new(), String::new())
+                    }
+                }
             }
-        })?;
-
-    // 4. Construir contexto RAG
-    let context = alesys_core::graphrag::build_rag_context(&search_results, 2000);
+            Err(e) => {
+                tracing::warn!("Embedder fallo: {}, continuando sin contexto", e);
+                (Vec::new(), String::new())
+            }
+        }
+    } else {
+        tracing::info!("Embedder no disponible, chat sin contexto RAG");
+        (Vec::new(), String::new())
+    };
 
     // 5. Agregar system prompt si no hay historial
     if messages.is_empty() {
@@ -213,11 +215,19 @@ pub async fn chat_handler(
         })
         .collect();
 
+    // 9. Verificación factual (opcional, no bloquea respuesta)
+    let verification = {
+        let verifier = alesys_core::verification::Verifier::default();
+        let contexts = vec![context.clone()];
+        verifier.verify(&payload.query, &llm_response.content, &contexts, &[]).ok().map(|v| serde_json::to_value(v).unwrap_or_default())
+    };
+
     let response = ChatResponse {
         response: llm_response.content,
         sources,
         query: payload.query,
         session_id: payload.session_id,
+        verification,
     };
 
     Ok(Json(response))

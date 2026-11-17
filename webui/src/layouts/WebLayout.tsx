@@ -80,6 +80,9 @@ export function WebLayout({ children }: WebLayoutProps) {
           <Link to="/settings" className="text-gray-300 hover:text-primary-400 transition">
             Configuración
           </Link>
+          <Link to="/workspaces" className="text-primary-400 hover:text-primary-300 transition font-semibold">
+            Cuadernos
+          </Link>
           <Link to="/ingestion" className="text-gray-300 hover:text-primary-400 transition">
             Ingesta
           </Link>

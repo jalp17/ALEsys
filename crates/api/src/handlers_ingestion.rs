@@ -308,6 +308,316 @@ pub async fn put_ingestion_config_handler(
 }
 
 // WebSocket: /ws/ingestion/:job_id
+#[derive(Debug, Deserialize)]
+pub struct IngestMarkdownRequest {
+    /// Root directory to scan for *.md files (books/, vault/, ...)
+    pub dir: String,
+    /// Explicit topic. If omitted, each top-level subdir becomes its own topic.
+    #[serde(default)]
+    pub topic: Option<String>,
+    /// Safety limit
+    #[serde(default = "default_max_files")]
+    pub max_files: usize,
+    /// Preview only, do not index
+    #[serde(default)]
+    pub dry_run: bool,
+}
+
+fn default_max_files() -> usize { 5000 }
+
+#[derive(Debug, Serialize)]
+pub struct MarkdownPreviewFile {
+    pub path: String,
+    pub topic: String,
+    pub title: String,
+    pub bytes: usize,
+}
+
+/// POST /api/v1/ingestion/markdown
+///
+/// Async by design: returns a `job_id` immediately and does the indexing in a
+/// background tokio task, so the request timeout never kills a long corpus
+/// run. Poll `/api/v1/ingestion/markdown/status/{job_id}` for progress.
+pub async fn ingest_markdown_handler(
+    claims: Claims,
+    State(state): State<AppState>,
+    Json(payload): Json<IngestMarkdownRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    if !crate::auth::has_permission(&claims.role, Permission::IngestionWrite) {
+        return Err(ApiError {
+            error: "Forbidden: requires ingestion:write permission".to_string(),
+            code: "FORBIDDEN".to_string(),
+        });
+    }
+
+    let root = std::path::PathBuf::from(&payload.dir);
+    let files = alesys_core::ingestion::discover_markdown(&root, payload.max_files)
+        .map_err(|e| ApiError { error: e, code: "INVALID_DIR".to_string() })?;
+
+    let total_bytes: usize = files.iter().map(|f| f.bytes).sum();
+    let mut topics: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    for f in &files { topics.insert(f.topic.clone()); }
+
+    if payload.dry_run {
+        return Ok(Json(serde_json::json!({
+            "dry_run": true,
+            "dir": payload.dir,
+            "files_found": files.len(),
+            "total_bytes": total_bytes,
+            "topics": topics.into_iter().collect::<Vec<_>>(),
+            "sample": files.iter().take(50).map(|f| MarkdownPreviewFile {
+                path: f.path.display().to_string(),
+                topic: f.topic.clone(),
+                title: f.title.clone(),
+                bytes: f.bytes,
+            }).collect::<Vec<_>>(),
+        })));
+    }
+
+    let job_id = Uuid::new_v4().to_string();
+    let job = crate::state::MarkdownJobState {
+        job_id: job_id.clone(),
+        dir: payload.dir.clone(),
+        topic: payload.topic.clone(),
+        status: "queued".to_string(),
+        files_done: 0,
+        files_total: files.len(),
+        chunks_indexed: 0,
+        files_indexed: 0,
+        skipped_empty: 0,
+        topics: vec![],
+        current_file: None,
+        current_topic: None,
+        message: Some("En cola".to_string()),
+        error: None,
+        result: None,
+        created_at: Utc::now(),
+        cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+    };
+
+    state.markdown_jobs.write().await.insert(job_id.clone(), job.clone());
+
+    let files_len = files.len();
+
+    // Spawn the actual indexing — outlives this request.
+    let user_id = claims.sub.clone();
+    let jobs_map = state.markdown_jobs.clone();
+    let graphrag = state.graphrag.clone();
+    let db = state.db.clone();
+    let semaphore = state.ingestion_semaphore.clone();
+    let cancelled = job.cancelled.clone();
+    let topic_override = payload.topic.clone();
+    let dir_label = payload.dir.clone();
+    let jid = job_id.clone();
+
+    tokio::spawn(async move {
+        // Per-user concurrency gate: serialize long embedding runs.
+        let _permit = semaphore.acquire(&user_id).await;
+
+        // A cancel that arrived while we were queued stops us before we start.
+        if cancelled.load(std::sync::atomic::Ordering::SeqCst) {
+            let mut guard = jobs_map.write().await;
+            if let Some(j) = guard.get_mut(&jid) {
+                j.status = "cancelled".to_string();
+                j.message = Some("Cancelado antes de iniciar".to_string());
+            }
+            return;
+        }
+
+        {
+            let mut guard = jobs_map.write().await;
+            if let Some(j) = guard.get_mut(&jid) {
+                j.status = "processing".to_string();
+                j.message = Some(format!("Indexando {} archivos", files.len()));
+            }
+        }
+
+        let indexer = alesys_core::ingestion::MarkdownIndexer::new(db.clone());
+        let progress_jobs = jobs_map.clone();
+        let progress_jid = jid.clone();
+        let progress_cancel = cancelled.clone();
+        let result = indexer
+            .index_files_with_progress(
+                &files,
+                &graphrag,
+                topic_override.as_deref(),
+                Some(&move |p: alesys_core::ingestion::MarkdownProgress| {
+                    // Non-blocking-ish update: write lock is held only briefly.
+                    if progress_cancel.load(std::sync::atomic::Ordering::SeqCst) {
+                        return;
+                    }
+                    let guard = progress_jobs.clone();
+                    let gid = progress_jid.clone();
+                    tokio::spawn(async move {
+                        let mut g = guard.write().await;
+                        if let Some(j) = g.get_mut(&gid) {
+                            j.files_done = p.files_done;
+                            j.files_total = p.files_total;
+                            j.chunks_indexed = p.chunks_indexed;
+                            j.current_file = p.current_file.clone();
+                            j.current_topic = p.current_topic.clone();
+                        }
+                    });
+                }),
+                Some(cancelled.as_ref()),
+            )
+            .await;
+
+        let mut guard = jobs_map.write().await;
+        if let Some(j) = guard.get_mut(&jid) {
+            // Determine outcome: cancelled or errors with zero indexed = failure
+            let failed = result.cancelled || (!result.errors.is_empty() && result.files_indexed == 0);
+            if failed {
+                j.status = if result.cancelled { "cancelled" } else { "failed" }.to_string();
+                let msg = if result.cancelled {
+                    "Cancelado por el usuario".to_string()
+                } else {
+                    result.errors.join("; ")
+                };
+                j.error = Some(msg.clone());
+                j.message = Some(msg);
+            } else {
+                j.status = "completed".to_string();
+                j.files_indexed = result.files_indexed;
+                j.chunks_indexed = result.chunks_indexed;
+                j.skipped_empty = result.skipped_empty;
+                j.topics = result.topics.clone();
+                j.files_done = j.files_total;
+                j.current_file = None;
+                j.current_topic = None;
+                j.message = Some(format!(
+                    "Completado: {} archivos, {} chunks",
+                    result.files_indexed, result.chunks_indexed
+                ));
+                j.result = Some(serde_json::json!({
+                    "dry_run": false,
+                    "job_id": jid,
+                    "dir": dir_label,
+                    "files_indexed": result.files_indexed,
+                    "chunks_indexed": result.chunks_indexed,
+                    "skipped_empty": result.skipped_empty,
+                    "topics": result.topics,
+                    "warnings": result.errors, // non-fatal errors as warnings
+                }));
+            }
+        }
+        drop(guard);
+
+        // Evict terminal jobs after 1 hour so the map doesn't grow forever.
+        let jobs_map_ref = jobs_map.clone();
+        let jid_ref = jid.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_secs(3600)).await;
+            let mut g = jobs_map_ref.write().await;
+            if let Some(j) = g.get(&jid_ref) {
+                if j.status != "processing" {
+                    g.remove(&jid_ref);
+                }
+            }
+        });
+    });
+
+    Ok(Json(serde_json::json!({
+        "job_id": job_id,
+        "status": "queued",
+        "dir": payload.dir,
+        "files_found": files_len,
+        "files_total": files_len,
+        "total_bytes": total_bytes,
+        "topics": topics.into_iter().collect::<Vec<_>>(),
+        "poll_url": format!("/api/v1/ingestion/markdown/status/{}", job_id),
+    })))
+}
+
+/// GET /api/v1/ingestion/markdown/status/{job_id}
+pub async fn ingest_markdown_status_handler(
+    State(state): State<AppState>,
+    Path(job_id): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let guard = state.markdown_jobs.read().await;
+    match guard.get(&job_id) {
+        Some(j) => Ok(Json(serde_json::json!({
+            "job_id": j.job_id,
+            "dir": j.dir,
+            "topic": j.topic,
+            "status": j.status,
+            "progress": j.progress_pct(),
+            "files_done": j.files_done,
+            "files_total": j.files_total,
+            "files_indexed": j.files_indexed,
+            "chunks_indexed": j.chunks_indexed,
+            "skipped_empty": j.skipped_empty,
+            "topics": j.topics,
+            "current_file": j.current_file,
+            "current_topic": j.current_topic,
+            "message": j.message,
+            "error": j.error,
+            "created_at": j.created_at.to_rfc3339(),
+        }))),
+        None => Err(ApiError {
+            error: "Job not found (may have expired)".to_string(),
+            code: "NOT_FOUND".to_string(),
+        }),
+    }
+}
+
+/// GET /api/v1/ingestion/markdown/jobs — list live/recent Markdown jobs.
+pub async fn list_markdown_jobs_handler(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let guard = state.markdown_jobs.read().await;
+    let mut jobs: Vec<_> = guard.values().collect();
+    jobs.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    let payload: Vec<serde_json::Value> = jobs
+        .into_iter()
+        .take(50)
+        .map(|j| {
+            serde_json::json!({
+                "job_id": j.job_id,
+                "dir": j.dir,
+                "status": j.status,
+                "progress": j.progress_pct(),
+                "files_done": j.files_done,
+                "files_total": j.files_total,
+                "chunks_indexed": j.chunks_indexed,
+                "message": j.message,
+                "created_at": j.created_at.to_rfc3339(),
+            })
+        })
+        .collect();
+    Ok(Json(serde_json::json!({ "jobs": payload })))
+}
+
+/// POST /api/v1/ingestion/markdown/{job_id}/cancel
+pub async fn cancel_markdown_job_handler(
+    claims: Claims,
+    State(state): State<AppState>,
+    Path(job_id): Path<String>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    if !crate::auth::has_permission(&claims.role, Permission::IngestionWrite) {
+        return Err(ApiError {
+            error: "Forbidden: requires ingestion:write permission".to_string(),
+            code: "FORBIDDEN".to_string(),
+        });
+    }
+
+    let guard = state.markdown_jobs.read().await;
+    match guard.get(&job_id) {
+        Some(j) => {
+            j.cancelled.store(true, std::sync::atomic::Ordering::SeqCst);
+            Ok(Json(serde_json::json!({
+                "job_id": job_id,
+                "status": "cancelling",
+                "message": "La tarea se detendrá tras el archivo en curso.",
+            })))
+        }
+        None => Err(ApiError {
+            error: "Job not found (may have expired)".to_string(),
+            code: "NOT_FOUND".to_string(),
+        }),
+    }
+}
+
 pub async fn ws_ingestion_handler(
     ws: axum::extract::ws::WebSocketUpgrade,
     State(state): State<AppState>,

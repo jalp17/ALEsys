@@ -55,6 +55,11 @@ fn test_generate_markdown() {
         end_page: 2,
         markdown_path: PathBuf::new(),
         image_refs: vec![],
+        experiment_id: None,
+        trial_id: None,
+        area: None,
+        section: None,
+        source_type: None,
     }];
     let images = vec![];
     let md = fb.generate_markdown(&chapters, &images);

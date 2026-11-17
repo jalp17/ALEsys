@@ -61,7 +61,16 @@ impl DocumentSplitter {
         let mut index = 0;
 
         while start < content.len() {
-            let end = std::cmp::min(start + max_chars, content.len());
+            let desired_end = std::cmp::min(start + max_chars, content.len());
+            // Walk back to a valid UTF-8 char boundary (never slice mid-char)
+            let mut end = desired_end;
+            while end > start && !content.is_char_boundary(end) {
+                end -= 1;
+            }
+            if end == start {
+                // Single multi-byte char larger than max_chars: take one char
+                end = content[start..].chars().next().map(|c| start + c.len_utf8()).unwrap_or(content.len());
+            }
             let chunk_content = content[start..end].to_string();
 
             chunks.push(DocumentChunk {

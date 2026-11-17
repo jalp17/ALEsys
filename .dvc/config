@@ -1,0 +1,4 @@
+[core]
+    remote = local
+['remote "local"']
+    url = /mnt/ws2/rescate_sdb/desarrollo_git/ALEsys/.dvc/storage

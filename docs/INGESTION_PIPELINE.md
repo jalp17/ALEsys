@@ -108,15 +108,15 @@ El hook usa `DocumentSplitter::BySize { max_chars: 2500 }` para capítulos largo
 
 | Ticket | Estado | Nota |
 |--------|--------|------|
-| 29.1 | ✅ | Plugin skeleton + config |
-| 29.2 | ✅ | MinerU wrapper + streaming |
-| 29.3 | ✅ | PyMuPDF fallback |
-| 29.4 | ✅ | Organizer |
-| 29.5 | ✅ | PDFProcessor orchestrator |
-| 29.6 | ✅ | API + WS handlers |
-| 29.7 | ✅ | Frontend panel |
-| 29.8 | ✅ | GraphRAG hook |
-| 29.9 | ✅ | E2E + benchmarks + CI |
-| 29.10 | ✅ | Docs + scripts |
+| 29.1 | | Plugin skeleton + config |
+| 29.2 | | MinerU wrapper + streaming |
+| 29.3 | | PyMuPDF fallback |
+| 29.4 | | Organizer |
+| 29.5 | | PDFProcessor orchestrator |
+| 29.6 | | API + WS handlers |
+| 29.7 | | Frontend panel |
+| 29.8 | | GraphRAG hook |
+| 29.9 | | E2E + benchmarks + CI |
+| 29.10 | | Docs + scripts |
 
 **Commit:** `43254af` en `master`

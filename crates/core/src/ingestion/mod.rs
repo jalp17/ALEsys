@@ -9,6 +9,8 @@ pub mod pdf_processor;
 pub mod config;
 pub mod plugin;
 pub mod progress;
+pub mod table_extractor;
+pub mod markdown_indexer;
 
 #[cfg(test)]
 pub mod tests;
@@ -21,6 +23,11 @@ pub use pdf_processor::PDFProcessor;
 pub use organizer::Organizer;
 pub use mineru_wrapper::MinerUWrapper;
 pub use plugin::IngestionPlugin;
+pub use table_extractor::{TableExtractor, TableExtractionResult, ExtractedTable};
+pub use markdown_indexer::{
+    MarkdownIndexer, MarkdownIndexResult, DiscoveredFile, discover_markdown, MarkdownProgress,
+    ProgressCallback,
+};
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;

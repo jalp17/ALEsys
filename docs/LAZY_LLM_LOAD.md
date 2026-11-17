@@ -150,11 +150,11 @@ function LLMControl() {
     });
     
     if (res.ok) {
-      alert('✅ Modelo cargado');
+      alert('Modelo cargado');
       checkStatus();
     } else {
       const err = await res.json();
-      alert(`❌ Error: ${err.error}`);
+      alert(`Error: ${err.error}`);
     }
     setLoading(false);
   };
@@ -167,7 +167,7 @@ function LLMControl() {
     
     if (res.ok) {
       const data = await res.json();
-      alert(`✅ Modelo descargado. ${data.ram_freed_mb} MB liberados`);
+      alert(`Modelo descargado. ${data.ram_freed_mb} MB liberados`);
       checkStatus();
     }
     setLoading(false);
@@ -188,15 +188,15 @@ function LLMControl() {
       <div className="buttons">
         {!llmStatus?.loaded ? (
           <button onClick={loadModel} disabled={loading}>
-            🚀 Cargar Modelo
+            Cargar Modelo
           </button>
         ) : (
           <button onClick={unloadModel} disabled={loading}>
-            🛑 Descargar Modelo (Liberar RAM)
+            Descargar Modelo (Liberar RAM)
           </button>
         )}
         <button onClick={checkStatus} disabled={loading}>
-          🔄 Refresh
+          Refresh
         </button>
       </div>
     </div>

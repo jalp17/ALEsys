@@ -40,6 +40,10 @@ pub mod security;
 pub mod deployment;
 pub mod db;
 pub mod e2e;
+pub mod classifier;
+pub mod verification;
+#[cfg(feature = "tracking")]
+pub mod tracking;
 pub mod bibliography;
 
 pub use generator::{CodeGenerator, GenerateRequest, GenerationResult};
@@ -48,6 +52,10 @@ pub use llm::LLMEngine;
 pub use session::SessionManager;
 pub use agent::{AgentManager, AgentInfo, AgentStatus};
 pub use plugin::{PluginManager, PluginMetadata, PluginResult};
+#[cfg(feature = "tracking")]
+pub use tracking::{MlflowClient, TrackingConfig};
+pub use classifier::{DocumentClassifier, ClassificationResult, DocumentType, DataType, SectionMeta};
+pub use verification::{Verifier, VerificationResult};
 
 /// Error types del core
 #[derive(Debug, thiserror::Error)]

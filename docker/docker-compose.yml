@@ -128,9 +128,88 @@ services:
     networks:
       - alesys-network
 
+  # MLflow Tracking Server (Experiment Tracking)
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.17.0
+    container_name: alesys-mlflow
+    env_file:
+      - .env
+    environment:
+      MLFLOW_BACKEND_STORE_URI: postgresql://${POSTGRES_USER:-alesys}:${POSTGRES_PASSWORD}@postgres-core:5432/${POSTGRES_DB:-alesys}
+      MLFLOW_DEFAULT_ARTIFACT_ROOT: /mlflow/artifacts
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow_artifacts:/mlflow/artifacts
+    command: >
+      mlflow server
+      --backend-store-uri postgresql://${POSTGRES_USER:-alesys}:${POSTGRES_PASSWORD}@postgres-core:5432/${POSTGRES_DB:-alesys}
+      --default-artifact-root /mlflow/artifacts
+      --host 0.0.0.0
+      --port 5000
+    depends_on:
+      postgres-core:
+        condition: service_healthy
+    networks:
+      - alesys-network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+
+  # Yjs WebSocket Server (collaborative editing)
+  yjs-server:
+    build:
+      context: ./yjs-server
+      dockerfile: Dockerfile
+    container_name: alesys-yjs
+    ports:
+      - "1234:1234"
+    environment:
+      PORT: 1234
+    networks:
+      - alesys-network
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+
+  # lakeFS (data versioning for experiments)
+  lakefs:
+    image: treeverse/lakefs:latest
+    container_name: alesys-lakefs
+    ports:
+      - "8000:8000"
+    environment:
+      LAKEFS_DATABASE_TYPE: "local"
+      LAKEFS_AUTH_ENCRYPT_SECRET_KEY: "alesys-dev-secret-change-me"
+      LAKEFS_BLOCKSTORE_TYPE: "local"
+      LAKEFS_BLOCKSTORE_LOCAL_PATH: "/data"
+      LAKEFS_LOGGING_LEVEL: "INFO"
+    volumes:
+      - lakefs_data:/data
+    networks:
+      - alesys-network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+
+
 volumes:
   postgres_core_data:
   postgres_users_data:
+  mlflow_artifacts:
+  lakefs_data:
 
 networks:
   alesys-network:

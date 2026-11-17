@@ -1,7 +1,7 @@
 //! PDFProcessor - Orchestrates PDF ingestion pipeline
 //! Coordinates MinerU + PyMuPDF fallback + Organizer + Bibliography
 
-use crate::ingestion::models::{IngestionJob, IngestionProgress, IngestionResult, IngestionStage, Result, IngestionError, IngestionMode};
+use crate::ingestion::models::{IngestionJob, IngestionProgress, IngestionResult, IngestionStage, Result, IngestionError, IngestionMode, IngestionStats};
 use crate::ingestion::mineru_wrapper::MinerUWrapper;
 use crate::ingestion::pymupdf_fallback::PyMuPDFFallback;
 use crate::ingestion::organizer::Organizer;
@@ -12,10 +12,13 @@ use crate::graphrag::GraphRAG;
 use sqlx::PgPool;
 use std::path::PathBuf;
 
+use crate::ingestion::table_extractor::TableExtractor;
+
 pub struct PDFProcessor {
     mineru: MinerUWrapper,
     fallback: PyMuPDFFallback,
     organizer: Organizer,
+    table_extractor: TableExtractor,
     max_parallel: usize,
 }
 
@@ -25,6 +28,7 @@ impl PDFProcessor {
             mineru: MinerUWrapper::new(config.model_dir, true),
             fallback: PyMuPDFFallback::new(),
             organizer: Organizer::new(config.output_base_dir.join("_reorg_logs")),
+            table_extractor: TableExtractor::default(),
             max_parallel: config.max_parallel,
         }
     }
@@ -34,6 +38,7 @@ impl PDFProcessor {
             mineru: MinerUWrapper::new(model_dir, true),
             fallback: PyMuPDFFallback::new(),
             organizer: Organizer::new(PathBuf::from("/tmp")),
+            table_extractor: TableExtractor::default(),
             max_parallel,
         }
     }
@@ -101,7 +106,12 @@ impl PDFProcessor {
                             let md_content = std::fs::read_to_string(&org_output.markdown_path).unwrap_or_default();
                             let extractor = CitationExtractor::new();
                             let bib_result = extractor.extract_from_text(&md_content, &org_output.markdown_path);
-                            
+
+                            // Extract tables (auto)
+                            let tables_output_dir = book_root.join("tables");
+                            let tables = self.table_extractor.extract(&job.pdf_path, Some(&tables_output_dir)).map(|r| r.tables).unwrap_or_default();
+                            let tables_count = tables.len() as u32;
+
                             Ok(IngestionResult {
                                 job_id,
                                 success: true,
@@ -113,8 +123,12 @@ impl PDFProcessor {
                                 database_path: None,
                                 chapters: vec![],
                                 images: vec![],
+                                tables,
                                 citations: bib_result.citations,
-                                stats: Default::default(),
+                                stats: IngestionStats {
+                                    tables_extracted: tables_count,
+                                    ..Default::default()
+                                },
                                 warnings: vec![],
                                 error: None,
                             })
@@ -166,7 +180,7 @@ impl PDFProcessor {
                 database_indexed: Some(false),
             }).await;
 
-            let hook = GraphRAGIngestionHook::new(IngestionHookConfig::default());
+            let hook = GraphRAGIngestionHook::new(IngestionHookConfig::from_env());
             match hook.index_documents(graphrag, &result, pool).await {
                 Ok(index_result) => {
                     result.database_generated = true;
