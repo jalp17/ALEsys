@@ -52,5 +52,5 @@ reqwest = { version = "0.12", features = ["json"] }
 sqlx = { workspace = true, features = ["postgres", "runtime-tokio-rustls", "macros"] }
 
 [features]
-default = ["alesys-core/llama-cpp"]
+default = ["alesys-core/llama-cpp", "alesys-core/http-backend", "alesys-core/tracking"]
 test = []

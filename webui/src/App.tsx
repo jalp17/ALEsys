@@ -1,8 +1,6 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { isDesktop } from './utils/platform';
-import { DesktopLayout } from './layouts/DesktopLayout';
-import { WebLayout } from './layouts/WebLayout';
+import { AppShell } from './layouts/AppShell';
 import { Chat } from './pages/Chat';
 import { Generate } from './pages/Generate';
 import { Sessions } from './pages/Sessions';
@@ -23,47 +21,82 @@ import MultiAgentPage from './pages/MultiAgent';
 import AnalyticsPage from './pages/Analytics';
 import WorkflowsPage from './pages/Workflows';
 import AdvancedSearchPage from './pages/AdvancedSearch';
-import { IngestionPanel, BatchIngestion, IngestionHistory } from './pages/ingestion';
+import { IngestionPanel, BatchIngestion, IngestionHistory, MarkdownIngestionPanel } from './pages/ingestion';
 import ResearchLayout from './layouts/ResearchLayout/ResearchLayout';
+import WorkspaceLayout from './layouts/WorkspaceLayout/WorkspaceLayout';
 
 const queryClient = new QueryClient();
 
-function App() {
-  const Layout = isDesktop ? DesktopLayout : WebLayout;
+const API_BASE = import.meta.env.VITE_API_URL || '';
 
+// Auto-login for local dev: obtain and store a JWT token if none exists
+async function ensureAuthToken() {
+  try {
+    const existing = localStorage.getItem('alesys_token');
+    if (existing) return;
+    const resp = await fetch(`${API_BASE}/api/v1/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: 'admin', password: 'alesys' }),
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data.token) localStorage.setItem('alesys_token', data.token);
+    }
+  } catch { /* noop: dev mode */ }
+}
+ensureAuthToken();
+
+/** Padded wrapper for standard content pages */
+function Padded({ children }: { children: React.ReactNode }) {
+  return <div className="mx-auto h-full max-w-6xl p-4 lg:p-6">{children}</div>
+}
+
+function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <Layout>
+        <AppShell>
           <Routes>
-            <Route path="/" element={<Chat />} />
-            <Route path="/chat" element={<Chat />} />
-            <Route path="/generate" element={<Generate />} />
-            <Route path="/editor" element={<EditorPage />} />
-            <Route path="/agents" element={<Agents />} />
-            <Route path="/plugins" element={<Plugins />} />
-            <Route path="/orchestrator" element={<OrchestratorDashboard />} />
-            <Route path="/collaboration" element={<Collaboration />} />
-            <Route path="/learning" element={<LearningPage />} />
-            <Route path="/debug" element={<DebugPage />} />
-            <Route path="/test-generation" element={<TestGenerationPage />} />
-            <Route path="/refactoring" element={<RefactoringPage />} />
-            <Route path="/kb-curation" element={<KnowledgeCurationPage />} />
-            <Route path="/multi-agent" element={<MultiAgentPage />} />
-            <Route path="/analytics" element={<AnalyticsPage />} />
-            <Route path="/workflows" element={<WorkflowsPage />} />
-            <Route path="/advanced-search" element={<AdvancedSearchPage />} />
-            <Route path="/sessions" element={<Sessions />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="/graph" element={<GraphViewer />} />
-            <Route path="/search" element={<AdvancedSearch />} />
-            <Route path="/ingestion" element={<IngestionPanel />} />
-            <Route path="/ingestion/batch" element={<BatchIngestion />} />
-            <Route path="/ingestion/history" element={<IngestionHistory />} />
+            <Route path="/" element={<Navigate to="/workspaces" replace />} />
+            <Route path="/chat" element={<Padded><Chat /></Padded>} />
+
+            {/* Investigación */}
+            <Route path="/workspaces" element={<WorkspaceLayout />} />
+            <Route path="/workspaces/:wsId" element={<WorkspaceLayout />} />
+            <Route path="/ingestion" element={<Padded><IngestionPanel /></Padded>} />
+            <Route path="/ingestion/batch" element={<Padded><BatchIngestion /></Padded>} />
+            <Route path="/ingestion/history" element={<Padded><IngestionHistory /></Padded>} />
+            <Route path="/ingestion/markdown" element={<Padded><MarkdownIngestionPanel /></Padded>} />
             <Route path="/research" element={<ResearchLayout />} />
             <Route path="/research/:projectId" element={<ResearchLayout />} />
+            <Route path="/sessions" element={<Padded><Sessions /></Padded>} />
+
+            {/* Desarrollo */}
+            <Route path="/editor" element={<EditorPage />} />
+            <Route path="/generate" element={<Padded><Generate /></Padded>} />
+            <Route path="/test-generation" element={<Padded><TestGenerationPage /></Padded>} />
+            <Route path="/debug" element={<Padded><DebugPage /></Padded>} />
+            <Route path="/refactoring" element={<Padded><RefactoringPage /></Padded>} />
+            <Route path="/agents" element={<Padded><Agents /></Padded>} />
+            <Route path="/orchestrator" element={<Padded><OrchestratorDashboard /></Padded>} />
+            <Route path="/collaboration" element={<Padded><Collaboration /></Padded>} />
+
+            {/* Conocimiento */}
+            <Route path="/graph" element={<GraphViewer />} />
+            <Route path="/search" element={<Padded><AdvancedSearch /></Padded>} />
+            <Route path="/advanced-search" element={<Padded><AdvancedSearchPage /></Padded>} />
+            <Route path="/kb-curation" element={<Padded><KnowledgeCurationPage /></Padded>} />
+            <Route path="/analytics" element={<Padded><AnalyticsPage /></Padded>} />
+            <Route path="/workflows" element={<Padded><WorkflowsPage /></Padded>} />
+
+            {/* Sistema */}
+            <Route path="/plugins" element={<Padded><Plugins /></Padded>} />
+            <Route path="/learning" element={<Padded><LearningPage /></Padded>} />
+            <Route path="/multi-agent" element={<Padded><MultiAgentPage /></Padded>} />
+            <Route path="/settings" element={<Padded><Settings /></Padded>} />
           </Routes>
-        </Layout>
+        </AppShell>
       </BrowserRouter>
     </QueryClientProvider>
   );

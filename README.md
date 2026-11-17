@@ -1,20 +1,21 @@
-# 🚀🐱 ALEsys v2.1.0 - AI IDE Framework
+# ALEsys v2.1.0 - AI IDE Framework 🐱
 
-**ALEsys** es un framework RAG + agente configurable con capacidades avanzadas de IA para desarrollo de software, investigación científica y gestión de conocimiento.
+ALEsys es un framework RAG + agente configurable con capacidades avanzadas de IA para desarrollo de software, investigación científica y gestión de conocimiento.
 
 ---
 
-## 📋 Tabla de Contenidos
+## Tabla de Contenidos
 
 - [Arquitectura](#arquitectura)
-- [Ingesta de PDFs](#ingesta-de-pdfs)
+- [Ingesta de PDFs y Markdown](#ingesta-de-pdfs-y-markdown)
 - [Setup Inicial](#setup-inicial)
 - [API Reference](#api-reference)
+- [Interfaz de Usuario](#interfaz-de-usuario)
 - [Licencia](#licencia)
 
 ---
 
-## 🏗️🐱 Arquitectura
+## Arquitectura
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -46,7 +47,7 @@
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### 🛠️🐱 Stack Tecnológico
+### Stack Tecnológico
 
 | Componente | Tecnología |
 |------------|------------|
@@ -58,51 +59,77 @@
 
 ---
 
+## Interfaz de Usuario
+
+ALEsys incluye una interfaz web moderna con los siguientes paneles:
+
+| Panel | Descripción |
+|-------|-------------|
+| Workspaces | Cuadernos de temas estilo AnythingLLM con tabs Chat/Docs/Graph |
+| Ingestión | Ingesta de PDFs y Markdown con progreso en tiempo real |
+| Investigación | Proyectos de I+D, notas, síntesis y export LaTeX |
+| Graph Viewer | Visualización del grafo de conocimiento |
+| Inventario | Gestión de activos LIMS con tracking de expiración |
+
+### Capturas de Pantalla
+
+Coloca tus capturas de pantalla en `docs/screenshots/` y referencia desde aquí:
+
+```
+docs/screenshots/
+├── dashboard-home.png
+├── workspace-chat.png
+├── ingestion-panel.png
+├── graph-viewer.png
+└── research-synthesis.png
+```
+
+Ejemplo de inclusión en Markdown:
+
+```markdown
+![Dashboard Principal](docs/screenshots/dashboard-home.png)
+![Panel de Ingesta](docs/screenshots/ingestion-panel.png)
+```
 
 ---
 
-## 📦🐱 Módulos del Core (27 total)
+## Ingesta de PDFs y Markdown
 
-### Core Base
-- `llm` - Motor multi-backend (llama.cpp, mistralrs, candle, vLLM)
-- `graphrag` - GraphRAG con pgvector + petgraph
-- `session` - Gestión de sesiones multi-usuario
-- `agent` - Agent manager y orchestrator
-- `plugin` - Sistema de plugins extensible
+### Características
 
-### Desarrollo
-- `generator` - Generación de código con LLM
-- `executor` - Ejecución local con límites
-- `fs_ops` - Operaciones de archivos
-- `automation` - Automatización (LaTeX, Markdown, red)
-- `pair_programmer` - AI Pair Programmer
-- `debug_assistant` - Asistente de debugging
-- `test_generation` - Generación automática de tests
-- `advanced_refactoring` - Refactorización AST-based
+- **MinerU + PyMuPDF fallback**: Extracción híbrida con OCR y detección de fórmulas
+- **Organizer**: Estructura limpia de salida (`auto/*` → `book_{id}/`)
+- **GraphRAG hook**: Indexación automática post-ingesta (chunking + embeddings batch 32)
+- **WebUI**: Drag-drop, progress bars en tiempo real, historial de jobs
+- **Auth**: JWT + RBAC (`ingestion:write`, `ingestion:read`)
+- **Ingesta de Markdown**: Indexación directa de libros y vaults pre-procesados (sin GPU)
 
-### Conocimiento
-- `voice` - Procesamiento de voz
-- `multimodal` - Entradas multimodales
-- `collaboration` - Colaboración en tiempo real
-- `learning` - Aprendizaje contextual
-- `knowledge_curation` - Curación de base de conocimiento
-- `multi_agent` - Colaboración multi-agente
-- `search_adv` - Búsqueda avanzada con filtros
+### Modos de Ingesta
 
-### Operaciones
-- `analytics` - Analíticas de uso y performance
-- `workflow` - Automatización de workflows
-- `performance` - Cache, pooling, batching, profiling
-- `security` - Rate limiting, validación, auditoría
-- `deployment` - Config, health checks, backups
-- `e2e` - Tests end-to-end, integración y benchmarks
+| Modo | Descripción | GPU |
+|-------------|---------------|-----|
+| `auto` | Selecciona automáticamente | Opcional |
+| `mineru` | Mejor calidad, fórmulas/tablas | Recomendada |
+| `pymupdf` | Rápido, sin GPU | No |
+| `markdown` | Indexación directa de archivos .md | No |
+
+### Setup
+
+```bash
+# Instalar MinerU con GPU
+./scripts/setup-mineru.sh
+
+# Ejecutar benchmarks
+./scripts/benchmark-ingestion.sh
+```
+
+### Documentación
+
+- [Pipeline de Ingesta](docs/INGESTION_PIPELINE.md)
 
 ---
 
-
----
-
-## 🛠️🐱 Setup Inicial
+## Setup Inicial
 
 ### Prerrequisitos
 
@@ -148,7 +175,7 @@ cargo test --workspace --no-default-features --features test
 
 ---
 
-## 🔌🐱 API Reference
+## API Reference
 
 ### Endpoints Principales
 
@@ -194,13 +221,22 @@ cargo test --workspace --no-default-features --features test
 - `POST /workflows` - Crear workflow
 - `POST /workflows/:id/run` - Ejecutar workflow
 
-#### Ingesta de PDFs (Fase 29)
+#### Ingesta de PDFs y Markdown (Fase 29)
 - `POST /api/v1/ingestion/pdf` - Ingesta individual con MinerU + PyMuPDF fallback
 - `POST /api/v1/ingestion/batch` - Ingesta por lotes
-- `GET /api/v1/ingestion/status/:id` - Estado de job
+- `POST /api/v1/ingestion/markdown` - Ingesta de Markdown (async, job-based)
+- `GET /api/v1/ingestion/status/:id` - Estado de job (PDF)
+- `GET /api/v1/ingestion/markdown/status/{id}` - Estado de job (Markdown)
+- `GET /api/v1/ingestion/markdown/jobs` - Listar jobs Markdown
+- `POST /api/v1/ingestion/markdown/{id}/cancel` - Cancelar job Markdown
 - `WS /ws/ingestion/:id` - Progreso en tiempo real
 - `GET /api/v1/ingestion/config` - Configuración actual
 - `PUT /api/v1/ingestion/config` - Actualizar configuración
+
+#### LLM (Carga Lazy)
+- `GET /api/v1/llm/status` - Estado del modelo LLM
+- `POST /api/v1/llm/load` - Cargar modelo en memoria
+- `POST /api/v1/llm/unload` - Descargar modelo de memoria
 
 #### Sistema
 - `GET /health` - Health check
@@ -211,46 +247,14 @@ cargo test --workspace --no-default-features --features test
 
 ---
 
-## 📄🐱 Ingesta de PDFs
-
-### Características
-- **MinerU + PyMuPDF fallback**: Extracción híbrida con OCR y detección de fórmulas
-- **Organizer**: Estructura limpia de salida (`auto/*` → `book_{id}/`)
-- **GraphRAG hook**: Indexación automática post-ingesta (chunking + embeddings batch 32)
-- **WebUI**: Drag-drop, progress bars en tiempo real, historial de jobs
-- **Auth**: JWT + RBAC (`ingestion:write`, `ingestion:read`)
-
-### Modos de Ingesta
-| Modo | Descripción | GPU |
-|-------------|---------------|-----|
-| `auto` | Selecciona automáticamente | Opcional |
-| `mineru` | Mejor calidad, fórmulas/tablas | Recomendada |
-| `pymupdf` | Rápido, sin GPU | No |
-
-### Setup
-```bash
-# Instalar MinerU con GPU
-./scripts/setup-mineru.sh
-
-# Ejecutar benchmarks
-./scripts/benchmark-ingestion.sh
-```
-
-### Documentación
-- [Pipeline de Ingesta](docs/INGESTION_PIPELINE.md)
-
----
-
-## 🧪🐱 Testing
-
-### Metodología
+## Testing
 
 | Tipo | Herramienta | Cuándo |
 |------|-------------|--------|
-| Unitarios | \`cargo test -p alesys-core --lib\` | Cada cambio en lógica Rust |
-| Integración | \`cargo test -p alesys-api --test <suite>\` | Backend + PostgreSQL |
+| Unitarios | `cargo test -p alesys-core --lib` | Cada cambio en lógica Rust |
+| Integración | `cargo test -p alesys-api --test <suite>` | Backend + PostgreSQL |
 | E2E | Python + Playwright | Pipeline completo (PDF → GraphRAG) |
-| Benchmarks | \`cargo bench\` | Regresión de performance |
+| Benchmarks | `cargo bench` | Regresión de performance |
 
 ### Comandos
 
@@ -275,36 +279,36 @@ cargo bench -p alesys-core ingestion_bench
 
 ---
 
-## 📊🐱 Métricas del Proyecto
+## Métricas del Proyecto
 
 | Métrica | Valor |
 |---------|-------|
-| **Versión** | v2.1.0 |
-| **Módulos Core** | 27 |
-| **Endpoints API** | ~50 |
-| **Tests Unitarios** | 351 |
-| **Líneas de Código** | ~15,000+ |
-| **Fases Completadas** | 29 |
+| Versión | v2.1.0 |
+| Módulos Core | 27 |
+| Endpoints API | ~50 |
+| Tests Unitarios | 351 |
+| Líneas de Código | ~15,000+ |
+| Fases Completadas | 29 |
 
 ---
 
-## 📄🐱 Licencia
+## Licencia
 
 GNU AGPL v3.0
 
 ---
 
-## 📝🐱 CHANGELOG v2.1.0
+## CHANGELOG v2.1.0
 
 ### Agregado
-- ✅ Fase 29: Pipeline de ingesta de PDFs (MinerU + PyMuPDF fallback)
-- ✅ 10 tickets TICKET-29.1 a 29.10 completados
-- ✅ GraphRAG ingestion hook con KnowledgeCuration splitter
-- ✅ API endpoints: `/ingestion/pdf`, `/ingestion/batch`, `/ingestion/status/:id`, `/ws/ingestion/:id`, `/ingestion/config`
-- ✅ WebUI: drag-drop, progress bars, historial de jobs
-- ✅ 351 tests unitarios passing (32 ingestion tests)
-- ✅ 7 escenarios E2E + benchmarks + CI workflow
-- ✅ Documentación Fase 29 y pipeline de ingesta
+- Fase 29: Pipeline de ingesta de PDFs (MinerU + PyMuPDF fallback)
+- 10 tickets TICKET-29.1 a 29.10 completados
+- GraphRAG ingestion hook con KnowledgeCuration splitter
+- API endpoints: `/ingestion/pdf`, `/ingestion/batch`, `/ingestion/status/:id`, `/ws/ingestion/:id`, `/ingestion/config`
+- WebUI: drag-drop, progress bars, historial de jobs
+- 351 tests unitarios passing (32 ingestion tests)
+- 7 escenarios E2E + benchmarks + CI workflow
+- Documentación Fase 29 y pipeline de ingesta
 
 ### Mejorado
 - Performance con cache LRU + TTL
@@ -314,9 +318,57 @@ GNU AGPL v3.0
 
 ### Cambiado
 - Metodología de tests: unit → integración → e2e → benchmarks
-- Flujo de tickets: issues por fase (`.github/FaseXX-ISSUES.md`)
+- Flujo de tickets: issues por fase
 - Version establecida a v2.1.0
 
 ---
 
-**Hecho con ❤️🐱 por el equipo ALEsys**
+### Fase I+D Científico (Sprints 1-4) — Nuevas capacidades
+
+**Sprint 1 — Fundamentos:**
+- Research Module persistido en PostgreSQL (migración + handlers sqlx + audit columns)
+- DVC + MinIO para versionado de PDFs/datos (remote local)
+- MLflow self-hosted en docker-compose + tracking client en Rust
+- Schema metadatos experimentales en chunks
+- DockerSandbox prototipo
+
+**Sprint 2 — Ejecución y análisis:**
+- Clasificador LLM-structured-output
+- Table Extractor (PyMuPDF → Camelot → TATR) → CSV/Parquet
+- Verificación factual (RAGAS LLM judge + numeric consistency + citations)
+- Notebook component (celdas code/markdown, run, output)
+- CollabEditor Yjs (CRDT + y-websocket + y-monaco + awareness)
+
+**Sprint 3 — Calidad y colaboración:**
+- TableExtractor integrado en ingestion pipeline
+- Verifier integrado en /api/v1/chat
+- Protocol Templates + Experiment Runs (ELN)
+- Export LaTeX
+- Notebook + CollabEditor integrados en SynthesisPanel
+
+**Sprint 4 — Enterprise y escalabilidad:**
+- Rate limiting robusto + métricas Prometheus
+- Multi-tenant aislamiento (owner_id columns + RLS policies)
+- Inventory/LIMS module
+- Yjs backend WebSocket
+- lakeFS en docker-compose
+- LLM streaming mejorado
+- Firecracker on-prem documentación
+- E2E tests + CI workflow
+
+**Nuevos endpoints:**
+- `/api/v1/research/runs` (GET/POST), `/api/v1/research/runs/:id` (PUT/DELETE)
+- `/api/v1/research/export/:project_id/latex`
+- `/api/v1/inventory` (GET/POST), `/api/v1/inventory/:id` (PUT/DELETE)
+
+**Nuevos servicios Docker:**
+- `mlflow` (:5000), `yjs-server` (:1234), `lakefs` (:8000)
+
+**Nuevos módulos Rust:**
+- `classifier`, `verification`, `tracking`, `table_extractor` (en ingestion), `executor::sandbox`
+
+**Tests:** 361 unitarios passing (core), tsc limpio (webui)
+
+---
+
+Hecho con 🐱 por el equipo ALEsys

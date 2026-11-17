@@ -151,3 +151,8 @@ PHASE2_PLAN.md
 # - sandbox/ (archivos temporales de ejecución)
 # - *.pem, *.key, *.crt (certificados, claves privadas)nohup.out
 nohup.out
+
+# DVC data (tracked by DVC, not Git)
+/data/*
+!/data/*.dvc
+!/data/.gitkeep

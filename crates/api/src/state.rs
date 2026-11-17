@@ -8,6 +8,7 @@ use alesys_core::llm::{
     LLMState,
 };
 use alesys_core::{GraphRAG, SessionManager, AgentManager, PluginManager};
+use chrono::{DateTime, Utc};
 use futures::stream::BoxStream;
 use sqlx::PgPool;
 use std::collections::HashMap;
@@ -64,34 +65,25 @@ impl LLMQueue {
         &'a self,
         messages: &'a [ChatMessage],
     ) -> BoxStream<'a, alesys_core::Result<StreamChunk>> {
-        // Streaming con verificación lazy - implementación simplificada
-        // Retorna un stream que verifica el estado antes de proceder
-        use futures::stream::once;
-        
-        // Clonar referencias para el stream async
         let engine = self.engine.clone();
-        let messages = messages.to_vec();
-        
-        Box::pin(once(async move {
-            // Verificar si está cargado
+        let messages = messages;
+        Box::pin(futures::stream::once(async move {
             let eng = engine.read().await;
             if !eng.is_loaded() {
                 return Err(alesys_core::AlesysError::LLM(
-                    "LLM no cargado. Usar POST /api/v1/llm/load para cargar.".to_string()
+                    "LLM no cargado. Usar POST /api/v1/llm/load para cargar.".to_string(),
                 ));
             }
             if !eng.is_available() {
-                return Err(alesys_core::AlesysError::LLM(
-                    "LLM no disponible".to_string()
-                ));
+                return Err(alesys_core::AlesysError::LLM("LLM no disponible".to_string()));
             }
-            
-            // En una implementación completa, aquí se obtendría el stream real
-            // Por ahora, retornamos un chunk vacío como placeholder
-            Ok(StreamChunk {
-                delta: "[Lazy load] Streaming no implementado aún. Usar chat() no-streaming.".to_string(),
-                finish_reason: Some("stop".to_string()),
-            })
+            match eng.chat(messages).await {
+                Ok(resp) => Ok(StreamChunk {
+                    delta: resp.content,
+                    finish_reason: Some("stop".to_string()),
+                }),
+                Err(e) => Err(e),
+            }
         }))
     }
 
@@ -205,6 +197,50 @@ impl Drop for IngestionToken {
     }
 }
 
+/// In-memory state of a Markdown ingestion job (survives no restart — PDF jobs use the DB).
+#[derive(Debug, Clone)]
+pub struct MarkdownJobState {
+    pub job_id: String,
+    pub dir: String,
+    pub topic: Option<String>,
+    pub status: String, // "processing" | "completed" | "failed" | "cancelled"
+    pub files_done: usize,
+    pub files_total: usize,
+    pub chunks_indexed: usize,
+    pub files_indexed: usize,
+    pub skipped_empty: usize,
+    pub topics: Vec<String>,
+    pub current_file: Option<String>,
+    pub current_topic: Option<String>,
+    pub message: Option<String>,
+    pub error: Option<String>,
+    pub result: Option<serde_json::Value>,
+    pub created_at: DateTime<Utc>,
+    /// Shared cancel flag — flipped by the cancel endpoint, polled between files.
+    pub cancelled: Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl MarkdownJobState {
+    pub fn progress_pct(&self) -> f64 {
+        if self.files_total == 0 {
+            return match self.status.as_str() {
+                "completed" => 100.0,
+                _ => 0.0,
+            };
+        }
+        let pct = (self.files_done as f64 / self.files_total as f64) * 100.0;
+        if self.status == "processing" {
+            pct.min(99.0)
+        } else {
+            pct
+        }
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.cancelled.load(std::sync::atomic::Ordering::SeqCst)
+    }
+}
+
 #[derive(Clone)]
 pub struct AppState {
     #[allow(dead_code)]
@@ -220,6 +256,8 @@ pub struct AppState {
     pub plugin_manager: Arc<PluginManager>,
     pub ingestion_config: IngestionConfig,
     pub ingestion_semaphore: IngestionSemaphore,
+    /// Live Markdown ingestion jobs keyed by job_id.
+    pub markdown_jobs: Arc<RwLock<HashMap<String, MarkdownJobState>>>,
 }
 
 impl AppState {
@@ -257,6 +295,13 @@ impl AppState {
                 );
             }
         }
+        // HTTP embedding backend (llama.cpp / OpenAI-compatible)
+        if let Ok(url) = std::env::var("EMBEDDING_HTTP_URL") {
+            let dim: usize = std::env::var("EMBEDDING_HTTP_DIM")
+                .ok().and_then(|v| v.parse().ok()).unwrap_or(1024);
+            embedder.set_http(url, dim);
+            tracing::info!("Embedder HTTP configurado (dim={})", dim);
+        }
         let embedder = Arc::new(embedder);
 
         // LLM Queue con referencia al engine lazy
@@ -278,6 +323,41 @@ impl AppState {
             tracing::warn!("Ingestion jobs migration failed: {}", e);
         }
 
+        let research_migration = include_str!("../../../crates/core/migrations/20261114_create_research_tables.sql");
+        if let Err(e) = execute_sql(&db, research_migration).await {
+            tracing::warn!("Research tables migration failed: {}", e);
+        }
+
+        let experimental_migration = include_str!("../../../crates/core/migrations/20261114_add_experimental_metadata.sql");
+        if let Err(e) = execute_sql(&db, experimental_migration).await {
+            tracing::warn!("Experimental metadata migration failed: {}", e);
+        }
+
+        let experiment_runs_migration = include_str!("../../../crates/core/migrations/20261114_create_experiment_runs.sql");
+        if let Err(e) = execute_sql(&db, experiment_runs_migration).await {
+            tracing::warn!("Experiment runs migration failed: {}", e);
+        }
+
+        let multi_tenant_migration = include_str!("../../../crates/core/migrations/20261114_multi_tenant.sql");
+        if let Err(e) = execute_sql(&db, multi_tenant_migration).await {
+            tracing::warn!("Multi-tenant migration failed: {}", e);
+        }
+
+        let inventory_migration = include_str!("../../../crates/core/migrations/20261114_create_inventory.sql");
+        if let Err(e) = execute_sql(&db, inventory_migration).await {
+            tracing::warn!("Inventory migration failed: {}", e);
+        }
+
+        let workspaces_migration = include_str!("../../../crates/core/migrations/20261116_create_workspaces.sql");
+        if let Err(e) = execute_sql(&db, workspaces_migration).await {
+            tracing::warn!("Workspaces migration failed: {}", e);
+        }
+
+        let fragmentos_migration = include_str!("../../../crates/core/migrations/20261117_create_fragmentos.sql");
+        if let Err(e) = execute_sql(&db, fragmentos_migration).await {
+            tracing::warn!("Fragmentos migration failed: {}", e);
+        }
+
         let state = Self {
             db,
             graphrag,
@@ -291,6 +371,7 @@ impl AppState {
             plugin_manager,
             ingestion_config,
             ingestion_semaphore: IngestionSemaphore::new(5),
+            markdown_jobs: Arc::new(RwLock::new(HashMap::new())),
         };
 
         tracing::info!(

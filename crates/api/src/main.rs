@@ -38,6 +38,9 @@ mod handlers_ingestion;
 mod handlers_bibliography;
 mod handlers_documents;
 mod handlers_research;
+mod handlers_experiments;
+mod handlers_inventory;
+mod handlers_workspaces;
 mod state;
 mod websocket;
 
@@ -64,7 +67,7 @@ use handlers::{
     search_faceted, search_suggest,
     get_llm_status, load_llm, unload_llm,
 };
-use handlers_ingestion::{ingest_pdf_handler, ingest_batch_handler, ingest_status_handler, get_ingestion_config_handler, put_ingestion_config_handler, ws_ingestion_handler};
+use handlers_ingestion::{ingest_pdf_handler, ingest_batch_handler, ingest_markdown_handler, ingest_status_handler, get_ingestion_config_handler, put_ingestion_config_handler, ws_ingestion_handler, ingest_markdown_status_handler, list_markdown_jobs_handler, cancel_markdown_job_handler};
 use handlers_bibliography::{store_citation_handler, list_citations_handler, format_citation_handler, deduplicate_citations_handler};
 use handlers_documents::{list_ingestion_history_handler, get_document_fragments_handler};
 use handlers_research::{
@@ -72,6 +75,19 @@ use handlers_research::{
     update_project_handler, delete_project_handler,
     list_notes_handler, create_note_handler, update_note_handler, delete_note_handler,
     get_synthesis_handler, update_synthesis_handler, export_synthesis_markdown_handler,
+    export_synthesis_latex_handler,
+};
+use handlers_experiments::{
+    list_runs_handler, create_run_handler, update_run_handler, delete_run_handler,
+};
+use handlers_inventory::{
+    list_inventory_handler, create_inventory_handler, update_inventory_handler, delete_inventory_handler,
+};
+use handlers_workspaces::{
+    list_workspaces_handler, create_workspace_handler, get_workspace_handler,
+    update_workspace_handler, delete_workspace_handler,
+    list_workspace_documents_handler, add_workspace_document_handler, delete_workspace_document_handler,
+    list_workspace_threads_handler, create_workspace_thread_handler, delete_workspace_thread_handler,
 };
 use state::AppState;
 use websocket::ws_chat_handler;
@@ -128,6 +144,23 @@ impl RateLimiterState {
             false
         }
     }
+}
+
+use metrics::{counter, histogram};
+
+async fn metrics_middleware(
+    request: Request<axum::body::Body>,
+    next: Next,
+) -> Response {
+    let method = request.method().clone();
+    let path = request.uri().path().to_string();
+    let start = std::time::Instant::now();
+    let response = next.run(request).await;
+    let status = response.status().as_u16();
+    let duration = start.elapsed().as_secs_f64();
+    counter!("http_requests_total", "method" => method.to_string(), "path" => path.clone(), "status" => status.to_string()).increment(1);
+    histogram!("http_request_duration_seconds", "method" => method.to_string(), "path" => path).record(duration);
+    response
 }
 
 async fn rate_limit_middleware(
@@ -274,9 +307,9 @@ async fn main() -> Result<()> {
         .route("/generate", post(generate_handler))
         .route("/sessions", get(list_sessions))
         .route("/sessions", post(create_session))
-        .route("/sessions/:id", get(get_session))
-        .route("/sessions/:id", delete(delete_session))
-        .route("/sessions/:id/history", get(get_session_history))
+        .route("/sessions/{id}", get(get_session))
+        .route("/sessions/{id}", delete(delete_session))
+        .route("/sessions/{id}/history", get(get_session_history))
         .route("/graph", get(get_graph))
         .route("/graph/stats", get(graph_stats))
         .route("/graph/centrality", get(get_centrality))
@@ -290,22 +323,22 @@ async fn main() -> Result<()> {
         .route("/auth/me", get(get_current_user))
         .route("/agents", get(list_agents))
         .route("/agents/stats", get(agent_stats))
-        .route("/agents/:id/execute", post(agent_execute))
-        .route("/agents/:id/files", get(agent_read_file).post(agent_write_file))
-        .route("/agents/:id/files/list", get(agent_list_dir))
+        .route("/agents/{id}/execute", post(agent_execute))
+        .route("/agents/{id}/files", get(agent_read_file).post(agent_write_file))
+        .route("/agents/{id}/files/list", get(agent_list_dir))
         // LLM Management endpoints
         .route("/llm/status", get(get_llm_status))
         .route("/llm/load", post(load_llm))
         .route("/llm/unload", post(unload_llm))
         // Plugin endpoints
         .route("/plugins", get(list_plugins))
-        .route("/plugins/:id/execute", post(execute_plugin))
-        .route("/plugins/:id/enable", post(enable_plugin))
-        .route("/plugins/:id/disable", post(disable_plugin))
+        .route("/plugins/{id}/execute", post(execute_plugin))
+        .route("/plugins/{id}/enable", post(enable_plugin))
+        .route("/plugins/{id}/disable", post(disable_plugin))
         // Marketplace endpoints
         .route("/marketplace/plugins", get(marketplace_list))
-        .route("/marketplace/install/:id", post(marketplace_install))
-        .route("/marketplace/uninstall/:id", delete(marketplace_uninstall))
+        .route("/marketplace/install/{id}", post(marketplace_install))
+        .route("/marketplace/uninstall/{id}", delete(marketplace_uninstall))
         // Pair programmer endpoints
         .route("/pair-programmer/analyze", post(pair_programmer_analyze))
         .route("/pair-programmer/refactor", post(pair_programmer_refactor))
@@ -339,83 +372,61 @@ async fn main() -> Result<()> {
         // Workflow endpoints
         .route("/workflows", get(workflow_list))
         .route("/workflows", post(workflow_create))
-        .route("/workflows/:id/run", post(workflow_run))
+        .route("/workflows/{id}/run", post(workflow_run))
         // Advanced search endpoints
         .route("/search/faceted", post(search_faceted))
         .route("/search/suggest", post(search_suggest))
         // Ingestion endpoints (Phase 29) - auth protected
-        .route("/ingestion/pdf", post(ingest_pdf_handler)).route_layer(
-            middleware::from_fn_with_state(Arc::new(AuthState::new()), auth_middleware)
-        )
-        .route("/ingestion/batch", post(ingest_batch_handler)).route_layer(
-            middleware::from_fn_with_state(Arc::new(AuthState::new()), auth_middleware)
-        )
-        .route("/ingestion/colab/process", post(ingest_pdf_handler)).route_layer(
-            middleware::from_fn_with_state(Arc::new(AuthState::new()), auth_middleware)
-        )
-        .route("/ingestion/status/:id", get(ingest_status_handler)).route_layer(
-            middleware::from_fn_with_state(Arc::new(AuthState::new()), auth_middleware)
-        )
-        .route("/ingestion/config", get(get_ingestion_config_handler)).route_layer(
-            middleware::from_fn_with_state(Arc::new(AuthState::new()), auth_middleware)
-        )
-        .route("/ingestion/config", put(put_ingestion_config_handler)).route_layer(
-            middleware::from_fn_with_state(Arc::new(AuthState::new()), auth_middleware)
-        )
-        .route("/ingestion/history", get(list_ingestion_history_handler)).route_layer(
-            middleware::from_fn_with_state(Arc::new(AuthState::new()), auth_middleware)
-        )
+        .route("/ingestion/pdf", post(ingest_pdf_handler))
+        .route("/ingestion/batch", post(ingest_batch_handler))
+        .route("/ingestion/markdown", post(ingest_markdown_handler))
+        .route("/ingestion/markdown/status/{id}", get(ingest_markdown_status_handler))
+        .route("/ingestion/markdown/jobs", get(list_markdown_jobs_handler))
+        .route("/ingestion/markdown/{id}/cancel", post(cancel_markdown_job_handler))
+        .route("/ingestion/colab/process", post(ingest_pdf_handler))
+        .route("/ingestion/status/{id}", get(ingest_status_handler))
+        .route("/ingestion/config", get(get_ingestion_config_handler))
+        .route("/ingestion/config", put(put_ingestion_config_handler))
+        .route("/ingestion/history", get(list_ingestion_history_handler))
         // Document endpoints (Fase 31 - Literature Explorer)
-        .route("/documents/:id/fragments", get(get_document_fragments_handler)).route_layer(
-            middleware::from_fn_with_state(Arc::new(AuthState::new()), auth_middleware)
-        )
+        .route("/documents/{id}/fragments", get(get_document_fragments_handler))
         // Research endpoints (Fase 31 - Research Module)
-        .route("/research/projects", get(list_projects_handler).post(create_project_handler)).route_layer(
-            middleware::from_fn_with_state(Arc::new(AuthState::new()), auth_middleware)
-        )
-        .route("/research/projects/:id", get(get_project_handler).put(update_project_handler).delete(delete_project_handler)).route_layer(
-            middleware::from_fn_with_state(Arc::new(AuthState::new()), auth_middleware)
-        )
-        .route("/research/notes", get(list_notes_handler).post(create_note_handler)).route_layer(
-            middleware::from_fn_with_state(Arc::new(AuthState::new()), auth_middleware)
-        )
-        .route("/research/notes/:id", put(update_note_handler).delete(delete_note_handler)).route_layer(
-            middleware::from_fn_with_state(Arc::new(AuthState::new()), auth_middleware)
-        )
-        .route("/research/synthesis/:project_id", get(get_synthesis_handler).put(update_synthesis_handler)).route_layer(
-            middleware::from_fn_with_state(Arc::new(AuthState::new()), auth_middleware)
-        )
-        .route("/research/export/:project_id/markdown", get(export_synthesis_markdown_handler)).route_layer(
-            middleware::from_fn_with_state(Arc::new(AuthState::new()), auth_middleware)
-        )
+        .route("/research/projects", get(list_projects_handler).post(create_project_handler))
+        .route("/research/projects/{id}", get(get_project_handler).put(update_project_handler).delete(delete_project_handler))
+        .route("/research/notes", get(list_notes_handler).post(create_note_handler))
+        .route("/research/notes/{id}", put(update_note_handler).delete(delete_note_handler))
+        .route("/research/synthesis/{project_id}", get(get_synthesis_handler).put(update_synthesis_handler))
+        .route("/research/export/{project_id}/markdown", get(export_synthesis_markdown_handler))
+        .route("/research/export/{project_id}/latex", get(export_synthesis_latex_handler))
+        // Experiment runs (ELN)
+        .route("/research/runs", get(list_runs_handler).post(create_run_handler))
+        .route("/research/runs/{id}", put(update_run_handler).delete(delete_run_handler))
+        // Inventory / LIMS
+        .route("/inventory", get(list_inventory_handler).post(create_inventory_handler))
+        .route("/inventory/{id}", put(update_inventory_handler).delete(delete_inventory_handler))
+        // Workspaces (cuadernos de temas) - AnythingLLM-style
+        .route("/workspaces", get(list_workspaces_handler).post(create_workspace_handler))
+        .route("/workspaces/{id}", get(get_workspace_handler).put(update_workspace_handler).delete(delete_workspace_handler))
+        .route("/workspaces/{id}/documents", get(list_workspace_documents_handler).post(add_workspace_document_handler))
+        .route("/workspaces/{id}/documents/{doc_id}", delete(delete_workspace_document_handler))
+        .route("/workspaces/{id}/threads", get(list_workspace_threads_handler).post(create_workspace_thread_handler))
+        .route("/workspaces/{id}/threads/{thread_id}", delete(delete_workspace_thread_handler))
         // Bibliography endpoints (Phase 30) - auth protected
-        .route("/bibliography/citations", post(store_citation_handler)).route_layer(
-            middleware::from_fn_with_state(Arc::new(AuthState::new()), auth_middleware)
-        )
-        .route("/bibliography/citations/:chapter_id", get(list_citations_handler)).route_layer(
-            middleware::from_fn_with_state(Arc::new(AuthState::new()), auth_middleware)
-        )
-        .route("/bibliography/format/:citation_id", post(format_citation_handler)).route_layer(
-            middleware::from_fn_with_state(Arc::new(AuthState::new()), auth_middleware)
-        )
-        .route("/bibliography/deduplicate", post(deduplicate_citations_handler)).route_layer(
-            middleware::from_fn_with_state(Arc::new(AuthState::new()), auth_middleware)
-        );
+        .route("/bibliography/citations", post(store_citation_handler))
+        .route("/bibliography/citations/{chapter_id}", get(list_citations_handler))
+        .route("/bibliography/format/{citation_id}", post(format_citation_handler))
+        .route("/bibliography/deduplicate", post(deduplicate_citations_handler));
 
     let app = Router::new()
         .nest("/api/v1", api_v1.clone())
         .nest("/api", api_v1)
         .route("/ws/chat", get(ws_chat_handler))
         .route("/ws/agent", get(ws_agent_handler))
-        .route("/ws/ingestion/:job_id", get(ws_ingestion_handler))
+        .route("/ws/ingestion/{job_id}", get(ws_ingestion_handler))
         .route("/health", get(health_handler))
         .route("/metrics", get(metrics_handler))
         .with_state(state)
         .layer(cors)
-        .layer(middleware::from_fn_with_state(
-            rate_limiter.clone(),
-            rate_limit_middleware,
-        ))
         .layer(TimeoutLayer::with_status_code(
             axum::http::StatusCode::REQUEST_TIMEOUT,
             std::time::Duration::from_secs(timeout_secs),

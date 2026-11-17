@@ -26,14 +26,35 @@ pub struct IngestionHookConfig {
     pub embedding_model: String,
     pub embedding_dimension: usize,
     pub max_chunk_tokens: usize,
+    /// HTTP embedder endpoint (llama.cpp / OpenAI-compatible). When set, the
+    /// hook uses it instead of a local ONNX model.
+    pub http_embed_url: Option<String>,
 }
 
 impl Default for IngestionHookConfig {
     fn default() -> Self {
         Self {
             embedding_model: "small_embeddings".to_string(),
-            embedding_dimension: 384,
+            embedding_dimension: 1024,
             max_chunk_tokens: 512,
+            http_embed_url: None,
+        }
+    }
+}
+
+impl IngestionHookConfig {
+    /// Build config from environment (EMBEDDING_HTTP_URL / EMBEDDING_HTTP_DIM).
+    pub fn from_env() -> Self {
+        let http = std::env::var("EMBEDDING_HTTP_URL").ok();
+        let dim: usize = std::env::var("EMBEDDING_HTTP_DIM")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(1024);
+        Self {
+            embedding_model: "http".to_string(),
+            embedding_dimension: dim,
+            max_chunk_tokens: 512,
+            http_embed_url: http,
         }
     }
 }
@@ -46,7 +67,11 @@ pub struct GraphRAGIngestionHook {
 impl GraphRAGIngestionHook {
     pub fn new(config: IngestionHookConfig) -> Self {
         let mut embedder = ONNXEmbedder::new();
-        embedder.load(&config.embedding_model);
+        if let Some(url) = config.http_embed_url.clone() {
+            embedder.set_http(url, config.embedding_dimension);
+        } else {
+            embedder.load(&config.embedding_model);
+        }
         Self { config, embedder }
     }
 
@@ -79,6 +104,11 @@ impl GraphRAGIngestionHook {
                         end_page: chapter.end_page,
                         markdown_path: chapter.markdown_path.clone(),
                         image_refs: chapter.image_refs.clone(),
+                        experiment_id: chapter.experiment_id.clone(),
+                        trial_id: chapter.trial_id.clone(),
+                        area: chapter.area.clone(),
+                        section: chapter.section.clone(),
+                        source_type: chapter.source_type.clone(),
                     };
                     let chunks = self.chunk_chapter(&sub_chapter, &sub_chunk.content, &topic, &result.output_dir)?;
                     all_chunks.extend(chunks);
@@ -89,8 +119,30 @@ impl GraphRAGIngestionHook {
             }
         }
 
+        if all_chunks.is_empty() {
+            return Ok(IndexResult::empty());
+        }
+
+#[cfg(feature = "tracking")]
+use crate::tracking::{MlflowClient, TrackingConfig};
+
         let embedded = self.embed_chunks(&all_chunks).await?;
         self.insert_chunks(pool, &embedded, &topic).await?;
+
+        // Track in MLflow if enabled
+        #[cfg(feature = "tracking")]
+        {
+            let tracking = TrackingConfig::from_env();
+            if tracking.is_enabled() {
+                let client = MlflowClient::new(tracking);
+                if let Ok(run_id) = client.create_run("ingestion").await {
+                    let _ = client.log_param(&run_id, "topic", &topic).await;
+                    let _ = client.log_param(&run_id, "chapters", &result.chapters.len().to_string()).await;
+                    let _ = client.log_metric(&run_id, "chunks_indexed", all_chunks.len() as f64).await;
+                    let _ = client.end_run(&run_id).await;
+                }
+            }
+        }
 
         Ok(IndexResult {
             chunks_indexed: all_chunks.len(),
@@ -122,9 +174,22 @@ impl GraphRAGIngestionHook {
                     source_pdf: output_dir.to_string_lossy().to_string(),
                     chapter_title: chapter.title.clone(),
                     chapter_id: chapter.id,
+                    experiment_id: chapter.experiment_id.clone(),
+                    trial_id: chapter.trial_id.clone(),
+                    area: chapter.area.clone(),
+                    section: chapter.section.clone(),
+                    source_type: chapter.source_type.clone(),
+                    data_type: None,
                 });
 
                 let overlap_start = current_chunk.len().saturating_sub(OVERLAP_TOKENS * 4);
+                let overlap_start = {
+                    let mut p = overlap_start.min(current_chunk.len());
+                    while p > 0 && !current_chunk.is_char_boundary(p) {
+                        p -= 1;
+                    }
+                    p
+                };
                 current_chunk = current_chunk[overlap_start..].to_string();
                 current_tokens = self.estimate_tokens(&current_chunk);
             }
@@ -142,6 +207,12 @@ impl GraphRAGIngestionHook {
                 source_pdf: output_dir.to_string_lossy().to_string(),
                 chapter_title: chapter.title.clone(),
                 chapter_id: chapter.id,
+                experiment_id: chapter.experiment_id.clone(),
+                trial_id: chapter.trial_id.clone(),
+                area: chapter.area.clone(),
+                section: chapter.section.clone(),
+                source_type: chapter.source_type.clone(),
+                data_type: None,
             });
         }
 
@@ -175,8 +246,8 @@ impl GraphRAGIngestionHook {
     ) -> Result<(), GraphRAGIngestionError> {
         for embedded in chunks {
             let row = sqlx::query(
-                r#"INSERT INTO documentos (ruta_relativa, tipo, topic, session_id, source_pdf, chapter_title)
-                   VALUES ($1, $2, $3, $4, $5, $6)
+                r#"INSERT INTO documentos (ruta_relativa, tipo, topic, session_id, source_pdf, chapter_title, experiment_id, trial_id, area, section, source_type, data_type, frontmatter)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, '{}'::jsonb)
                    ON CONFLICT (ruta_relativa) DO UPDATE SET topic = EXCLUDED.topic
                    RETURNING id"#,
             )
@@ -186,6 +257,12 @@ impl GraphRAGIngestionHook {
             .bind(embedded.chunk.session_id)
             .bind(&embedded.chunk.source_pdf)
             .bind(&embedded.chunk.chapter_title)
+            .bind(&embedded.chunk.experiment_id)
+            .bind(&embedded.chunk.trial_id)
+            .bind(&embedded.chunk.area)
+            .bind(&embedded.chunk.section)
+            .bind(&embedded.chunk.source_type)
+            .bind(&embedded.chunk.data_type)
             .fetch_one(pool)
             .await
             .map_err(|e| GraphRAGIngestionError::Database(e.to_string()))?;
@@ -225,6 +302,13 @@ pub struct Chunk {
     pub source_pdf: String,
     pub chapter_title: String,
     pub chapter_id: Uuid,
+    // Experimental metadata (Fase I+D)
+    pub experiment_id: Option<String>,
+    pub trial_id: Option<String>,
+    pub area: Option<String>,
+    pub section: Option<String>,
+    pub source_type: Option<String>,
+    pub data_type: Option<String>,
 }
 
 #[derive(Debug)]

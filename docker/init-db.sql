@@ -1,4 +1,4 @@
-# Database initialization for ALEsys Core (PostgreSQL + pgvector)
+-- Database initialization for ALEsys Core (PostgreSQL + pgvector)
 
 -- Enable pgvector extension
 CREATE EXTENSION IF NOT EXISTS vector;
@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS fragmentos (
     id SERIAL PRIMARY KEY,
     documento_id INTEGER REFERENCES documentos(id) ON DELETE CASCADE,
     contenido TEXT NOT NULL,
-    embedding vector(384),
+    embedding vector(1024),
     indice_orden INTEGER,
     creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

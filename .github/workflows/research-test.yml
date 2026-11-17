@@ -1,0 +1,43 @@
+name: Research E2E Tests
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  research-e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: alesys
+          POSTGRES_USER: alesys
+          POSTGRES_PASSWORD: alesys_dev_change_me
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build API
+        run: cargo build -p alesys-api
+      - name: Start API
+        env:
+          DATABASE_URL: postgres://alesys:alesys_dev_change_me@localhost:5432/alesys
+          RUST_LOG: alesys_api=info
+        run: |
+          ./target/debug/alesys-api &
+          sleep 5
+      - name: Run E2E tests
+        env:
+          ALESYS_API_URL: http://localhost:3000
+          ALESYS_TOKEN: dev-token-change-in-production
+        run: python3 tests/e2e/research_test.py

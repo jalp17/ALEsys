@@ -270,6 +270,24 @@ pub fn rrf_fusion(
 /// Resalta términos de búsqueda en el contenido
 ///
 /// Extrae fragmentos alrededor de las coincidencias y envuelve en `<mark>`.
+/// Safe byte cut: never splits a UTF-8 char. Returns a <= desired end index.
+fn safe_cut(s: &str, desired: usize) -> usize {
+    let mut d = desired.min(s.len());
+    while d > 0 && !s.is_char_boundary(d) {
+        d -= 1;
+    }
+    d
+}
+
+fn preview_of(content: &str, frag_size: usize) -> String {
+    let cut = safe_cut(content, frag_size);
+    if cut < content.len() {
+        format!("{}...", &content[..cut])
+    } else {
+        content.to_string()
+    }
+}
+
 pub fn highlight_terms(content: &str, query: &str, frag_size: usize, max_frags: usize) -> String {
     let lower_content = content.to_lowercase();
     let terms: Vec<String> = query
@@ -279,32 +297,29 @@ pub fn highlight_terms(content: &str, query: &str, frag_size: usize, max_frags: 
         .collect();
 
     if terms.is_empty() {
-        let preview = if content.len() > frag_size {
-            format!("{}...", &content[..frag_size])
-        } else {
-            content.to_string()
-        };
-        return preview;
+        return preview_of(content, frag_size);
     }
 
     // Encontrar todas las posiciones de coincidencias
     let mut matches: Vec<(usize, usize)> = Vec::new(); // (start, end) de coincidencias
     for term in &terms {
-        let mut start = 0;
-        while let Some(pos) = lower_content[start..].find(term.as_str()) {
-            let abs_pos = start + pos;
-            matches.push((abs_pos, abs_pos + term.len()));
-            start = abs_pos + 1;
+        let mut start = 0usize;
+        while start <= lower_content.len() {
+            match lower_content[start..].find(term.as_str()) {
+                Some(pos) => {
+                    let abs_pos = start + pos;
+                    matches.push((abs_pos, abs_pos + term.len()));
+                    let next = abs_pos + term.len();
+                    start = if next > start { next } else { start + 1 };
+                    start = safe_cut(&lower_content, start);
+                }
+                None => break,
+            }
         }
     }
 
     if matches.is_empty() {
-        let preview = if content.len() > frag_size {
-            format!("{}...", &content[..frag_size])
-        } else {
-            content.to_string()
-        };
-        return preview;
+        return preview_of(content, frag_size);
     }
 
     // Ordenar y fusionar coincidencias superpuestas
@@ -324,9 +339,9 @@ pub fn highlight_terms(content: &str, query: &str, frag_size: usize, max_frags: 
         let adjusted_start = find_word_boundary_start(content, window_start);
         let adjusted_end = find_word_boundary_end(content, window_end);
 
-        let before = &content[adjusted_start..*start];
-        let term = &content[*start..*end];
-        let after = &content[*end..adjusted_end];
+        let before = &content[adjusted_start..safe_cut(content, *start)];
+        let term = &content[safe_cut(content, *start)..safe_cut(content, *end)];
+        let after = &content[safe_cut(content, *end)..adjusted_end];
 
         let mut frag = String::new();
         if adjusted_start > 0 {
@@ -345,11 +360,7 @@ pub fn highlight_terms(content: &str, query: &str, frag_size: usize, max_frags: 
     }
 
     if fragments.is_empty() {
-        if content.len() > frag_size {
-            format!("{}...", &content[..frag_size])
-        } else {
-            content.to_string()
-        }
+        preview_of(content, frag_size)
     } else {
         fragments.join("\n")
     }
@@ -380,7 +391,7 @@ fn merge_overlapping(ranges: &[(usize, usize)]) -> Vec<(usize, usize)> {
 /// Encuentra el límite de palabra anterior más cercano
 fn find_word_boundary_start(content: &str, pos: usize) -> usize {
     let bytes = content.as_bytes();
-    let mut p = pos;
+    let mut p = safe_cut(content, pos);
     while p > 0 && bytes[p - 1] != b' ' && bytes[p - 1] != b'\n' && bytes[p - 1] != b'\t' {
         p -= 1;
     }
@@ -390,7 +401,7 @@ fn find_word_boundary_start(content: &str, pos: usize) -> usize {
 /// Encuentra el límite de palabra posterior más cercano
 fn find_word_boundary_end(content: &str, pos: usize) -> usize {
     let bytes = content.as_bytes();
-    let mut p = pos;
+    let mut p = safe_cut(content, pos);
     while p < bytes.len() && bytes[p] != b' ' && bytes[p] != b'\n' && bytes[p] != b'\t' {
         p += 1;
     }

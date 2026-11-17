@@ -1,0 +1,12 @@
+{
+  "name": "alesys-yjs-server",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "y-websocket": "^3.0.0",
+    "yjs": "^13.6.0"
+  }
+}

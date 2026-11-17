@@ -49,7 +49,7 @@ export function AdvancedSearch() {
   const [showSavedSearches, setShowSavedSearches] = useState(false);
   const [savedSearches, setSavedSearches] = useState<SavedSearch[]>([]);
 
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Load saved searches

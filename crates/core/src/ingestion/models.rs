@@ -20,6 +20,7 @@ pub enum IngestionMode {
     #[default]
     Full,
     FilesOnly,
+    Markdown,
 }
 
 impl Default for IngestionJob {
@@ -50,6 +51,7 @@ pub struct IngestionResult {
     pub database_path: Option<PathBuf>,
     pub chapters: Vec<Chapter>,
     pub images: Vec<ImageRef>,
+    pub tables: Vec<crate::ingestion::table_extractor::ExtractedTable>,
     pub citations: Vec<crate::bibliography::Citation>,
     pub stats: IngestionStats,
     pub warnings: Vec<String>,
@@ -65,6 +67,31 @@ pub struct Chapter {
     pub end_page: u32,
     pub markdown_path: PathBuf,
     pub image_refs: Vec<Uuid>,
+    // Experimental metadata (Fase I+D)
+    pub experiment_id: Option<String>,
+    pub trial_id: Option<String>,
+    pub area: Option<String>,
+    pub section: Option<String>,
+    pub source_type: Option<String>,
+}
+
+impl Default for Chapter {
+    fn default() -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            title: String::new(),
+            level: 0,
+            start_page: 0,
+            end_page: 0,
+            markdown_path: PathBuf::new(),
+            image_refs: vec![],
+            experiment_id: None,
+            trial_id: None,
+            area: None,
+            section: None,
+            source_type: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -94,6 +121,7 @@ pub struct IngestionStats {
     pub images_extracted: u32,
     pub formulas_detected: u32,
     pub tables_detected: u32,
+    pub tables_extracted: u32,
     pub processing_time_ms: u64,
     pub method_used: ProcessingMethod,
     pub database_chunks: Option<u32>,

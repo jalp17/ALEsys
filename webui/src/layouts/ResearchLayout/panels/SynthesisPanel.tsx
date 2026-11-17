@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
+import CollabEditor from '../../../components/CollabEditor'
+import Notebook from '../../../components/Notebook'
 
 interface Citation {
   id: string
@@ -67,7 +69,7 @@ export default function SynthesisPanel({ onToggleFullscreen: _onToggleFullscreen
   const [selectedChapterId, setSelectedChapterId] = useState<string>(selectedChapterIds?.[0] || '')
   const [citationStyle, setCitationStyle] = useState<CitationStyle>('apa')
   const [showCitationPicker, setShowCitationPicker] = useState(false)
-  const [isPreviewMode, setIsPreviewMode] = useState(false)
+  const [viewMode, setViewMode] = useState<'edit' | 'collab' | 'notebook' | 'preview'>('edit')
 
   useEffect(() => {
     if (!selectedChapterId) {
@@ -151,18 +153,32 @@ export default function SynthesisPanel({ onToggleFullscreen: _onToggleFullscreen
           </div>
           <div className="flex items-center gap-2">
             <button
+              onClick={() => setViewMode('edit')}
+              className={`rounded px-2 py-1 text-xs ${viewMode === 'edit' ? 'bg-primary-500 text-white' : 'border border-gray-700 text-gray-300 hover:bg-gray-800'}`}
+              type="button"
+            >
+              Editar
+            </button>
+            <button
+              onClick={() => setViewMode('collab')}
+              className={`rounded px-2 py-1 text-xs ${viewMode === 'collab' ? 'bg-primary-500 text-white' : 'border border-gray-700 text-gray-300 hover:bg-gray-800'}`}
+              type="button"
+            >
+              Collab
+            </button>
+            <button
+              onClick={() => setViewMode('notebook')}
+              className={`rounded px-2 py-1 text-xs ${viewMode === 'notebook' ? 'bg-primary-500 text-white' : 'border border-gray-700 text-gray-300 hover:bg-gray-800'}`}
+              type="button"
+            >
+              Notebook
+            </button>
+            <button
               onClick={() => setShowCitationPicker(!showCitationPicker)}
               className="rounded bg-primary-500 px-2 py-1 text-xs text-white hover:bg-primary-600"
               type="button"
             >
               Insertar cita
-            </button>
-            <button
-              onClick={() => setIsPreviewMode(!isPreviewMode)}
-              className="rounded border border-gray-700 px-2 py-1 text-xs text-gray-300 hover:bg-gray-800"
-              type="button"
-            >
-              {isPreviewMode ? 'Editar' : 'Preview'}
             </button>
             <button
               onClick={exportMarkdown}
@@ -206,15 +222,16 @@ export default function SynthesisPanel({ onToggleFullscreen: _onToggleFullscreen
       )}
 
       <div className="flex-1 overflow-hidden">
-        {isPreviewMode ? (
-          <div className="h-full overflow-y-auto p-4">
-            <div className="prose prose-invert max-w-none">
-              <h1 className="text-2xl font-bold text-gray-100">{state.title || 'Sin título'}</h1>
-              <div className="mt-4 whitespace-pre-wrap text-sm text-gray-300">
-                {state.content || 'Comienza a escribir tu síntesis...'}
-              </div>
-            </div>
-          </div>
+        {viewMode === 'collab' ? (
+          <CollabEditor
+            roomId={state.title || 'synthesis'}
+            wsUrl="ws://localhost:1234"
+            userName="researcher"
+            initialContent={state.content}
+            onChange={(c: string) => setState((prev) => ({ ...prev, content: c }))}
+          />
+        ) : viewMode === 'notebook' ? (
+          <Notebook />
         ) : (
           <textarea
             value={state.content}

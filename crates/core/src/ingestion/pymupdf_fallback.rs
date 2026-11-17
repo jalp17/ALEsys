@@ -60,6 +60,7 @@ impl PyMuPDFFallback {
             images_extracted: images.len() as u32,
             formulas_detected: 0, // PyMuPDF doesn't detect formulas well
             tables_detected: tables.len() as u32,
+            tables_extracted: 0,
             processing_time_ms: start_time.elapsed().as_millis() as u64,
             method_used: ProcessingMethod::PyMuPDF { ocr_enabled: self.tesseract_available },
             database_chunks: None,
@@ -76,6 +77,7 @@ impl PyMuPDFFallback {
             database_path: None,
             chapters,
             images,
+            tables: vec![],
             citations: vec![],
             stats,
             warnings: vec!["PyMuPDF fallback used - formula detection limited".to_string()],
@@ -245,6 +247,11 @@ for page_num in range(len(doc)):
                         end_page: i as u32 + 1,
                         markdown_path: PathBuf::new(),
                         image_refs: Vec::new(),
+                        experiment_id: None,
+                        trial_id: None,
+                        area: None,
+                        section: None,
+                        source_type: None,
                     });
                 }
             }
@@ -268,6 +275,11 @@ for page_num in range(len(doc)):
                 end_page: pages.len() as u32,
                 markdown_path: PathBuf::new(),
                 image_refs: Vec::new(),
+                experiment_id: None,
+                trial_id: None,
+                area: None,
+                section: None,
+                source_type: None,
             });
         }
 
