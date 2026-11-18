@@ -697,3 +697,102 @@ pub async fn ws_ingestion_handler(
         }
     })
 }
+
+/// POST /api/v1/ingestion/markdown/reindex
+/// Re-index only files whose content has changed since last index.
+pub async fn reindex_markdown_handler(
+    claims: Claims,
+    State(state): State<AppState>,
+    Json(payload): Json<IngestMarkdownRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    if !crate::auth::has_permission(&claims.role, Permission::IngestionWrite) {
+        return Err(ApiError {
+            error: "Forbidden: requires ingestion:write permission".to_string(),
+            code: "FORBIDDEN".to_string(),
+        });
+    }
+
+    let root = std::path::PathBuf::from(&payload.dir);
+    let files = alesys_core::ingestion::discover_markdown(&root, payload.max_files)
+        .map_err(|e| ApiError { error: e, code: "INVALID_DIR".to_string() })?;
+
+    let files_count = files.len();
+    let job_id = Uuid::new_v4().to_string();
+    let job = crate::state::MarkdownJobState {
+        job_id: job_id.clone(),
+        dir: payload.dir.clone(),
+        topic: payload.topic.clone(),
+        status: "processing".to_string(),
+        files_done: 0,
+        files_total: files_count,
+        chunks_indexed: 0,
+        files_indexed: 0,
+        skipped_empty: 0,
+        topics: vec![],
+        current_file: None,
+        current_topic: None,
+        message: Some("Re-indexando archivos modificados".to_string()),
+        error: None,
+        result: None,
+        created_at: Utc::now(),
+        cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+    };
+
+    state.markdown_jobs.write().await.insert(job_id.clone(), job.clone());
+
+    let jobs_map = state.markdown_jobs.clone();
+    let graphrag = state.graphrag.clone();
+    let db = state.db.clone();
+    let topic_override = payload.topic.clone();
+    let jid = job_id.clone();
+    let cancelled = job.cancelled.clone();
+    let files_clone = files.clone();
+    let jobs_map_clone = jobs_map.clone();
+    let job_id_clone = job_id.clone();
+
+    tokio::spawn(async move {
+        let indexer = alesys_core::ingestion::MarkdownIndexer::new(db.clone());
+        let (checked, reindexed, skipped, errors) = indexer
+            .reindex_changed(&files_clone, &graphrag, topic_override.as_deref(), Some(&move |p: alesys_core::ingestion::MarkdownProgress| {
+                let guard = jobs_map.clone();
+                let gid = jid.clone();
+                tokio::spawn(async move {
+                    let mut g = guard.write().await;
+                    if let Some(j) = g.get_mut(&gid) {
+                        j.files_done = p.files_done;
+                        j.files_total = p.files_total;
+                        j.chunks_indexed = p.chunks_indexed;
+                        j.current_file = p.current_file.clone();
+                        j.current_topic = p.current_topic.clone();
+                    }
+                });
+            }))
+            .await;
+
+        let mut guard = jobs_map_clone.write().await;
+        if let Some(j) = guard.get_mut(&job_id_clone) {
+            j.status = "completed".to_string();
+            j.files_done = j.files_total;
+            j.files_indexed = reindexed;
+            j.current_file = None;
+            j.current_topic = None;
+            j.message = Some(format!(
+                "Re-index completado: {} archivos verificados, {} re-indexados, {} sin cambios",
+                checked, reindexed, skipped
+            ));
+            j.result = Some(serde_json::json!({
+                "checked": checked,
+                "reindexed": reindexed,
+                "skipped": skipped,
+                "errors": errors,
+            }));
+        }
+    });
+
+    Ok(Json(serde_json::json!({
+        "job_id": job_id,
+        "status": "processing",
+        "files_found": files_count,
+        "poll_url": format!("/api/v1/ingestion/markdown/status/{}", job_id),
+    })))
+}

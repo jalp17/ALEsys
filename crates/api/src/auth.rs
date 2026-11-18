@@ -7,6 +7,7 @@ use axum::{
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use crate::state::AppState;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Claims {
@@ -103,10 +104,16 @@ where
 }
 
 pub async fn auth_middleware(
-    State(state): State<Arc<AuthState>>,
+    State(state): State<AppState>,
     request: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
+    // Skip auth for public endpoints
+    let path = request.uri().path();
+    if path == "/health" || path == "/metrics" || path.ends_with("/auth/login") {
+        return Ok(next.run(request).await);
+    }
+
     let auth_header = request
         .headers()
         .get("Authorization")
@@ -117,7 +124,7 @@ pub async fn auth_middleware(
         _ => return Err(StatusCode::UNAUTHORIZED),
     };
 
-    match verify_token(token, &state.jwt_config.secret) {
+    match verify_token(token, &state.auth_state.jwt_config.secret) {
         Ok(_claims) => Ok(next.run(request).await),
         Err(_) => Err(StatusCode::UNAUTHORIZED),
     }

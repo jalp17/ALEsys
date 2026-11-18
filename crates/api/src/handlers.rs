@@ -39,6 +39,7 @@ impl IntoResponse for ApiError {
         let status = match self.code.as_str() {
             "NOT_FOUND" => StatusCode::NOT_FOUND,
             "VALIDATION" => StatusCode::BAD_REQUEST,
+            "UNAUTHORIZED" => StatusCode::UNAUTHORIZED,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
         (status, Json(self)).into_response()
@@ -891,9 +892,12 @@ pub async fn login(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     // TODO: In production, validate against database with bcrypt
     // For now, simple hardcoded validation for development
+    let admin_pass = std::env::var("ALESYS_ADMIN_PASSWORD").unwrap_or_else(|_| "alesys".to_string());
+    let user_pass = std::env::var("ALESYS_USER_PASSWORD").unwrap_or_else(|_| "alesys".to_string());
+
     let (user_id, role) = match (req.username.as_str(), req.password.as_str()) {
-        ("admin", "alesys") => ("admin", Role::Admin),
-        ("user", "alesys") => ("user", Role::User),
+        (u, p) if u == "admin" && p == admin_pass => ("admin", Role::Admin),
+        (u, p) if u == "user" && p == user_pass => ("user", Role::User),
         _ => {
             return Err(ApiError {
                 error: "Invalid credentials".into(),

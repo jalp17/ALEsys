@@ -171,7 +171,7 @@ use crate::tracking::{MlflowClient, TrackingConfig};
                     text: current_chunk.clone(),
                     topic: topic.to_string(),
                     session_id: None,
-                    source_pdf: output_dir.to_string_lossy().to_string(),
+                    source_pdf: chapter.markdown_path.to_string_lossy().to_string(),
                     chapter_title: chapter.title.clone(),
                     chapter_id: chapter.id,
                     experiment_id: chapter.experiment_id.clone(),
@@ -204,7 +204,7 @@ use crate::tracking::{MlflowClient, TrackingConfig};
                 text: current_chunk,
                 topic: topic.to_string(),
                 session_id: None,
-                source_pdf: output_dir.to_string_lossy().to_string(),
+                source_pdf: chapter.markdown_path.to_string_lossy().to_string(),
                 chapter_title: chapter.title.clone(),
                 chapter_id: chapter.id,
                 experiment_id: chapter.experiment_id.clone(),
@@ -245,10 +245,16 @@ use crate::tracking::{MlflowClient, TrackingConfig};
         topic: &str,
     ) -> Result<(), GraphRAGIngestionError> {
         for embedded in chunks {
+            // Compute SHA-256 hash of chunk content for change detection
+            use sha2::{Sha256, Digest};
+            let mut hasher = Sha256::new();
+            hasher.update(embedded.chunk.text.as_bytes());
+            let hash = format!("{:x}", hasher.finalize());
+
             let row = sqlx::query(
-                r#"INSERT INTO documentos (ruta_relativa, tipo, topic, session_id, source_pdf, chapter_title, experiment_id, trial_id, area, section, source_type, data_type, frontmatter)
-                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, '{}'::jsonb)
-                   ON CONFLICT (ruta_relativa) DO UPDATE SET topic = EXCLUDED.topic
+                r#"INSERT INTO documentos (ruta_relativa, tipo, topic, session_id, source_pdf, chapter_title, experiment_id, trial_id, area, section, source_type, data_type, frontmatter, contenido_hash)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, '{}'::jsonb, $13)
+                   ON CONFLICT (ruta_relativa) DO UPDATE SET topic = EXCLUDED.topic, contenido_hash = EXCLUDED.contenido_hash
                    RETURNING id"#,
             )
             .bind(format!("chunk:{}", embedded.chunk.chapter_id))
@@ -263,6 +269,7 @@ use crate::tracking::{MlflowClient, TrackingConfig};
             .bind(&embedded.chunk.section)
             .bind(&embedded.chunk.source_type)
             .bind(&embedded.chunk.data_type)
+            .bind(&hash)
             .fetch_one(pool)
             .await
             .map_err(|e| GraphRAGIngestionError::Database(e.to_string()))?;

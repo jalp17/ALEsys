@@ -29,21 +29,11 @@ const queryClient = new QueryClient();
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
-// Auto-login for local dev: obtain and store a JWT token if none exists
+// Auto-login disabled for production security
+// Users must authenticate manually via /auth/login
 async function ensureAuthToken() {
-  try {
-    const existing = localStorage.getItem('alesys_token');
-    if (existing) return;
-    const resp = await fetch(`${API_BASE}/api/v1/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: 'admin', password: 'alesys' }),
-    });
-    if (resp.ok) {
-      const data = await resp.json();
-      if (data.token) localStorage.setItem('alesys_token', data.token);
-    }
-  } catch { /* noop: dev mode */ }
+  // No auto-login in production - require manual authentication
+  return;
 }
 ensureAuthToken();
 

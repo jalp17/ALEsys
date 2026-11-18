@@ -284,3 +284,144 @@ fn first_heading(content: &str) -> Option<String> {
     }
     None
 }
+/// Compute SHA-256 hash of file content.
+pub fn compute_file_hash(path: &std::path::Path) -> Result<String, String> {
+    use sha2::{Sha256, Digest};
+    use std::io::Read;
+    let mut file = std::fs::File::open(path).map_err(|e| e.to_string())?;
+    let mut hasher = Sha256::new();
+    let mut buf = [0u8; 8192];
+    loop {
+        let n = file.read(&mut buf).map_err(|e| e.to_string())?;
+        if n == 0 { break; }
+        hasher.update(&buf[..n]);
+    }
+    Ok(format!("{:x}", hasher.finalize()))
+}
+
+impl MarkdownIndexer {
+    /// Re-index only files whose content has changed since last index.
+    /// Returns (files_checked, files_reindexed, files_skipped, errors).
+    pub async fn reindex_changed(
+        &self,
+        files: &[DiscoveredFile],
+        graphrag: &crate::graphrag::GraphRAG,
+        topic_override: Option<&str>,
+        on_progress: Option<ProgressCallback<'_>>,
+    ) -> (usize, usize, usize, Vec<String>) {
+        let mut checked = 0usize;
+        let mut reindexed = 0usize;
+        let mut skipped = 0usize;
+        let mut errors = Vec::new();
+        let total = files.len();
+
+        for (i, f) in files.iter().enumerate() {
+            checked += 1;
+
+            if let Some(cb) = on_progress {
+                cb(MarkdownProgress {
+                    files_done: i + 1,
+                    files_total: total,
+                    chunks_indexed: reindexed,
+                    current_file: Some(f.path.display().to_string()),
+                    current_topic: Some(f.topic.clone()),
+                });
+            }
+
+            // Compute current hash
+            let current_hash = match compute_file_hash(&f.path) {
+                Ok(h) => h,
+                Err(e) => {
+                    errors.push(format!("{}: hash error: {}", f.path.display(), e));
+                    continue;
+                }
+            };
+
+            // Check stored hash
+            let stored_hash: Option<String> = sqlx::query_scalar(
+                "SELECT contenido_hash FROM documentos WHERE source_pdf = $1 LIMIT 1"
+            )
+            .bind(f.path.display().to_string())
+            .fetch_optional(&self.pool)
+            .await
+            .ok()
+            .flatten();
+
+            if let Some(stored) = stored_hash {
+                if stored == current_hash {
+                    skipped += 1;
+                    continue;
+                }
+            }
+
+            // Re-index: delete old + index new
+            // Delete old documents/fragments for this file
+            let _ = sqlx::query(
+                "DELETE FROM documentos WHERE source_pdf = $1"
+            )
+            .bind(f.path.display().to_string())
+            .execute(&self.pool)
+            .await;
+
+            // Build single-file ingestion result
+            let content = match std::fs::read_to_string(&f.path) {
+                Ok(c) => c,
+                Err(e) => {
+                    errors.push(format!("{}: read error: {}", f.path.display(), e));
+                    continue;
+                }
+            };
+            if content.trim().is_empty() {
+                skipped += 1;
+                continue;
+            }
+
+            let title = first_heading(&content).unwrap_or_else(|| f.title.clone());
+            let topic = topic_override.unwrap_or(&f.topic).to_string();
+            let chapter = crate::ingestion::models::Chapter {
+                id: uuid::Uuid::new_v4(),
+                title,
+                level: 1,
+                start_page: 0,
+                end_page: 0,
+                markdown_path: f.path.clone(),
+                image_refs: vec![],
+                experiment_id: None,
+                trial_id: None,
+                area: None,
+                section: None,
+                source_type: Some("markdown".to_string()),
+            };
+
+            let result_dir = f.path.parent().unwrap_or(std::path::Path::new(".")).to_path_buf();
+            let ingestion_result = crate::ingestion::models::IngestionResult {
+                job_id: uuid::Uuid::new_v4(),
+                success: true,
+                mode: crate::ingestion::models::IngestionMode::Markdown,
+                output_dir: result_dir,
+                markdown_path: f.path.clone(),
+                images_dir: std::path::PathBuf::new(),
+                database_generated: false,
+                database_path: None,
+                chapters: vec![chapter],
+                images: vec![],
+                tables: vec![],
+                citations: vec![],
+                stats: Default::default(),
+                warnings: vec![],
+                error: None,
+            };
+
+            match self.hook.index_documents(graphrag, &ingestion_result, &self.pool).await {
+                Ok(idx) => {
+                    reindexed += 1;
+                }
+                Err(e) => {
+                    errors.push(format!("{}: index error: {}", f.path.display(), e));
+                }
+            }
+        }
+
+        (checked, reindexed, skipped, errors)
+    }
+}

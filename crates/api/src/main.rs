@@ -18,7 +18,7 @@ use anyhow::Result;
 use axum::{
     extract::State,
     http::{Request, StatusCode},
-    middleware::{self, Next},
+    middleware::{self, from_fn_with_state, Next},
     response::{IntoResponse, Response},
     routing::{delete, get, post, put},
     Json, Router,
@@ -67,7 +67,7 @@ use handlers::{
     search_faceted, search_suggest,
     get_llm_status, load_llm, unload_llm,
 };
-use handlers_ingestion::{ingest_pdf_handler, ingest_batch_handler, ingest_markdown_handler, ingest_status_handler, get_ingestion_config_handler, put_ingestion_config_handler, ws_ingestion_handler, ingest_markdown_status_handler, list_markdown_jobs_handler, cancel_markdown_job_handler};
+use handlers_ingestion::{ingest_pdf_handler, ingest_batch_handler, ingest_markdown_handler, ingest_status_handler, get_ingestion_config_handler, put_ingestion_config_handler, ws_ingestion_handler, ingest_markdown_status_handler, list_markdown_jobs_handler, cancel_markdown_job_handler, reindex_markdown_handler};
 use handlers_bibliography::{store_citation_handler, list_citations_handler, format_citation_handler, deduplicate_citations_handler};
 use handlers_documents::{list_ingestion_history_handler, get_document_fragments_handler};
 use handlers_research::{
@@ -383,6 +383,7 @@ async fn main() -> Result<()> {
         .route("/ingestion/markdown/status/{id}", get(ingest_markdown_status_handler))
         .route("/ingestion/markdown/jobs", get(list_markdown_jobs_handler))
         .route("/ingestion/markdown/{id}/cancel", post(cancel_markdown_job_handler))
+        .route("/ingestion/markdown/reindex", post(reindex_markdown_handler))
         .route("/ingestion/colab/process", post(ingest_pdf_handler))
         .route("/ingestion/status/{id}", get(ingest_status_handler))
         .route("/ingestion/config", get(get_ingestion_config_handler))
@@ -417,9 +418,12 @@ async fn main() -> Result<()> {
         .route("/bibliography/format/{citation_id}", post(format_citation_handler))
         .route("/bibliography/deduplicate", post(deduplicate_citations_handler));
 
+    // Apply auth middleware to api_v1 routes
+    let protected_api = api_v1.layer(from_fn_with_state(state.clone(), auth_middleware));
+
     let app = Router::new()
-        .nest("/api/v1", api_v1.clone())
-        .nest("/api", api_v1)
+        .nest("/api/v1", protected_api.clone())
+        .nest("/api", protected_api)
         .route("/ws/chat", get(ws_chat_handler))
         .route("/ws/agent", get(ws_agent_handler))
         .route("/ws/ingestion/{job_id}", get(ws_ingestion_handler))
