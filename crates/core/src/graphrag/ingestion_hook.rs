@@ -18,8 +18,8 @@ use std::path::PathBuf;
 
 const BATCH_SIZE: usize = 32;
 const OVERLAP_TOKENS: usize = 200;
-const MAX_CHAPTER_CHARS: usize = 5000;
-const SPLIT_MAX_CHARS: usize = 2500;
+const MAX_CHAPTER_CHARS: usize = 3000;
+const SPLIT_MAX_CHARS: usize = 1500;
 
 #[derive(Debug, Clone)]
 pub struct IngestionHookConfig {
