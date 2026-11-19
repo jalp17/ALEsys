@@ -7,6 +7,7 @@ import { SECTION_GROUPS, findSection, findItem } from '../config/sections'
 import { CommandPalette } from '../components/CommandPalette'
 import { LLMStatusIndicator } from '../components/LLMStatusIndicator'
 import { AgentStatusIndicator } from '../components/AgentStatusIndicator'
+import { TaskMonitor } from '../components/TaskMonitor'
 import { cn } from '../utils/cn'
 
 interface AppShellProps {
@@ -188,6 +189,7 @@ export function AppShell({ children, inspector, inspectorOpen, onToggleInspector
             </button>
             <LLMStatusIndicator />
             <AgentStatusIndicator />
+            <TaskMonitor />
             {onToggleInspector && (
               <button
                 onClick={onToggleInspector}
