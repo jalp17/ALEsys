@@ -15,3 +15,5 @@ CREATE INDEX IF NOT EXISTS idx_fragmentos_documento ON fragmentos(documento_id);
 CREATE INDEX IF NOT EXISTS idx_fragmentos_embedding ON fragmentos USING hnsw (embedding vector_cosine_ops);
 
 ALTER TABLE documentos ADD COLUMN IF NOT EXISTS contenido_hash VARCHAR(64);
+-- Track embedding source for validation
+ALTER TABLE fragmentos ADD COLUMN IF NOT EXISTS embedding_source VARCHAR(20) DEFAULT 'unknown';
