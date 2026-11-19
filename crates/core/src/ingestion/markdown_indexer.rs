@@ -243,12 +243,32 @@ impl MarkdownIndexer {
                     error: None,
                 };
 
-                match self.hook.index_documents(graphrag, &ingestion_result, &self.pool).await {
-                    Ok(idx) => result.chunks_indexed += idx.chunks_indexed,
-                    Err(e) => {
-                        let msg = format!("Markdown index error (topic={}): {}", topic, e);
-                        tracing::error!("{}", msg);
-                        result.errors.push(msg);
+                // Reintentar hasta que el embedder este disponible.
+                // No avanzar al siguiente topic hasta que este se indexe correctamente.
+                loop {
+                    match self.hook.index_documents(graphrag, &ingestion_result, &self.pool).await {
+                        Ok(idx) => {
+                            result.chunks_indexed += idx.chunks_indexed;
+                            break;
+                        }
+                        Err(e) => {
+                            let msg = format!("Markdown index error (topic={}): {}", topic, e);
+                            tracing::warn!("{}", msg);
+                            result.errors.push(msg);
+
+                            // Esperar 60 segundos antes de reintentar
+                            if let Some(cb) = on_progress {
+                                cb(MarkdownProgress {
+                                    files_done,
+                                    files_total,
+                                    chunks_indexed: result.chunks_indexed,
+                                    current_file: Some(format!("ESPERANDO EMBEDDER - {}", topic)),
+                                    current_topic: Some(topic.clone()),
+                                });
+                            }
+
+                            tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+                        }
                     }
                 }
 
@@ -412,12 +432,35 @@ impl MarkdownIndexer {
                 error: None,
             };
 
-            match self.hook.index_documents(graphrag, &ingestion_result, &self.pool).await {
-                Ok(idx) => {
-                    reindexed += 1;
-                }
-                Err(e) => {
-                    errors.push(format!("{}: index error: {}", f.path.display(), e));
+            // Reintentar hasta que el embedder este disponible.
+            // No avanzar al siguiente archivo hasta que este se indexe correctamente.
+            let mut attempt = 0u32;
+            loop {
+                attempt += 1;
+                match self.hook.index_documents(graphrag, &ingestion_result, &self.pool).await {
+                    Ok(_) => {
+                        reindexed += 1;
+                        break;
+                    }
+                    Err(e) => {
+                        let msg = format!("{}: index error (intento {}): {}", f.path.display(), attempt, e);
+                        tracing::warn!("{}", msg);
+                        errors.push(msg);
+
+                        // Esperar 60 segundos antes de reintentar (embedder puede estar caido)
+                        if let Some(cb) = on_progress {
+                            cb(MarkdownProgress {
+                                files_done: i + 1,
+                                files_total: total,
+                                chunks_indexed: reindexed,
+                                current_file: Some(format!("ESPERANDO EMBEDDER (intento {}) - {}", attempt, f.path.display())),
+                                current_topic: Some(f.topic.clone()),
+                            });
+                        }
+
+                        // Esperar 60s, luego reintentar
+                        tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+                    }
                 }
             }
         }
