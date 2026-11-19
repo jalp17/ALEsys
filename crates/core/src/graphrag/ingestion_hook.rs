@@ -281,8 +281,8 @@ use crate::tracking::{MlflowClient, TrackingConfig};
             );
 
             sqlx::query(
-                r#"INSERT INTO fragmentos (documento_id, contenido, embedding, indice_orden)
-                   VALUES ($1, $2, $3::vector, $4)"#,
+                r#"INSERT INTO fragmentos (documento_id, contenido, embedding, indice_orden, embedding_source)
+                   VALUES ($1, $2, $3::vector, $4, 'http')"#,
             )
             .bind(doc_id)
             .bind(&embedded.chunk.text)
