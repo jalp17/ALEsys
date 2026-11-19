@@ -227,12 +227,56 @@ use crate::tracking::{MlflowClient, TrackingConfig};
             let embeddings = self.embedder.encode_batch(&texts)
                 .map_err(|e| GraphRAGIngestionError::Embedding(e.to_string()))?;
 
+            if embeddings.len() != batch.len() {
+                return Err(GraphRAGIngestionError::Embedding(format!(
+                    "Mismatch: {} embeddings for {} chunks",
+                    embeddings.len(), batch.len()
+                )));
+            }
+
             for (chunk, embedding) in batch.iter().zip(embeddings) {
+                // Verificar que el embedding es valido (no nulo, no all-zero, dimension correcta, sin NaN/Inf)
+                if embedding.is_empty() {
+                    tracing::warn!("Embedding vacio para chunk: {}", chunk.chapter_title);
+                    continue;
+                }
+                if embedding.len() != self.config.embedding_dimension {
+                    tracing::warn!(
+                        "Dimension incorrecta: {} (esperado {}) para chunk: {}",
+                        embedding.len(), self.config.embedding_dimension, chunk.chapter_title
+                    );
+                    continue;
+                }
+                if embedding.iter().all(|&x| x == 0.0) {
+                    tracing::warn!("Embedding all-zero (falso) para chunk: {}", chunk.chapter_title);
+                    continue;
+                }
+                if embedding.iter().any(|x| x.is_nan() || x.is_infinite()) {
+                    tracing::warn!("Embedding con NaN/Inf para chunk: {}", chunk.chapter_title);
+                    continue;
+                }
+
+                // Verificar que no es un embedding hash-based (falso)
+                // El patron hash-based tiene: val[i] = (hash * (i+1)) / u32::MAX normalizado
+                // Detectamos verificando si la varianza es demasiado baja
+                let mean: f32 = embedding.iter().sum::<f32>() / embedding.len() as f32;
+                let variance: f32 = embedding.iter().map(|x| (x - mean) * (x - mean)).sum::<f32>() / embedding.len() as f32;
+                if variance < 1e-8 {
+                    tracing::warn!("Embedding con varianza sospechosamente baja para chunk: {}", chunk.chapter_title);
+                    continue;
+                }
+
                 embedded.push(EmbeddedChunk {
                     chunk: chunk.clone(),
                     embedding,
                 });
             }
+        }
+
+        if embedded.is_empty() && !chunks.is_empty() {
+            return Err(GraphRAGIngestionError::Embedding(
+                "Todos los embeddings fueron invalidos o filtrados".to_string()
+            ));
         }
 
         Ok(embedded)
