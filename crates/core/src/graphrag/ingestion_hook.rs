@@ -224,48 +224,86 @@ use crate::tracking::{MlflowClient, TrackingConfig};
 
         for batch in chunks.chunks(BATCH_SIZE) {
             let texts: Vec<&str> = batch.iter().map(|c| c.text.as_str()).collect();
-            let embeddings = self.embedder.encode_batch(&texts)
-                .map_err(|e| GraphRAGIngestionError::Embedding(e.to_string()))?;
 
-            if embeddings.len() != batch.len() {
-                return Err(GraphRAGIngestionError::Embedding(format!(
-                    "Mismatch: {} embeddings for {} chunks",
-                    embeddings.len(), batch.len()
-                )));
-            }
+            // Reintentar hasta obtener embeddings validos para TODOS los chunks del batch.
+            // No descartar silenciosamente: si un embedding es invalido, reintentar el batch completo.
+            let mut attempt = 0u32;
+            let max_attempts = 5u32;
+            let valid_embeddings = loop {
+                attempt += 1;
+                let embeddings = match self.embedder.encode_batch(&texts) {
+                    Ok(e) => e,
+                    Err(e) => {
+                        tracing::warn!("Embedding batch error (intento {}): {}", attempt, e);
+                        if attempt >= max_attempts {
+                            return Err(GraphRAGIngestionError::Embedding(format!(
+                                "Embedder no disponible tras {} intentos: {}", attempt, e
+                            )));
+                        }
+                        tokio::time::sleep(std::time::Duration::from_secs(2u64.pow(attempt))).await;
+                        continue;
+                    }
+                };
 
-            for (chunk, embedding) in batch.iter().zip(embeddings) {
-                // Verificar que el embedding es valido (no nulo, no all-zero, dimension correcta, sin NaN/Inf)
-                if embedding.is_empty() {
-                    tracing::warn!("Embedding vacio para chunk: {}", chunk.chapter_title);
-                    continue;
-                }
-                if embedding.len() != self.config.embedding_dimension {
-                    tracing::warn!(
-                        "Dimension incorrecta: {} (esperado {}) para chunk: {}",
-                        embedding.len(), self.config.embedding_dimension, chunk.chapter_title
-                    );
-                    continue;
-                }
-                if embedding.iter().all(|&x| x == 0.0) {
-                    tracing::warn!("Embedding all-zero (falso) para chunk: {}", chunk.chapter_title);
-                    continue;
-                }
-                if embedding.iter().any(|x| x.is_nan() || x.is_infinite()) {
-                    tracing::warn!("Embedding con NaN/Inf para chunk: {}", chunk.chapter_title);
-                    continue;
-                }
-
-                // Verificar que no es un embedding hash-based (falso)
-                // El patron hash-based tiene: val[i] = (hash * (i+1)) / u32::MAX normalizado
-                // Detectamos verificando si la varianza es demasiado baja
-                let mean: f32 = embedding.iter().sum::<f32>() / embedding.len() as f32;
-                let variance: f32 = embedding.iter().map(|x| (x - mean) * (x - mean)).sum::<f32>() / embedding.len() as f32;
-                if variance < 1e-8 {
-                    tracing::warn!("Embedding con varianza sospechosamente baja para chunk: {}", chunk.chapter_title);
+                if embeddings.len() != batch.len() {
+                    tracing::warn!("Mismatch: {} embeddings para {} chunks (intento {})", embeddings.len(), batch.len(), attempt);
+                    if attempt >= max_attempts {
+                        return Err(GraphRAGIngestionError::Embedding(format!(
+                            "Mismatch de embeddings tras {} intentos", attempt
+                        )));
+                    }
+                    tokio::time::sleep(std::time::Duration::from_secs(2u64.pow(attempt))).await;
                     continue;
                 }
 
+                // Validar cada embedding individualmente
+                let mut all_valid = true;
+                let mut invalid_reasons = Vec::new();
+                for (chunk, embedding) in batch.iter().zip(embeddings.iter()) {
+                    if embedding.is_empty() {
+                        all_valid = false;
+                        invalid_reasons.push(format!("vacio: {}", chunk.chapter_title));
+                        continue;
+                    }
+                    if embedding.len() != self.config.embedding_dimension {
+                        all_valid = false;
+                        invalid_reasons.push(format!("dim {} (esperado {}): {}", embedding.len(), self.config.embedding_dimension, chunk.chapter_title));
+                        continue;
+                    }
+                    if embedding.iter().all(|&x| x == 0.0) {
+                        all_valid = false;
+                        invalid_reasons.push(format!("all-zero: {}", chunk.chapter_title));
+                        continue;
+                    }
+                    if embedding.iter().any(|x| x.is_nan() || x.is_infinite()) {
+                        all_valid = false;
+                        invalid_reasons.push(format!("NaN/Inf: {}", chunk.chapter_title));
+                        continue;
+                    }
+                    let mean: f32 = embedding.iter().sum::<f32>() / embedding.len() as f32;
+                    let variance: f32 = embedding.iter().map(|x| (x - mean) * (x - mean)).sum::<f32>() / embedding.len() as f32;
+                    if variance < 1e-8 {
+                        all_valid = false;
+                        invalid_reasons.push(format!("varianza baja: {}", chunk.chapter_title));
+                        continue;
+                    }
+                }
+
+                if all_valid {
+                    break embeddings;
+                }
+
+                // Algunos embeddings invalidos: reintentar el batch completo
+                tracing::warn!("Embeddings invalidos (intento {}): {:?}", attempt, invalid_reasons);
+                if attempt >= max_attempts {
+                    return Err(GraphRAGIngestionError::Embedding(format!(
+                        "Embeddings invalidos tras {} intentos: {:?}", attempt, invalid_reasons
+                    )));
+                }
+                tokio::time::sleep(std::time::Duration::from_secs(2u64.pow(attempt))).await;
+            };
+
+            for (chunk, embedding) in batch.iter().zip(valid_embeddings) {
                 embedded.push(EmbeddedChunk {
                     chunk: chunk.clone(),
                     embedding,
@@ -275,7 +313,7 @@ use crate::tracking::{MlflowClient, TrackingConfig};
 
         if embedded.is_empty() && !chunks.is_empty() {
             return Err(GraphRAGIngestionError::Embedding(
-                "Todos los embeddings fueron invalidos o filtrados".to_string()
+                "Todos los embeddings fueron invalidos".to_string()
             ));
         }
 
