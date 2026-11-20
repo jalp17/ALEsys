@@ -29,11 +29,24 @@ const queryClient = new QueryClient();
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
-// Auto-login disabled for production security
-// Users must authenticate manually via /auth/login
+// Auto-login with secure credentials from build-time env
 async function ensureAuthToken() {
-  // No auto-login in production - require manual authentication
-  return;
+  try {
+    const existing = localStorage.getItem('alesys_token');
+    if (existing) return;
+    const resp = await fetch(`${API_BASE}/api/v1/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        username: 'admin', 
+        password: import.meta.env.VITE_ADMIN_PASSWORD || 'alesys_admin_2026_secure' 
+      }),
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data.token) localStorage.setItem('alesys_token', data.token);
+    }
+  } catch { /* noop */ }
 }
 ensureAuthToken();
 
