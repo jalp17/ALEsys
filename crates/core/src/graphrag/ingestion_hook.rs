@@ -18,8 +18,8 @@ use std::path::PathBuf;
 
 const BATCH_SIZE: usize = 32;
 const OVERLAP_TOKENS: usize = 200;
-const MAX_CHAPTER_CHARS: usize = 3000;
-const SPLIT_MAX_CHARS: usize = 1500;
+const MAX_CHAPTER_CHARS: usize = 2000;
+const SPLIT_MAX_CHARS: usize = 800;
 
 #[derive(Debug, Clone)]
 pub struct IngestionHookConfig {
@@ -222,7 +222,31 @@ use crate::tracking::{MlflowClient, TrackingConfig};
     async fn embed_chunks(&self, chunks: &[Chunk]) -> Result<Vec<EmbeddedChunk>, GraphRAGIngestionError> {
         let mut embedded = Vec::new();
 
-        for batch in chunks.chunks(BATCH_SIZE) {
+        // Safety: truncate any chunk that exceeds safe token limit (900 tokens ≈ 2700 chars)
+        // to prevent llama.cpp from rejecting the entire batch
+        let safe_chunks: Vec<Chunk> = chunks.iter().map(|c| {
+            if self.estimate_tokens(&c.text) > 900 {
+                let safe_chars = 900 * 3; // ~2700 chars max
+                let mut truncated = c.text.clone();
+                if truncated.len() > safe_chars {
+                    // Find char boundary
+                    let mut end = safe_chars;
+                    while end > 0 && !truncated.is_char_boundary(end) {
+                        end -= 1;
+                    }
+                    truncated.truncate(end);
+                    let mut chunk = c.clone();
+                    chunk.text = truncated;
+                    chunk
+                } else {
+                    c.clone()
+                }
+            } else {
+                c.clone()
+            }
+        }).collect();
+
+        for batch in safe_chunks.chunks(BATCH_SIZE) {
             let texts: Vec<&str> = batch.iter().map(|c| c.text.as_str()).collect();
 
             // Reintentar hasta obtener embeddings validos para TODOS los chunks del batch.
@@ -379,7 +403,8 @@ use crate::tracking::{MlflowClient, TrackingConfig};
     }
 
     fn estimate_tokens(&self, text: &str) -> usize {
-        text.split_whitespace().count()
+        // Conservative estimate: 1 token ≈ 3 chars (accounts for code/formulas with high token density)
+        (text.len() + 2) / 3
     }
 }
 
