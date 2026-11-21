@@ -84,12 +84,12 @@ const loadGraph = async () => {
   try {
     const token = localStorage.getItem('alesys_token')
     // Try to fetch graph data from API
-    const res = await axios.get(`${API_BASE}/api/v1/graph/nodes`, {
+    const res = await axios.get(`${API_BASE}/api/v1/graph`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       params: { limit: 500 },
     })
-    nodes.value = res.data.nodes || []
-    edges.value = res.data.edges || []
+    nodes.value = (res.data.nodes || []).map((n: any) => ({ id: String(n.id), label: n.label || n.id, type: n.type || 'document' }))
+    edges.value = (res.data.edges || []).map((e: any) => ({ source: String(e.source), target: String(e.target), type: e.type || 'related' }))
   } catch (err: any) {
     // Fallback: show placeholder
     console.error('Graph load error:', err)
