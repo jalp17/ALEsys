@@ -38,6 +38,7 @@ const router = createRouter({
     { path: '/ingestion', component: () => import('./pages/Ingestion.vue') },
     { path: '/ingestion/markdown', component: () => import('./pages/MarkdownIngestion.vue') },
     { path: '/graph', component: () => import('./pages/Graph.vue') },
+    { path: '/editor', component: () => import('./pages/Editor.vue') },
     { path: '/settings', component: () => import('./pages/Settings.vue') },
     { path: '/search', component: () => import('./pages/AdvancedSearch.vue') },
     { path: '/analytics', component: () => import('./pages/Analytics.vue') },
