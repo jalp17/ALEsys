@@ -19,15 +19,7 @@
     </div>
 
     <div class="flex-1 overflow-hidden relative">
-      <!-- Graph canvas -->
-      <div ref="graphContainer" class="w-full h-full bg-dark-900">
-        <div v-if="loading" class="absolute inset-0 flex items-center justify-center">
-          <Loader2 class="h-8 w-8 animate-spin text-primary-400" />
-        </div>
-        <div v-if="!loading && nodes.length === 0" class="absolute inset-0 flex items-center justify-center text-gray-500">
-          Haz clic en "Cargar" para visualizar el grafo
-        </div>
-      </div>
+      <GraphCanvas :nodes="nodes" :edges="edges" :loading="loading" />
 
       <!-- Node detail panel -->
       <div v-if="selectedNode" class="absolute right-4 top-4 w-72 bg-dark-800 rounded-lg p-4 shadow-xl border border-gray-700">
@@ -58,7 +50,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import axios from 'axios'
-import { Loader2 } from 'lucide-vue-next'
+import GraphCanvas from '../components/GraphCanvas.vue'
 
 const API_BASE = import.meta.env.VITE_API_URL || ''
 
