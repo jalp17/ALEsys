@@ -1,11 +1,11 @@
 <template>
   <div class="flex h-screen overflow-hidden bg-dark-900 text-gray-100">
     <!-- Nav Rail -->
-    <nav class="flex w-14 shrink-0 flex-col items-center border-r border-gray-800 bg-dark-800 py-3">
+    <nav class="flex w-14 shrink-0 flex-col items-center border-r border-gray-800 bg-dark-800 py-3" role="navigation" aria-label="Navegación principal">
       <button
         @click="navigate('/workspaces')"
         class="mb-4 flex h-9 w-9 items-center justify-center rounded-lg bg-primary-500 text-white"
-        title="ALEsys — Inicio"
+        title="ALEsys — Inicio" aria-label="Ir al inicio"
       >
         <Sparkles class="h-5 w-5" />
       </button>
@@ -103,7 +103,7 @@
     </button>
 
     <!-- Main -->
-    <main class="flex min-w-0 flex-1 flex-col">
+    <main class="flex min-w-0 flex-1 flex-col" role="main">
       <header class="flex h-12 shrink-0 items-center gap-3 border-b border-gray-800 bg-dark-800/60 px-4">
         <nav class="flex items-center gap-1.5 text-xs text-gray-500">
           <span>ALEsys</span>

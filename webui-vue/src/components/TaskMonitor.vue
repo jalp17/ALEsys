@@ -9,6 +9,7 @@
           : 'bg-gray-800/40 text-gray-400 border-gray-700/50 hover:bg-gray-800/60',
       ]"
       :title="activeJobs.length > 0 ? activeJobs.length + ' tarea(s) activa(s)' : 'Tareas completadas'"
+      aria-label="Monitor de tareas de indexación"
     >
       <Loader2 v-if="activeJobs.length > 0" class="h-3 w-3 animate-spin" />
       <CheckCircle v-else class="h-3 w-3" />
@@ -20,6 +21,8 @@
     <div
       v-if="expanded"
       class="absolute right-0 top-full mt-2 w-96 max-h-96 overflow-y-auto rounded-lg border border-gray-700 bg-dark-800 shadow-xl z-50"
+      role="dialog"
+      aria-label="Panel de tareas"
     >
       <div class="p-3 border-b border-gray-700">
         <h3 class="text-sm font-semibold text-gray-200">Tareas de Indexación</h3>
