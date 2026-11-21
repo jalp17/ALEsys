@@ -142,7 +142,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   Sparkles, Cpu, Command, ChevronLeft, ChevronRight,
-  NotebookPen, Network, Upload, FileText, GitGraph, Search, Settings, ListChecks, BarChart3, Library, Bug,
+  NotebookPen, Network, Upload, FileText, GitGraph, Search, Settings, ListChecks, BarChart3, Library, Bug, Bot, Workflow, Puzzle, GraduationCap, Terminal, Hammer, FlaskConical, TestTube2, Scissors,
 } from 'lucide-vue-next'
 import TaskMonitor from './components/TaskMonitor.vue'
 
@@ -161,6 +161,20 @@ const groups = [
     ],
   },
   {
+    id: 'development',
+    label: 'Desarrollo',
+    icon: Terminal,
+    items: [
+      { to: '/editor', label: 'Editor IDE', icon: Hammer, description: 'Editor con terminal' },
+      { to: '/agents', label: 'Agentes', icon: Bot, description: 'Agentes de ejecución' },
+      { to: '/orchestrator', label: 'Orchestrator', icon: Workflow, description: 'Orquestación multi-agente' },
+      { to: '/multi-agent', label: 'Multi-Agente', icon: FlaskConical, description: 'Colaboración de agentes' },
+      { to: '/test-generation', label: 'Tests', icon: TestTube2, description: 'Generación de pruebas' },
+      { to: '/debug', label: 'Debug', icon: Bug, description: 'Asistente de depuración' },
+      { to: '/refactoring', label: 'Refactor', icon: Scissors, description: 'Refactorización asistida' },
+    ],
+  },
+  {
     id: 'knowledge',
     label: 'Conocimiento',
     icon: Network,
@@ -169,6 +183,7 @@ const groups = [
       { to: '/search', label: 'Búsqueda', icon: Search, description: 'Búsqueda semántica' },
       { to: '/analytics', label: 'Analytics', icon: BarChart3, description: 'Métricas de uso' },
       { to: '/kb-curation', label: 'KB Curation', icon: Library, description: 'Deduplicar, unir, partir' },
+      { to: '/workflows', label: 'Workflows', icon: Workflow, description: 'Automatizaciones' },
       { to: '/search', label: 'Búsqueda', icon: Search, description: 'Búsqueda semántica' },
     ],
   },
@@ -178,6 +193,8 @@ const groups = [
     icon: Settings,
     items: [
       { to: '/settings', label: 'Configuración', icon: Settings, description: 'Modelos y conexiones' },
+      { to: '/plugins', label: 'Plugins', icon: Puzzle, description: 'Extensiones y sandbox' },
+      { to: '/learning', label: 'Aprendizaje', icon: GraduationCap, description: 'Feedback y memoria' },
       { to: '/debug', label: 'Debug', icon: Bug, description: 'Asistente de depuración' },
     ],
   },

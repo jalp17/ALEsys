@@ -43,6 +43,14 @@ const router = createRouter({
     { path: '/analytics', component: () => import('./pages/Analytics.vue') },
     { path: '/debug', component: () => import('./pages/Debug.vue') },
     { path: '/kb-curation', component: () => import('./pages/KnowledgeCuration.vue') },
+    { path: '/agents', component: () => import('./pages/Agents.vue') },
+    { path: '/orchestrator', component: () => import('./pages/Orchestrator.vue') },
+    { path: '/plugins', component: () => import('./pages/Plugins.vue') },
+    { path: '/test-generation', component: () => import('./pages/TestGeneration.vue') },
+    { path: '/refactoring', component: () => import('./pages/Refactoring.vue') },
+    { path: '/multi-agent', component: () => import('./pages/MultiAgent.vue') },
+    { path: '/workflows', component: () => import('./pages/Workflows.vue') },
+    { path: '/learning', component: () => import('./pages/Learning.vue') },
   ],
 })
 
