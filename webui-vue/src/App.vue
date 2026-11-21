@@ -142,7 +142,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   Sparkles, Cpu, Command, ChevronLeft, ChevronRight,
-  NotebookPen, Network, Upload, FileText, GitGraph, Search, Settings, ListChecks,
+  NotebookPen, Network, Upload, FileText, GitGraph, Search, Settings, ListChecks, BarChart3, Library, Bug,
 } from 'lucide-vue-next'
 import TaskMonitor from './components/TaskMonitor.vue'
 
@@ -167,6 +167,9 @@ const groups = [
     items: [
       { to: '/graph', label: 'Grafo', icon: GitGraph, description: 'Visualización GraphRAG' },
       { to: '/search', label: 'Búsqueda', icon: Search, description: 'Búsqueda semántica' },
+      { to: '/analytics', label: 'Analytics', icon: BarChart3, description: 'Métricas de uso' },
+      { to: '/kb-curation', label: 'KB Curation', icon: Library, description: 'Deduplicar, unir, partir' },
+      { to: '/search', label: 'Búsqueda', icon: Search, description: 'Búsqueda semántica' },
     ],
   },
   {
@@ -175,6 +178,7 @@ const groups = [
     icon: Settings,
     items: [
       { to: '/settings', label: 'Configuración', icon: Settings, description: 'Modelos y conexiones' },
+      { to: '/debug', label: 'Debug', icon: Bug, description: 'Asistente de depuración' },
     ],
   },
 ]

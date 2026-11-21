@@ -1,4 +1,5 @@
 import { createApp } from 'vue'
+import { createPinia } from 'pinia'
 import { createRouter, createWebHistory } from 'vue-router'
 import { VueQueryPlugin } from '@tanstack/vue-query'
 import App from './App.vue'
@@ -38,10 +39,15 @@ const router = createRouter({
     { path: '/ingestion/markdown', component: () => import('./pages/MarkdownIngestion.vue') },
     { path: '/graph', component: () => import('./pages/Graph.vue') },
     { path: '/settings', component: () => import('./pages/Settings.vue') },
+    { path: '/search', component: () => import('./pages/AdvancedSearch.vue') },
+    { path: '/analytics', component: () => import('./pages/Analytics.vue') },
+    { path: '/debug', component: () => import('./pages/Debug.vue') },
+    { path: '/kb-curation', component: () => import('./pages/KnowledgeCuration.vue') },
   ],
 })
 
 const app = createApp(App)
+app.use(createPinia())
 app.use(router)
 app.use(VueQueryPlugin)
 app.mount('#app')
