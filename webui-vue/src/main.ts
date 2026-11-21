@@ -33,6 +33,7 @@ const router = createRouter({
     { path: '/', redirect: '/workspaces' },
     { path: '/workspaces', component: () => import('./pages/Workspaces.vue') },
     { path: '/chat', component: () => import('./pages/Chat.vue') },
+    { path: '/sessions', component: () => import('./pages/Sessions.vue') },
     { path: '/ingestion', component: () => import('./pages/Ingestion.vue') },
     { path: '/ingestion/markdown', component: () => import('./pages/MarkdownIngestion.vue') },
     { path: '/graph', component: () => import('./pages/Graph.vue') },

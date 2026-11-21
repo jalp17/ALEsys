@@ -142,7 +142,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   Sparkles, Cpu, Command, ChevronLeft, ChevronRight,
-  NotebookPen, Network, Upload, FileText, GitGraph, Search, Settings,
+  NotebookPen, Network, Upload, FileText, GitGraph, Search, Settings, ListChecks,
 } from 'lucide-vue-next'
 import TaskMonitor from './components/TaskMonitor.vue'
 
@@ -154,6 +154,7 @@ const groups = [
     items: [
       { to: '/workspaces', label: 'Cuadernos', icon: NotebookPen, description: 'Espacios de trabajo con documentos y chat' },
       { to: '/chat', label: 'Chat', icon: Sparkles, description: 'Chat con GraphRAG' },
+      { to: '/sessions', label: 'Sesiones', icon: ListChecks, description: 'Historial de conversaciones' },
       { to: '/ingestion', label: 'Ingesta', icon: Upload, description: 'Procesar PDFs y documentos' },
       { to: '/ingestion/history', label: 'Historial', icon: FileText, description: 'Trabajos de ingesta' },
       { to: '/ingestion/markdown', label: 'Markdown', icon: FileText, description: 'Indexar Markdown' },
