@@ -16,7 +16,7 @@ use sqlx::PgPool;
 use sqlx::Row;
 use std::path::PathBuf;
 
-const BATCH_SIZE: usize = 32;
+const BATCH_SIZE: usize = 8;
 const OVERLAP_TOKENS: usize = 200;
 const MAX_CHAPTER_CHARS: usize = 2000;
 const SPLIT_MAX_CHARS: usize = 800;
@@ -91,7 +91,8 @@ impl GraphRAGIngestionHook {
 
         for chapter in &result.chapters {
             let content = std::fs::read_to_string(&chapter.markdown_path)
-                .map_err(|e| GraphRAGIngestionError::ReadChapter(e.to_string()))?;
+                .map_err(|e| GraphRAGIngestionError::ReadChapter(e.to_string()))?
+                .replace('\0', "");
 
             if content.len() > MAX_CHAPTER_CHARS {
                 let split_result = splitter.split(&chapter.id.to_string(), &content);

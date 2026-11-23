@@ -168,7 +168,7 @@ impl MarkdownIndexer {
             let mut chapters = Vec::new();
             for f in &group {
                 let content = match std::fs::read_to_string(&f.path) {
-                    Ok(c) => c,
+                    Ok(c) => c.replace('\0', ""),
                     Err(_) => {
                         files_done += 1;
                         let done = files_done;
@@ -374,7 +374,22 @@ impl MarkdownIndexer {
                 }
             }
 
-            // Re-index: delete old + index new
+            // Read file first - if it can't be read, skip (don't retry)
+            let content = match std::fs::read_to_string(&f.path) {
+                Ok(c) => c,
+                Err(e) => {
+                    errors.push(format!("{}: read error (saltando): {}", f.path.display(), e));
+                    continue;
+                }
+            };
+            if content.trim().is_empty() {
+                skipped += 1;
+                continue;
+            }
+
+            // Sanitize: remove null bytes that cause UTF-8 DB errors
+            let content = content.replace('\0', "");
+
             // Delete old documents/fragments for this file
             let _ = sqlx::query(
                 "DELETE FROM documentos WHERE source_pdf = $1"
@@ -382,15 +397,6 @@ impl MarkdownIndexer {
             .bind(f.path.display().to_string())
             .execute(&self.pool)
             .await;
-
-            // Build single-file ingestion result
-            let content = match std::fs::read_to_string(&f.path) {
-                Ok(c) => c,
-                Err(e) => {
-                    errors.push(format!("{}: read error: {}", f.path.display(), e));
-                    continue;
-                }
-            };
             if content.trim().is_empty() {
                 skipped += 1;
                 continue;
@@ -443,7 +449,16 @@ impl MarkdownIndexer {
                         break;
                     }
                     Err(e) => {
-                        let msg = format!("{}: index error (intento {}): {}", f.path.display(), attempt, e);
+                        let err_str = e.to_string();
+                        // Errores permanentes: no reintentar, saltar el archivo
+                        if err_str.contains("No such file") || err_str.contains("invalid byte sequence") || err_str.contains("UTF8") || err_str.contains("0x00") {
+                            let msg = format!("{}: error permanente (saltando): {}", f.path.display(), err_str);
+                            tracing::warn!("{}", msg);
+                            errors.push(msg);
+                            break; // Salir del loop de reintentos
+                        }
+
+                        let msg = format!("{}: index error (intento {}): {}", f.path.display(), attempt, err_str);
                         tracing::warn!("{}", msg);
                         errors.push(msg);
 

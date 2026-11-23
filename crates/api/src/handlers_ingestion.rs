@@ -17,6 +17,51 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use uuid::Uuid;
 
+
+/// Persist markdown job state to DB for crash recovery.
+pub async fn persist_md_job(pool: &sqlx::PgPool, job: &crate::state::MarkdownJobState) {
+    let topics_json = serde_json::to_value(&job.topics).unwrap_or(serde_json::json!([]));
+    let result_json = job.result.clone();
+    let cancelled = job.cancelled.load(std::sync::atomic::Ordering::SeqCst);
+    let _ = sqlx::query(
+        r#"INSERT INTO markdown_ingestion_jobs (id, dir, topic_override, status, files_done, files_total, chunks_indexed, files_indexed, skipped_empty, topics, current_file, current_topic, message, error, result, cancelled, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, now())
+           ON CONFLICT (id) DO UPDATE SET
+             status = EXCLUDED.status,
+             files_done = EXCLUDED.files_done,
+             files_total = EXCLUDED.files_total,
+             chunks_indexed = EXCLUDED.chunks_indexed,
+             files_indexed = EXCLUDED.files_indexed,
+             skipped_empty = EXCLUDED.skipped_empty,
+             topics = EXCLUDED.topics,
+             current_file = EXCLUDED.current_file,
+             current_topic = EXCLUDED.current_topic,
+             message = EXCLUDED.message,
+             error = EXCLUDED.error,
+             result = EXCLUDED.result,
+             cancelled = EXCLUDED.cancelled,
+             updated_at = now()"#
+    )
+    .bind(&job.job_id)
+    .bind(&job.dir)
+    .bind(&job.topic)
+    .bind(&job.status)
+    .bind(job.files_done as i32)
+    .bind(job.files_total as i32)
+    .bind(job.chunks_indexed as i32)
+    .bind(job.files_indexed as i32)
+    .bind(job.skipped_empty as i32)
+    .bind(&topics_json)
+    .bind(&job.current_file)
+    .bind(&job.current_topic)
+    .bind(&job.message)
+    .bind(&job.error)
+    .bind(&result_json)
+    .bind(cancelled)
+    .execute(pool)
+    .await;
+}
+
 #[derive(Debug, Deserialize)]
 pub struct IngestPdfRequest {
     pub pdf_path: String,
@@ -740,6 +785,9 @@ pub async fn reindex_markdown_handler(
 
     state.markdown_jobs.write().await.insert(job_id.clone(), job.clone());
 
+    // Persist initial state to DB for crash recovery
+    persist_md_job(&state.db, &job).await;
+
     let jobs_map = state.markdown_jobs.clone();
     let graphrag = state.graphrag.clone();
     let db = state.db.clone();
@@ -749,6 +797,9 @@ pub async fn reindex_markdown_handler(
     let files_clone = files.clone();
     let jobs_map_clone = jobs_map.clone();
     let job_id_clone = job_id.clone();
+    let db_for_persist = state.db.clone();
+    let db_for_completion = db_for_persist.clone();
+    let db_for_progress = db_for_persist.clone();
 
     tokio::spawn(async move {
         let indexer = alesys_core::ingestion::MarkdownIndexer::new(db.clone());
@@ -756,6 +807,7 @@ pub async fn reindex_markdown_handler(
             .reindex_changed(&files_clone, &graphrag, topic_override.as_deref(), Some(&move |p: alesys_core::ingestion::MarkdownProgress| {
                 let guard = jobs_map.clone();
                 let gid = jid.clone();
+                let db_prog = db_for_progress.clone();
                 tokio::spawn(async move {
                     let mut g = guard.write().await;
                     if let Some(j) = g.get_mut(&gid) {
@@ -764,6 +816,16 @@ pub async fn reindex_markdown_handler(
                         j.chunks_indexed = p.chunks_indexed;
                         j.current_file = p.current_file.clone();
                         j.current_topic = p.current_topic.clone();
+                    }
+                    // Persist to DB every 10 files
+                    if p.files_done % 10 == 0 {
+                        if let Some(j) = g.get(&gid) {
+                            let j_clone = j.clone();
+                            let pool = db_prog.clone();
+                            tokio::spawn(async move {
+                                persist_md_job(&pool, &j_clone).await;
+                            });
+                        }
                     }
                 });
             }))
@@ -786,6 +848,10 @@ pub async fn reindex_markdown_handler(
                 "skipped": skipped,
                 "errors": errors,
             }));
+            // Persist final state
+            let j_final = j.clone();
+            let pool = db_for_completion.clone();
+            tokio::spawn(async move { persist_md_job(&pool, &j_final).await; });
         }
     });
 

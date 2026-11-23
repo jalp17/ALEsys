@@ -23,6 +23,7 @@ use axum::{
     routing::{delete, get, post, put},
     Json, Router,
 };
+use sqlx::Row;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::OnceLock;
@@ -429,16 +430,85 @@ async fn main() -> Result<()> {
         .route("/ws/ingestion/{job_id}", get(ws_ingestion_handler))
         .route("/health", get(health_handler))
         .route("/metrics", get(metrics_handler))
-        .with_state(state)
-        .layer(cors)
-        .layer(TimeoutLayer::with_status_code(
-            axum::http::StatusCode::REQUEST_TIMEOUT,
-            std::time::Duration::from_secs(timeout_secs),
-        ))
-        .layer(TraceLayer::new_for_http());
+        .with_state(state.clone());
 
     let addr = std::env::var("API_ADDR").unwrap_or_else(|_| "0.0.0.0:3000".to_string());
-    let listener = tokio::net::TcpListener::bind(&addr).await?;
+    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+
+    // Clone state for crash recovery before moving
+    let recovery_db = state.db.clone();
+    let recovery_graphrag = state.graphrag.clone();
+    let recovery_jobs_map = state.markdown_jobs.clone();
+    let recovery_semaphore = state.ingestion_semaphore.clone();
+
+    // Recover incomplete markdown ingestion jobs from DB (crash recovery)
+    {
+        let pool = recovery_db.clone();
+        let graphrag = recovery_graphrag.clone();
+        let jobs_map = recovery_jobs_map.clone();
+        let semaphore = recovery_semaphore.clone();
+        tokio::spawn(async move {
+            let rows = sqlx::query(
+                "SELECT id, dir, topic_override FROM markdown_ingestion_jobs WHERE status IN ('queued', 'processing')"
+            )
+            .fetch_all(&pool)
+            .await;
+            if let Ok(rows) = rows {
+                for row in rows {
+                    let job_id: uuid::Uuid = row.get("id");
+                    let dir: String = row.get("dir");
+                    let topic: Option<String> = row.get("topic_override");
+                    tracing::info!("Recovering markdown job {} (dir={})", job_id, dir);
+                    let pool = pool.clone();
+                    let graphrag = graphrag.clone();
+                    let jobs_map = jobs_map.clone();
+                    let semaphore = semaphore.clone();
+                    let jid = job_id.to_string();
+                    tokio::spawn(async move {
+                        let root = std::path::PathBuf::from(&dir);
+                        let files = match alesys_core::ingestion::discover_markdown(&root, 5000) {
+                            Ok(f) => f,
+                            Err(e) => { tracing::error!("Recovery failed: {}", e); return; }
+                        };
+                        let job = crate::state::MarkdownJobState {
+                            job_id: jid.clone(),
+                            dir: dir.clone(),
+                            topic: topic.clone(),
+                            status: "processing".to_string(),
+                            files_done: 0,
+                            files_total: files.len(),
+                            chunks_indexed: 0,
+                            files_indexed: 0,
+                            skipped_empty: 0,
+                            topics: vec![],
+                            current_file: None,
+                            current_topic: None,
+                            message: Some("Recuperando...".to_string()),
+                            error: None,
+                            result: None,
+                            created_at: chrono::Utc::now(),
+                            cancelled: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+                        };
+                        jobs_map.write().await.insert(jid.clone(), job.clone());
+                        let _permit = semaphore.acquire("recovery").await;
+                        let indexer = alesys_core::ingestion::MarkdownIndexer::new(pool.clone());
+                        let (checked, reindexed, skipped, errors) = indexer
+                            .reindex_changed(&files, &graphrag, topic.as_deref(), None)
+                            .await;
+                        let mut guard = jobs_map.write().await;
+                        if let Some(j) = guard.get_mut(&jid) {
+                            j.status = "completed".to_string();
+                            j.files_indexed = reindexed;
+                            j.chunks_indexed = reindexed;
+                            j.files_done = j.files_total;
+                            j.message = Some(format!("Recuperado: {} archivos, {} chunks", reindexed, reindexed));
+                        }
+                        tracing::info!("Recovered job {}: {} files, {} chunks", jid, reindexed, reindexed);
+                    });
+                }
+            }
+        });
+    }
 
     tracing::info!(
         "ALEsys API listening on {} (timeout={}s)",

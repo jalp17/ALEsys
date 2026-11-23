@@ -176,7 +176,7 @@ impl ONNXEmbedder {
 
     pub fn encode(&self, text: &str) -> Result<Vec<f32>> {
         if let Some(url) = &self.http_url {
-            let client = reqwest::Client::new();
+            let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(120)).build().unwrap_or_default();
             let body = serde_json::json!({"input": text, "model": "bge"});
             let url = format!("{}/v1/embeddings", url.trim_end_matches('/'));
             let result = tokio::task::block_in_place(|| {
@@ -224,7 +224,7 @@ impl ONNXEmbedder {
         // ~7x faster than one-request-per-text for large corpora.
         if let Some(url) = &self.http_url {
             if !texts.is_empty() {
-                let client = reqwest::Client::new();
+                let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(120)).build().unwrap_or_default();
                 let body = serde_json::json!({"input": texts, "model": "bge"});
                 let url = format!("{}/v1/embeddings", url.trim_end_matches('/'));
                 let owned: Vec<String> = texts.iter().map(|s| s.to_string()).collect();
